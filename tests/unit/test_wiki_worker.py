@@ -17,11 +17,12 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
-from nous.application.chat.tools.schedule import AGENT_TASK_TAG
+from nous.application.chat.tools.schedule import AGENT_TASK_TAG, done_tags, due_agent_tasks
+from nous.application.wiki.journal import _TODO_TAG
 from nous.application.workers.wiki_worker import MIN_TOPIC_MEMORIES, WikiWorker
 from nous.domain.memory.entities import Memory
 from nous.domain.memory.service import MemoryService
-from nous.domain.shared.result import Success
+from nous.domain.shared.result import Failure, Success
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.memory_repo import SQLiteMemoryRepository
@@ -1647,7 +1648,9 @@ class TestJournalTomorrow:
 
     @staticmethod
     def _tasks(ctx) -> list[Memory]:
-        return sorted(ctx.memory_service.get_by_tags([AGENT_TASK_TAG]).value, key=lambda m: m.content)
+        found = ctx.memory_service.get_by_tags([AGENT_TASK_TAG])
+        assert isinstance(found, Success)
+        return sorted(found.value, key=lambda m: m.content)
 
     def test_tasks_are_scheduled_with_cue_tags(self, tmp_path) -> None:
         """2 件が agent:task + cue:time + journal:todo 付きで、時刻も正しく登録される。"""
@@ -1675,14 +1678,15 @@ class TestJournalTomorrow:
             conn.close()
 
     def test_existing_task_with_same_content_is_skipped(self, tmp_path) -> None:
-        """既存の agent:task と同じ本文は登録しない。"""
+        """既存の agent:task と同じ本文は登録しない（予定は日記の材料にはならない）。"""
         seed = _mem_at(
-            "t1", datetime(2026, 11, 9, 10, 0, tzinfo=_JST), tags=["agent:task", "cue:time:2026-11-10T09:30"]
+            "t1", datetime(2026, 11, 9, 10, 0, tzinfo=_JST), tags=[AGENT_TASK_TAG, "cue:time:2026-11-10T09:30"]
         )
         seed.content = "論文の下書きを読み返す"
-        conn, worker, ctx = self._setup(tmp_path, [seed], llm=[_BODY, _TOMORROW_JSON])
+        day = _mem_at("a", datetime(2026, 11, 9, 12, 0, tzinfo=_JST))
+        conn, worker, ctx = self._setup(tmp_path, [seed, day], llm=[_BODY, _TOMORROW_JSON])
         try:
-            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now) == ["a"]
             assert [m.content for m in self._tasks(ctx)] == ["問いの答えを書く", "論文の下書きを読み返す"]
             assert [m.key for m in self._tasks(ctx) if m.content == "論文の下書きを読み返す"] == ["t1"]
         finally:
@@ -1697,6 +1701,8 @@ class TestJournalTomorrow:
             assert self._tasks(ctx) == []
             assert [t for t, _s, _d in _event_rows(conn) if t == "journal.tomorrow"] == []
             assert worker._cycle_errors == 0
+            # 失敗は諦めず監査に残す（error: ではなく warning:）。
+            assert f"warning: tomorrow tasks is not JSON ({self._now.date()})" in [s for _t, s, _d in _event_rows(conn)]
         finally:
             conn.close()
 
@@ -1734,6 +1740,169 @@ class TestJournalTomorrow:
             worker._compile_journal(ctx, "test_ww", store, self._now)
             assert len(self._tasks(ctx)) == 2
             assert [t for t, _s, _d in _event_rows(conn) if t == "journal.tomorrow"] == ["journal.tomorrow"]
+        finally:
+            conn.close()
+
+    def test_due_agent_task_is_picked_up_by_scheduler(self, tmp_path) -> None:
+        """登録した予定は既存スケジューラ（ProspectiveWorker の照合）が期限ちょうどで拾える。"""
+        from nous.domain.memory.cue import parse_time_cues
+
+        conn, worker, ctx = self._setup(tmp_path, llm=[_BODY, _TOMORROW_JSON])
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert [m.content for m in due_agent_tasks(self._tasks(ctx), now=self._now)] == []
+            for task in self._tasks(ctx):
+                due = parse_time_cues(task)[0]
+                assert [m.key for m in due_agent_tasks([task], now=due)] == [task.key]
+        finally:
+            conn.close()
+
+    def test_done_task_is_not_scheduled_again(self, tmp_path) -> None:
+        """実行済み（_finish が agent:task を外した）の予定を再登録しない（journal:todo で防ぐ）。"""
+        conn, worker, ctx = self._setup(tmp_path, llm=[_BODY, _TOMORROW_JSON, _BODY, _TOMORROW_JSON])
+        try:
+            store = _store(tmp_path)
+            worker._compile_journal(ctx, "test_ww", store, self._now)
+            task = self._tasks(ctx)[0]
+            # 本番の _finish（prospective_worker.py:177-181）と同じ経路でタグを落とす。
+            ctx.memory_service.update_memory(task.key, tags=done_tags(task, None))
+            todo = ctx.memory_service.get_by_tags([_TODO_TAG])
+            assert isinstance(todo, Success)
+            assert all(AGENT_TASK_TAG not in m.tags for m in todo.value if m.key == task.key)
+            before = len(self._tasks(ctx))
+            worker._compile_journal(ctx, "test_ww", store, self._now)
+            assert len(self._tasks(ctx)) == before == 1
+            assert [t for t, _s, _d in _event_rows(conn) if t == "journal.tomorrow"] == ["journal.tomorrow"]
+        finally:
+            conn.close()
+
+    def test_done_task_older_than_retry_window_is_still_skipped(self, tmp_path) -> None:
+        done = _mem_at("t9", self._now - timedelta(hours=25), tags=[_TODO_TAG])
+        done.content = "論文の下書きを読み返す"
+        day = _mem_at("a", datetime(2026, 11, 9, 12, 0, tzinfo=_JST))
+        conn, worker, ctx = self._setup(tmp_path, [done, day], llm=[_BODY, _TOMORROW_JSON])
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert [m.content for m in self._tasks(ctx)] == ["問いの答えを書く"]
+        finally:
+            conn.close()
+
+    def test_duplicate_prompts_in_one_response_registers_once(self, tmp_path) -> None:
+        """同じ本文が 2 件返っても 1 件だけ登録する（バッチ内の重複除去）。"""
+        dup = json.dumps(
+            {
+                "tasks": [
+                    {"when": "09:30", "prompt": "論文の下書きを読み返す"},
+                    {"when": "18:00", "prompt": "論文の下書きを読み返す "},
+                ]
+            },
+            ensure_ascii=False,
+        )
+        conn, worker, ctx = self._setup(tmp_path, llm=[_BODY, dup])
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert [m.content for m in self._tasks(ctx)] == ["論文の下書きを読み返す"]
+        finally:
+            conn.close()
+
+    def test_duplicate_window_boundary(self, tmp_path) -> None:
+        """重複窓はちょうど 48 時間まで（30 分後のリトライで閉じない幅）で、超えたら再登録する。"""
+        for age, expected in (
+            (timedelta(hours=48), ["問いの答えを書く"]),
+            (timedelta(hours=48, minutes=1), ["問いの答えを書く", "論文の下書きを読み返す"]),
+        ):
+            done = _mem_at(f"t{age.total_seconds()}", self._now - age, tags=[_TODO_TAG])
+            done.content = "論文の下書きを読み返す"
+            day = _mem_at("a", datetime(2026, 11, 9, 12, 0, tzinfo=_JST))
+            case_dir = tmp_path / str(int(age.total_seconds()))
+            conn, worker, ctx = self._setup(case_dir, [done, day], llm=[_BODY, _TOMORROW_JSON])
+            try:
+                worker._compile_journal(ctx, "test_ww", _store(case_dir), self._now)
+                assert [m.content for m in self._tasks(ctx)] == expected
+            finally:
+                conn.close()
+
+    def test_pending_task_is_not_a_journal_source(self, tmp_path) -> None:
+        """未実行の予定は日記の sources にしない（消化されて発火前に消えない）。"""
+        # 予定の created_at は実時計なので、その日を窓にする（now は翌日）。
+        # 窓は [当日 03:00, 翌 03:00) なので、どの時刻に走らせても窓内の 12:00 に固定する。
+        real_now = datetime.now(_JST).replace(hour=12, minute=0, second=0, microsecond=0)
+        task = _mem_at("t1", real_now, tags=[AGENT_TASK_TAG, _TODO_TAG])
+        task.content = "問いの答えを書く"
+        conn, worker, ctx = self._setup(
+            tmp_path, [task, _mem_at("a", real_now)], llm=[_BODY, json.dumps({"tasks": []})]
+        )
+        try:
+            store = _store(tmp_path)
+            worker._compile_journal(ctx, "test_ww", store, real_now + timedelta(days=1))
+            page = store.read_page(f"journal-{real_now.date().isoformat()}")
+            assert isinstance(page, Success)
+            assert task.key not in page.value.sources
+            found = ctx.memory_repo.find_by_key(task.key)
+            assert isinstance(found, Success) and found.value is not None
+        finally:
+            conn.close()
+
+    def test_only_pending_task_day_still_writes_journal(self, tmp_path) -> None:
+        """記憶が未実行の予定だけの日でも日記を書く（早期 return で日記が抜けない）。"""
+        real_now = datetime.now(_JST).replace(hour=12, minute=0, second=0, microsecond=0)
+        task = _mem_at("t1", real_now, tags=[AGENT_TASK_TAG, _TODO_TAG])
+        conn, worker, ctx = self._setup(tmp_path, [task], llm=[_BODY, json.dumps({"tasks": []})])
+        try:
+            store = _store(tmp_path)
+            worker._compile_journal(ctx, "test_ww", store, real_now + timedelta(days=1))
+            assert store.read_page(f"journal-{real_now.date().isoformat()}").is_ok
+        finally:
+            conn.close()
+
+    def test_limit_caps_registrations(self, tmp_path) -> None:
+        """LLM が上限を超えて返しても journal_tomorrow_max 件までしか登録しない。"""
+        four = json.dumps(
+            {"tasks": [{"when": f"{h:02d}:00", "prompt": f"予定 {h:02d}"} for h in (9, 12, 15, 18)]}, ensure_ascii=False
+        )
+        conn, worker, ctx = self._setup(tmp_path, llm=[_BODY, four], cfg_update={"journal_tomorrow_max": 3})
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert [m.content for m in self._tasks(ctx)] == ["予定 09", "予定 12", "予定 15"]
+        finally:
+            conn.close()
+
+    def test_invalid_times_are_rejected(self, tmp_path) -> None:
+        """24:00・桁不足・空・数値の when は登録しない（正しい 1 件だけ通す）。"""
+        mixed = json.dumps(
+            {
+                "tasks": [
+                    {"when": "24:00", "prompt": "範囲外"},
+                    {"when": "9:5", "prompt": "桁不足"},
+                    {"when": "", "prompt": "空"},
+                    {"when": 930, "prompt": "数値"},
+                    {"when": "09:30", "prompt": "正しい"},
+                ]
+            },
+            ensure_ascii=False,
+        )
+        conn, worker, ctx = self._setup(tmp_path, llm=[_BODY, mixed])
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert [m.content for m in self._tasks(ctx)] == ["正しい"]
+        finally:
+            conn.close()
+
+    def test_lookup_failure_registers_nothing_and_warns(self, tmp_path) -> None:
+        """既存予定が読めないなら重複を作らないため登録しない（fail-closed）＋ 監査に 1 行。"""
+        conn, worker, ctx = self._setup(tmp_path, llm=[_BODY, _TOMORROW_JSON])
+        ctx.memory_service.get_by_tags = MagicMock(return_value=Failure("db down"))  # type: ignore[method-assign]
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            # 既存予定を読めないまま登録しない（agent:task の記憶が 1 件も増えない）。
+            all_mem = ctx.memory_repo.find_all()
+            assert isinstance(all_mem, Success)
+            assert [m for m in all_mem.value if AGENT_TASK_TAG in m.tags] == []
+            rows = _event_rows(conn)
+            assert [s for _t, s, _d in rows if s.startswith("warning: tomorrow tasks")] == [
+                "warning: tomorrow tasks skipped (lookup failed): db down"
+            ]
+            assert [t for t, _s, _d in rows if t == "journal.tomorrow"] == []
         finally:
             conn.close()
 

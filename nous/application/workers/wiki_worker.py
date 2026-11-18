@@ -32,6 +32,7 @@ from nous.application.wiki.journal import (
     _JOURNAL_SLUG_PREFIX,
     JournalMixin,
     _hash_of,
+    _is_pending_task,
     _parse_json_object,
 )
 from nous.domain.shared.result import Failure, Success
@@ -386,7 +387,9 @@ class WikiWorker(JournalMixin, ConflictsMixin):
         deleted_seen: set[str] = set()
         journal_sources = self._compile_journal(ctx, persona, store, now)
         questions: list[dict] = []
-        topics = self._select_topics(memories, now, store, persona)
+        # 未実行の予定（agent:task）は topic の源にしない。topic の sources 経由で
+        # `_delete_sources` に消されると、発火前に予定が消えるため。
+        topics = self._select_topics([m for m in memories if not _is_pending_task(m)], now, store, persona)
         if not topics:
             # 「起動して何もしなかった」と「壊れて何もできなかった」を後から区別する（#45）。
             # buckets も出す: memories があってもクラスタが小さければ topic 0 件になる。

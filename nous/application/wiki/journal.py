@@ -33,6 +33,12 @@ logger = get_logger(__name__)
 _JOURNAL_SLUG_PREFIX = "journal-"
 #: LLM に渡す記憶本文の切り詰め長。
 _CONTENT_PREVIEW_CHARS = 300
+#: 明日やること（日記由来）の印。実行後も ``agent:task`` は外れるがこのタグは残る。
+_TODO_TAG = "journal:todo"
+#: 既存予定としてプロンプトに列挙する上限（重複判定は全件で行う）。
+_EXISTING_LIST_LIMIT = 20
+#: 保存する予定本文の上限（指示は 60 文字以内だが、長文をそのまま自走させない）。
+_TASK_PROMPT_MAX = 200
 
 _JOURNAL_PROMPT = """あなたは日記を書く記録係です。{day} の記憶と営みを材料に、その日の記録を Markdown で書いてください。
 
@@ -166,7 +172,10 @@ class JournalMixin:
             existed = store.read_page(slug).is_ok
             # 源記憶は物理削除されるので、2 回目サイクルでは材料が 0 件になる。
             # その状態で書き直すと痩せた日記で上書きするので、既存ページを残す。
-            if existed and not memories:
+            # 未実行の予定は消化されずに残るので usable で数える（予定だけの 2 回目で
+            # 本文を痩せさせない・状態を 2 度適用しない）。
+            usable = [m for m in memories if not _is_pending_task(m)]
+            if existed and not usable:
                 return []
             # 人物設定から起こした暮らしを実ログに混ぜる（記憶にも sources にも入れない）。
             # 2 回目サイクルの判定より後に置くのは、暮らしの再生成で日記を書き換えないため。
@@ -176,7 +185,8 @@ class JournalMixin:
                 return []
             # sources は候補（その日の記憶）からだけ作る。LLM に選ばせない。
             # 営み（session_events）は記憶ではないので sources には入れない。
-            sources = tuple(m.key for m in memories)
+            # 未実行の予定は source にしない（消化されて物理削除されると発火前に消える）。
+            sources = tuple(m.key for m in usable)
             tag = day.strftime("%Y-%m")
             # 本文予算は「frontmatter を引いた残り」。write_page は frontmatter 込みで
             # max_page_bytes を見るので、sources が多い日は本文を減らさないと必ず落ちる。
@@ -306,11 +316,26 @@ class JournalMixin:
             if service is None:
                 self._record_event(ctx, persona, "skipped: tomorrow tasks (no memory_service)", None)
                 return
-            existing: set[str] = set()
+            # 既存予定が読めないまま登録すると重複を作るので、読めなければ何もしない。
             result = service.get_by_tags([AGENT_TASK_TAG])
-            if isinstance(result, Success):
-                existing = {m.content for m in result.value}
-            listing = "\n".join(f"- {c}" for c in existing) or "(なし)"
+            if not isinstance(result, Success):
+                self._record_event(
+                    ctx, persona, f"warning: tomorrow tasks skipped (lookup failed): {result.error}", None
+                )
+                return
+            existing = {_normalize_task(m.content) for m in result.value}
+            # 実行済みは _finish が agent:task を外すので agent:task の照合では拾えない。
+            # journal:todo は残るので、直近 2 日（30 分後のリトライでも窓が閉じる幅）の
+            # ものも重複として扱う。
+            todo = service.get_by_tags([_TODO_TAG])
+            if not isinstance(todo, Success):
+                self._record_event(
+                    ctx, persona, f"warning: tomorrow tasks skipped (todo lookup failed): {todo.error}", None
+                )
+                return
+            recent = now - timedelta(days=2)
+            existing |= {_normalize_task(m.content) for m in todo.value if _aware(m.created_at, now.tzinfo) >= recent}
+            listing = "\n".join(f"- {c}" for c in sorted(existing)[:_EXISTING_LIST_LIMIT]) or "(なし)"
             raw = (
                 self._ask_text(
                     _TOMORROW_PROMPT.format(
@@ -325,42 +350,26 @@ class JournalMixin:
                 parsed = _parse_json_object(raw)
             except ValueError:
                 logger.warning("WikiWorker: tomorrow tasks is not JSON")
+                self._record_event(ctx, persona, f"warning: tomorrow tasks is not JSON ({now.date()})", None)
                 return
             items = parsed.get("tasks")
             if not isinstance(items, list):
+                self._record_event(ctx, persona, f"warning: tomorrow tasks has no list ({now.date()})", None)
                 return
-
-            planned: list[tuple[datetime, str, list[str]]] = []
-            seen: set[str] = set()
-            for item in items:
-                if len(planned) >= self._cfg.journal_tomorrow_max:
-                    break
-                if not isinstance(item, dict):
-                    continue
-                when, prompt = item.get("when"), item.get("prompt")
-                if not isinstance(when, str) or not re.fullmatch(r"\d{1,2}:\d{2}", when):
-                    continue
-                hour, minute = (int(v) for v in when.split(":"))
-                if hour > 23 or minute > 59 or not isinstance(prompt, str):
-                    continue
-                text = " ".join(prompt.split())[:60]
-                if not text or text in existing or text in seen:
-                    continue
-                seen.add(text)
-                # 日記は前日ぶん。当日内の時刻は「今日」、過ぎていれば翌日にする。
-                due = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
-                if due <= now:
-                    due += timedelta(days=1)
-                planned.append((due, text, [AGENT_TASK_TAG, time_cue_tag(due), "journal:todo"]))
+            planned = _plan_tomorrow(items, existing, now, self._cfg.journal_tomorrow_max)
             if not planned:
                 return
-            created = asyncio.run(_create_scheduled(service, planned))
+            tagged = [(d, t, [AGENT_TASK_TAG, time_cue_tag(d), _TODO_TAG]) for d, t in planned]
+            # loop を閉じると create_memory 内の背景 evolution はキャンセルされる（予定本体は残る）。
+            created = asyncio.run(_create_scheduled(service, tagged))
             if not created:
                 return
+            created.sort(key=lambda c: c[0])
             self._record_event(
                 ctx,
                 persona,
-                f"scheduled {len(created)} tasks for tomorrow",
+                f"scheduled {len(created)} tasks (due {created[0][0].isoformat(timespec='minutes')}"
+                f"..{created[-1][0].isoformat(timespec='minutes')})",
                 {"tasks": [{"when": d.isoformat(timespec="minutes"), "prompt": p} for d, p in created]},
                 event_type="journal.tomorrow",
             )
@@ -383,7 +392,8 @@ class JournalMixin:
         """``[start, end)``（日記の 1 日）に作られた記憶を created_at 昇順で上限まで。
 
         tombstoned 以外は拾う。同日 2 回目のサイクルでは 1 回目が源記憶を物理削除して
-        いるので、材料 0 件での上書きを呼び出し側が避ける（``existed and not memories``）。
+        いるので、材料が空での上書きを呼び出し側が避ける（``existed and not usable``）。
+        未実行の予定（``agent:task``）は材料には入るが消化はされない。
         """
         result = ctx.memory_repo.find_all()
         memories: list[Memory] = list(result.value) if isinstance(result, Success) else []
@@ -552,6 +562,50 @@ class JournalMixin:
             memories="\n".join(memory_lines) or "(なし)",
             activity=activity or "(なし)",
         )
+
+
+def _plan_tomorrow(items: object, existing: set[str], now: datetime, limit: int) -> list[tuple[datetime, str]]:
+    """LLM が返した tasks を検証し、(due, 本文) を返す。時刻は HH:MM のみ受け付け、過期は翌日送り。"""
+    if not isinstance(items, list):
+        return []
+    out: list[tuple[datetime, str]] = []
+    seen: set[str] = set()
+    for item in items:
+        if len(out) >= limit:
+            break
+        if not isinstance(item, dict):
+            continue
+        when, prompt = item.get("when"), item.get("prompt")
+        if not isinstance(when, str) or not re.fullmatch(r"\d{1,2}:\d{2}", when):
+            continue
+        hour, minute = (int(v) for v in when.split(":"))
+        if hour > 23 or minute > 59 or not isinstance(prompt, str):
+            continue
+        text = " ".join(prompt.split())
+        if len(text) > _TASK_PROMPT_MAX:
+            continue
+        key = _normalize_task(text)
+        if not key or key in existing or key in seen:
+            continue
+        seen.add(key)
+        # 日記は前日ぶん。当日内の時刻は「今日」、過ぎていれば翌日にする。
+        due = now.replace(hour=hour, minute=minute, second=0, microsecond=0)
+        if due <= now:
+            due += timedelta(days=1)
+        out.append((due, text))
+    return out
+
+
+def _normalize_task(text: str) -> str:
+    """本文の照合キー（登録側・既存側で同じ関数を使う）。先頭 60 文字で比べる。"""
+    return " ".join(text.split())[:60]
+
+
+def _is_pending_task(memory: Memory) -> bool:
+    """未実行の予定（``agent:task``）か。消化対象から外し、発火前の物理削除を防ぐ。"""
+    from nous.application.chat.tools.schedule import AGENT_TASK_TAG
+
+    return AGENT_TASK_TAG in memory.tags
 
 
 async def _create_scheduled(service, planned: list[tuple[datetime, str, list[str]]]) -> list[tuple[datetime, str]]:
