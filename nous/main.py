@@ -304,7 +304,11 @@ def create_app() -> MemoryFastMCP:
     _workers.append(activity_worker)
 
     # ドリーミング（wiki 編纂）。既定無効: NOUS_WIKI__ENABLED=true で有効化。
+    # start() 自体は enabled を見ない（compose で env を渡し忘れると「started」だけ出て
+    # 毎回無言で早期 return する状態になる）ので、ここで警告する。
     wiki_worker = WikiWorker(settings)
+    if not settings.wiki.enabled:
+        logger.warning("WikiWorker is disabled (NOUS_WIKI__ENABLED is not true): wiki will not be compiled")
     wiki_worker.start()
     _workers.append(wiki_worker)
 
