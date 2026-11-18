@@ -70,6 +70,40 @@ com.nous.sandbox=1
 manager は root で動くので、mkdir したマウント先は 777 にして書けるようにしてある
 （`cap_drop: ALL` で chown できないため）。
 
+**`$HOME` はイメージ側の罠で root 所有になりやすい。** Dockerfile の `WORKDIR /home/agent` が
+`useradd -m` より先に走るので、`-m` は「ディレクトリが既にある」と判断して何もしない。
+結果 `/home/agent` が `root:root 0755` のままだと、`pip install --user` や
+`git config --global` が Permission denied になる（マウント先は 777 なので
+「ワークスペースは書けるのに $HOME だけ書けない」という分かりにくい壊れ方をする）。
+対策は2段:
+
+1. イメージで `mkdir -p /home/agent/.agents && chown -R ${SANDBOX_UID}:${SANDBOX_GID} /home/agent`
+2. manager が `ensure` 時に `docker exec -u 0 chown <uid>:<gid> /home/agent /home/agent/.agents`
+   （既に作られたコンテナをイメージ再ビルドなしで直す。冪等なのでコンテナごとに1回だけ打つ。
+   uid は `SANDBOX_UID` ではなく `docker inspect` の `.Config.User` を使う — 後から env を
+   変えたときに、動いていない uid へ chown して $HOME を壊さないため）
+
+`exec -u 0` は sandbox 側に既定の caps（`CAP_CHOWN`）が残っていることが前提。
+**sandbox に `--cap-drop ALL` を入れるとこの修正は静かに無効になる**（`--cap-drop` を
+入れていないことをテストで固定してある）。rootless では効かないが、元の症状が残るだけで
+新しい壊れ方はしない（`logger.warning` が1回出る）。
+
+nous（root）がマウント内に書くファイルも、置いた後に `chmod 0666`
+（wiki ページ・ユーザー添付・exec の全文ログ）にしている。root 0644 のままだと
+ペルソナの `edit_file` が Permission denied になる。
+
+wiki の履歴（`wiki/_history/*.jsonl`）だけは 0644／dir 0755 のまま。dir に write が
+あるとファイル mode に関係なく差し替えられるので、**dir 権限が履歴を守る唯一の防壁**で
+ある。ここが 0777 になると版を偽造できる。内容の正しさ（改竄検知）は保証しない——
+版を戻せることと、内容が正しいことは別。
+
+置き換えは `nous/infrastructure/wiki/store.py` の `write_shared()` を通す（履歴と
+gist 退避もこれ経由）。`mkstemp` で tmp を選び、`fchmod` してから `os.replace` する。
+`.{name}.tmp` のような予測可能な名前だと、wiki を書けるペルソナが先に symlink を置いて、
+nous（root）に他ペルソナの DB を truncate させられる。同じ理由で `write_shared()` は
+親 dir の symlink を拒否し、`_path_for()` は
+symlink のページを拒否し、`list_slugs()` も symlink を辿らない。
+
 スキルはグローバルとペルソナ専用の2本。同名はペルソナ優先（`/api/skills/{persona}` も同じ順で重ねる）。
 sandbox 内のエージェントには AGENTS.md で両方のパスを教える。
 
@@ -200,7 +234,8 @@ sandbox は名前解決のために `nous-net` に載る。分離を優先する
 - `timeout(1)` をコンテナ内で噛ませるので、打ち切りは exit 124（`-k 5` で SIGKILL まで5秒）。外側の `subprocess` が先に切れた場合だけ、コンテナ内のプロセスが残りうる
 - manager を再起動すると、稼働中の sandbox は `RESTART_GRACE_SECONDS`（300秒）後に idle 判定に入る
 - sock のパーミッション（manager を root 以外で動かすなら `group_add`）は実機確認
-- sandbox の `--user`（uid 不一致で書けない問題）は未対応
+- 既知の穴（残り）: nous がマウント内の**任意の場所**に書いたファイルの所有者は root のまま。
+  wiki / uploads / ログは `chmod 0666` で対処済みだが、新しい書き込み経路を足すときは同じ対処が要る
 
 ---
 

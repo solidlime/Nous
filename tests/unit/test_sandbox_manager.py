@@ -67,6 +67,9 @@ def fake(monkeypatch, tmp_path) -> FakeDocker:
     monkeypatch.setattr(sm, "_last_used", {})
     monkeypatch.setattr(sm, "_idle_override", {})
     monkeypatch.setattr(sm, "_in_flight", {})
+    # $HOME の chown は 1 回だけ。テスト間で持ち越さない。
+    monkeypatch.setattr(sm, "_home_fixed", set())
+    monkeypatch.setattr(sm, "_home_warned", set())
     monkeypatch.setattr(sm, "_host_root", None)
     # HOSTNAME は自分自身のコンテナ ID（短縮形）と一致していなければならない。
     monkeypatch.setenv("HOSTNAME", "0123456789ab")
@@ -167,6 +170,10 @@ def test_exec_runs_container_when_missing(client, fake, tmp_path: Path) -> None:
     # media は nous が書く生成物なので読み取り専用。
     assert f"{tmp_path}/host/persona/alice/media:/home/agent/media:ro" in run
     assert "--user" in run
+    # _fix_home は sandbox の既定 caps（CAP_CHOWN）で exec する。ここで cap を
+    # 落とすと $HOME の chown が静かに効かなくなる（tests/unit/test_sandbox_manager.py の
+    # test_fix_home_* が前提にしている）。
+    assert not any(a.startswith("--cap-drop") for a in run)
     assert f"{tmp_path}/host/persona/alice/skills:/home/agent/.agents/skills" in run
     assert f"{tmp_path}/host/skills:/home/agent/.agents/global-skills:ro" in run
     assert run[-2:] == ("sleep", "infinity")
@@ -305,6 +312,8 @@ def test_apt_extra_installs_only_the_missing_packages(client, fake, monkeypatch)
 
     installs = [c for c in seen.calls if "apt-get install" in " ".join(c)]
     assert len(installs) == 1
+    # コンテナは --user 1026:100 で走るので、apt は root で打たないと必ず失敗する。
+    assert installs[0][1:4] == ("-u", "0", "alice-sandbox")
     script = installs[0][-1]
     assert "DEBIAN_FRONTEND=noninteractive" in script
     assert "--no-install-recommends" in script
@@ -595,6 +604,9 @@ def test_reset_uses_request_options(client, fake, monkeypatch) -> None:
 
 def test_in_flight_counts_concurrent_execs(monkeypatch) -> None:
     monkeypatch.setattr(sm, "_in_flight", {})
+    # $HOME の chown は 1 回だけ。テスト間で持ち越さない。
+    monkeypatch.setattr(sm, "_home_fixed", set())
+    monkeypatch.setattr(sm, "_home_warned", set())
     sm._enter("alice")
     sm._enter("alice")
     assert sm._in_flight == {"alice": 2}
@@ -668,7 +680,8 @@ def test_exec_rejects_a_network_outside_the_allowlist(client, fake, monkeypatch)
 def test_exec_wraps_the_command_in_timeout(client, fake) -> None:
     fake.by_subcommand["inspect"] = (0, "true 1", "")
     client.post("/exec", json={"persona": "alice", "command": "sleep 999", "timeout_seconds": 7})
-    exec_call = next(c for c in fake.calls if c[0] == "exec")
+    # _fix_home も exec を打つので、timeout ラッパーを含む exec を選ぶ。
+    exec_call = next(c for c in fake.calls if c[0] == "exec" and "timeout" in c)
     assert exec_call[exec_call.index("-k") + 1] == "5"
     assert tuple(exec_call[exec_call.index("timeout") + 1 :])[:4] == ("-k", "5", "7", "bash")
 
@@ -683,3 +696,68 @@ def test_load_existing_starts_the_idle_clock_after_a_grace(fake, monkeypatch) ->
     last = sm._last_used["alice"]
     assert before - sm._idle_minutes() * 60.0 + sm.RESTART_GRACE_SECONDS - 2 <= last
     assert last <= before - sm._idle_minutes() * 60.0 + sm.RESTART_GRACE_SECONDS + 2
+
+
+def test_fix_home_chowns_home_and_agents_as_root(fake, monkeypatch) -> None:
+    """$HOME はイメージ側で root 所有になり得る（WORKDIR が useradd より先）。
+
+    実機で `ls -ld /home/agent` が root:root 0755 になり、$HOME に書けなかった。
+    run / start の後に uid へ寄せ直す（manager は cap_drop: ALL で chown できない）。
+    """
+    monkeypatch.setattr(sm, "_home_fixed", set())
+    monkeypatch.setenv("SANDBOX_UID", "1026")
+    monkeypatch.setenv("SANDBOX_GID", "100")
+
+    sm._fix_home("alice-sandbox")
+
+    assert fake.calls == [
+        ("exec", "-u", "0", "alice-sandbox", "chown", "1026:100", "/home/agent"),
+        ("exec", "-u", "0", "alice-sandbox", "chown", "1026:100", "/home/agent/.agents"),
+    ]
+
+
+def test_fix_home_uses_configured_uid(fake, monkeypatch) -> None:
+    """SANDBOX_UID を変えている環境では、その uid に合わせる（1026 決め打ちにしない）。"""
+    monkeypatch.setattr(sm, "_home_fixed", set())
+    monkeypatch.setenv("SANDBOX_UID", "1000")
+    monkeypatch.setenv("SANDBOX_GID", "1000")
+
+    sm._fix_home("alice-sandbox")
+
+    assert fake.calls[0][-2] == "1000:1000"
+
+
+def test_ensure_fixes_home_on_existing_container(fake, tmp_path: Path, monkeypatch) -> None:
+    """running の経路（毎 exec）でも HOME を直す。start 済みだと run の chmod を通らない。"""
+    monkeypatch.setenv("SANDBOX_DNS_CHECK", "0")
+
+    assert sm._ensure("alice") is None
+
+    assert ("exec", "-u", "0", "alice-sandbox", "chown", "1026:100", "/home/agent") in fake.calls
+
+
+def test_fix_home_prefers_container_user(fake, monkeypatch) -> None:
+    """chown 先は env ではなく既存コンテナの .Config.User を信じる。
+
+    SANDBOX_UID を後から変えたとき、動いていない uid へ $HOME を寄せると
+    二度と書けないコンテナになる。
+    """
+    monkeypatch.setenv("SANDBOX_UID", "1026")
+    monkeypatch.setenv("SANDBOX_GID", "100")
+    monkeypatch.setenv("SANDBOX_DNS_CHECK", "0")
+    fake.by_subcommand["inspect"] = (0, "true 1 1000:1000\n", "")
+
+    assert sm._ensure("alice") is None
+
+    assert ("exec", "-u", "0", "alice-sandbox", "chown", "1000:1000", "/home/agent") in fake.calls
+    assert ("exec", "-u", "0", "alice-sandbox", "chown", "1026:100", "/home/agent") not in fake.calls
+
+
+def test_write_log_is_writable_by_persona(fake, tmp_path: Path, monkeypatch) -> None:
+    """ログは root 所有で置かれるので、ペルソナが消せる/書き換えられる状態にする。"""
+    rel = sm._write_log("alice", "id", "out", "err")
+
+    assert rel is not None
+    log = tmp_path / "container" / "persona" / "alice" / "workspace" / rel.split("/workspace/", 1)[1]
+    assert stat.S_IMODE(log.stat().st_mode) == 0o666
+    assert stat.S_IMODE(log.parent.stat().st_mode) == 0o777

@@ -230,14 +230,56 @@ def _mount_specs(root: Path, persona: str) -> list[tuple[Path, str, bool]]:
     ]
 
 
-def _fix_mount_perms(persona: str) -> None:
+_home_fixed: set[str] = set()
+_home_warned: set[str] = set()
+
+
+def _fix_home(container: str, user: str | None = None) -> None:
+    """$HOME をコンテナの uid に寄せる（コンテナごとに 1 回だけ）。
+
+    イメージの /home/agent は WORKDIR が先に作るため root 所有になり得る
+    （useradd -m は既存ディレクトリを作り直さない）。実機でも ``HOME=NG`` になった。
+    マウント先は chmod で済ませているが、$HOME 本体と .agents が書けないままだと
+    pip install --user / git config --global が落ちる。chown は冪等なので作り直さない。
+
+    manager は cap_drop: ALL なので os.chown はできない。sandbox 側は既定 caps を
+    持っているので、コンテナの root で exec して chown させる。**この結合に依存して
+    いる**（sandbox にも cap-drop を入れると、この修正は静かに無効になる）。
+    失敗は無視する（rootless では効かないが、元の症状が残るだけで exec は続ける）。
+    """
+    if container in _home_fixed:
+        return
+    # 既存コンテナの真実は .Config.User。SANDBOX_UID を後から変えても壊さない。
+    spec = user or f"{_env('SANDBOX_UID', '1026')}:{_env('SANDBOX_GID', '100')}"
+    if ":" not in spec:
+        spec = f"{spec}:{_env('SANDBOX_GID', '100')}"
+    detail = ""
+    failed = False
+    for path in ("/home/agent", "/home/agent/.agents"):
+        proc, err = _call("exec", "-u", "0", container, "chown", spec, path, timeout=15.0)
+        if proc is None or proc.returncode != 0:
+            failed = True
+            detail = err or (proc.stderr.strip() if proc is not None else "")
+    if failed:
+        # 毎 exec 警告しない（同じコンテナでは 1 回だけ）。
+        if container not in _home_warned:
+            _home_warned.add(container)
+            logger.warning(
+                "sandbox $HOME を chown できない（rootless では効果なし）: %s/%s %s", container, spec, detail
+            )
+        return
+    _home_fixed.add(container)
+
+
+def _fix_mount_perms(persona: str, user: str | None = None) -> None:
     """rw マウントを書き込み可能にする。
 
     sandbox は非 root（既定 1026:100）で走る。manager が mkdir しただけだと
     root 所有になり書けない。chown は cap_drop: ALL でできないので chmod する。
     既存コンテナを start するだけの経路では run 時の chmod が済んでいないため、
-    ensure のたびに掛け直す（失败しても exec は続ける）。
+    ensure のたびに掛け直す（失敗しても exec は続ける）。
     """
+    _fix_home(_container(persona), user)
     root = _host_data_root()
     if root is None:
         return
@@ -294,7 +336,8 @@ def _install_missing(container: str, packages: list[str]) -> list[str]:
         "export DEBIAN_FRONTEND=noninteractive; "
         "apt-get update && apt-get install -y --no-install-recommends " + " ".join(missing)
     )
-    proc, err = _call("exec", container, "bash", "-lc", script, timeout=APT_EXTRA_TIMEOUT_SECONDS)
+    # コンテナは --user 1026:100 で走る。apt は root でないと必ず失敗する。
+    proc, err = _call("exec", "-u", "0", container, "bash", "-lc", script, timeout=APT_EXTRA_TIMEOUT_SECONDS)
     if proc is None:
         logger.warning("sandbox apt install failed (%s): %s", container, err)
         return []
@@ -309,6 +352,11 @@ def _install_missing(container: str, packages: list[str]) -> list[str]:
 
 def _post_run(container: str) -> str | None:
     """run 直後の面倒。戻り値に載るのは DNS の失敗だけ（apt は警告で済ませる）。"""
+    # run 直後は必ず新規コンテナ。外部の docker rm で作り直された場合も
+    # ここを通るので、$HOME の chown キャッシュはここで捨てる。
+    _home_fixed.discard(container)
+    _home_warned.discard(container)
+    _fix_home(container)
     dns_err = _post_start_check(container)
     if dns_err:
         return dns_err
@@ -374,26 +422,27 @@ def _ensure_inner(
     inspected, err = _call(
         "inspect",
         "--format",
-        '{{.State.Running}} {{index .Config.Labels "com.nous.sandbox"}}',
+        '{{.State.Running}} {{index .Config.Labels "com.nous.sandbox"}} {{.Config.User}}',
         name,
         timeout=30.0,
     )
     if inspected is None:
         return err or "docker inspect failed"
     if inspected.returncode == 0:
-        running, _, label = inspected.stdout.strip().partition(" ")
+        running, _, rest = inspected.stdout.strip().partition(" ")
+        label, _, user = rest.partition(" ")
         # 名前だけで他人のコンテナを exec しない。自分が作ったものだけ触る。
         if label.strip() != "1":
             return f"{name} は nous の sandbox ではない（com.nous.sandbox ラベルが無い）"
         if running == "true":
-            _fix_mount_perms(persona)
+            _fix_mount_perms(persona, user.strip() or None)
             return None
         started, err = _call("start", name)
         if started is None:
             return err or "docker start failed"
         if started.returncode != 0:
             return started.stderr.strip() or "docker start failed"
-        _fix_mount_perms(persona)
+        _fix_mount_perms(persona, user.strip() or None)
         return _post_start_check(name)
 
     detail = inspected.stderr.strip()
@@ -502,7 +551,10 @@ def _write_log(persona: str, command: str, stdout: str, stderr: str) -> str | No
     body = f"$ {command}\n\n[stdout]\n{stdout}\n\n[stderr]\n{stderr}\n"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
+        # ペルソナは root 所有のファイルを消せない。ログは自分で読む/消すので 0666 に。
+        os.chmod(path.parent, 0o777)  # nosec B103 - 隔離ディレクトリ。上の _fix_mount_perms 参照。
         path.write_text(body, encoding="utf-8")
+        os.chmod(path, 0o666)  # nosec B103 - 同上。中身は実行内容のログだけ。
     except OSError:
         logger.warning("sandbox log write failed: %s", path, exc_info=True)
         return None
@@ -674,6 +726,9 @@ def reset_sandbox(req: PersonaRequest) -> dict:
     if _host_data_root() is None:
         return _failure("host data root が解決できない（SANDBOX_HOST_DATA_ROOT に絶対パスを設定する）")
     name = _container(persona)
+    # 同名で作り直されるので、$HOME の chown 済みキャッシュを持ち越さない。
+    _home_fixed.discard(name)
+    _home_warned.discard(name)
     fmt = '{{.Id}} {{index .Config.Labels "com.nous.sandbox"}}'
     state, err = _call("inspect", "--format", fmt, name, timeout=30.0)
     if state is None:

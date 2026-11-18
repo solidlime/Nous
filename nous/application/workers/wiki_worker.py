@@ -18,6 +18,7 @@ from __future__ import annotations
 
 import asyncio
 import json
+import os
 import re
 import threading
 from dataclasses import replace
@@ -461,7 +462,7 @@ class WikiWorker(JournalMixin, ConflictsMixin):
         失敗したら False を返し、呼び手は gist を消さない（不可逆な loss を防ぐ）。
         """
         from nous.domain.shared.time_utils import get_now
-        from nous.infrastructure.wiki.store import WikiStore
+        from nous.infrastructure.wiki.store import WikiStore, write_shared
 
         dumped = ctx.memory_repo.dump_rows(keys)
         if not isinstance(dumped, Success) or not dumped.value:
@@ -469,11 +470,27 @@ class WikiWorker(JournalMixin, ConflictsMixin):
             return False
         day = get_now(self._cfg.run_at_tz).strftime("%Y%m%d")
         path = WikiStore(self._settings.data_root, persona).root / _GIST_DUMP_SUBDIR / f"gists-{day}.jsonl"
+        # _purged は wiki 配下 = ペルソナが 0777 で書ける。symlink を先に置かれると
+        # 日付から名前が予測できるため、root で任意ファイルを読ませ/append させられる。
+        # 読みもリンク拒否で開く（is_symlink() の check-then-use を避ける）。
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            with path.open("a", encoding="utf-8") as fh:
-                for row in dumped.value:
-                    fh.write(json.dumps(row, ensure_ascii=False, default=str) + "\n")
+            fd = os.open(path, os.O_RDONLY | os.O_NOFOLLOW)
+        except FileNotFoundError:
+            existing = ""
+        except OSError as exc:
+            logger.warning("WikiWorker: gist dump target refused for %s: %s", persona, exc)
+            return False
+        else:
+            try:
+                with os.fdopen(fd, encoding="utf-8") as fh:
+                    existing = fh.read()
+            except (OSError, UnicodeDecodeError) as exc:
+                logger.warning("WikiWorker: gist dump read failed for %s: %s", persona, exc)
+                return False
+        try:
+            added = "".join(json.dumps(row, ensure_ascii=False, default=str) + "\n" for row in dumped.value)
+            # mode/dir_mode は書く側（write_shared）が握る。ここで chmod を打たない。
+            write_shared(path, existing + added)
         except Exception:
             logger.warning("WikiWorker: gist dump write failed for %s", persona, exc_info=True)
             return False

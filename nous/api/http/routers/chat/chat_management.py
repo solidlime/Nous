@@ -481,6 +481,7 @@ async def _do_attachment_upload(persona: str, ctx, filename: str, file_bytes: by
     """Save uploaded file to host FS and return metadata dict."""
     import mimetypes
     import os
+    from contextlib import suppress
     from pathlib import Path
 
     settings = get_settings()
@@ -501,6 +502,10 @@ async def _do_attachment_upload(persona: str, ctx, filename: str, file_bytes: by
     safe_name = dest.name
 
     dest.write_bytes(file_bytes)
+    # persona は別 uid で動く。root 0644 のままだと edit_file / 削除で Permission denied。
+    # 権限を変えられなくても保存は成功させる（ペルソナが読めないよりはまし）。
+    with suppress(OSError):
+        os.chmod(dest, 0o666)  # nosec B103 - persona 専用の隔離ディレクトリ。
 
     mime_type, _ = mimetypes.guess_type(safe_name)
     mime_type = mime_type or "application/octet-stream"

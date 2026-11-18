@@ -213,3 +213,71 @@ def test_restore_revision_writes_back_and_keeps_new_entry(store):
 def test_restore_missing_revision_is_failure(store):
     store.write_page("p-miss", title="v1", body="b")
     assert not store.restore_revision("p-miss", 999).is_ok
+
+
+def test_written_page_is_writable_by_the_sandbox_user(store, tmp_path):
+    """nous（root）が置いたページを、別 uid の sandbox が編集できること。
+
+    実機で /home/agent と .agents が root 所有になり書けなかったのと同じ種類の穴。
+    wiki は rw マウントで persona が書く場所なので、置いた後に 0666 へ落とす。
+    """
+    import stat
+
+    assert store.write_page("project-nous", title="NOUS", body="本文").is_ok
+
+    page = tmp_path / "persona" / "herta" / "wiki" / "project-nous.md"
+    assert stat.S_IMODE(page.stat().st_mode) == 0o666
+
+
+def test_symlinked_page_is_rejected(store, tmp_path):
+    """wiki はペルソナが 0777 で書ける。symlink を置かれても辿らない。
+
+    辿ると nous（root）の権限で他ペルソナの file を読めてしまう。
+    """
+    victim = tmp_path / "persona" / "other" / "db" / "memory.sqlite"
+    victim.parent.mkdir(parents=True)
+    victim.write_text("secret")
+    store.root.mkdir(parents=True, exist_ok=True)
+    (store.root / "leak.md").symlink_to(victim)
+
+    assert not store.read_page("leak").is_ok
+    assert "leak" not in store.list_slugs()
+
+
+def test_history_stays_private_to_nous(store, tmp_path):
+    """履歴は nous しか書かない。dir も 0755 のまま（dir に write があると file mode は無意味）。
+
+    dir がペルソナに書けると .jsonl を差し替えて版を偽造できる。
+    """
+    import stat
+
+    assert store.write_page("page", title="t", body="b").is_ok
+
+    hist = tmp_path / "persona" / "herta" / "wiki" / "_history" / "page.jsonl"
+    assert stat.S_IMODE(hist.stat().st_mode) == 0o644
+    assert stat.S_IMODE(hist.parent.stat().st_mode) == 0o755
+
+
+def test_symlinked_wiki_dir_is_not_written_through(store, tmp_path):
+    """_purged やネスト slug の親 dir を symlink にされても、その先へ書かない。"""
+    victim_dir = tmp_path / "persona" / "other" / "wiki"
+    victim_dir.mkdir(parents=True)
+    store.root.mkdir(parents=True, exist_ok=True)
+    (store.root / "_purged").symlink_to(victim_dir)
+
+    from nous.infrastructure.wiki.store import WikiStoreError, write_shared
+
+    with pytest.raises(WikiStoreError):
+        write_shared(store.root / "_purged" / "gists.jsonl", "x")
+
+
+def test_nested_slug_through_symlinked_dir_returns_failure(store):
+    """ネスト slug の親 dir が symlink でも、例外を投げず Failure で返す。
+
+    ペルソナは wiki を 0777 で書けるので `ln -s . wiki/sub` を置ける。
+    WikiStoreError が write_page を貫通すると 500 になる。
+    """
+    store.root.mkdir(parents=True, exist_ok=True)
+    (store.root / "sub").symlink_to(store.root)
+
+    assert not store.write_page("sub/x", title="t", body="b").is_ok

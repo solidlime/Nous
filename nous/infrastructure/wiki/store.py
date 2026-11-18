@@ -11,10 +11,12 @@
 
 from __future__ import annotations
 
+import contextlib
 import hashlib
 import json
 import os
 import re
+import tempfile
 from dataclasses import dataclass, field
 from datetime import UTC, datetime
 from pathlib import Path
@@ -69,6 +71,41 @@ def _rev_of(entry: dict) -> int:
         return int(entry.get("rev") or 0)
     except (TypeError, ValueError):
         return 0
+
+
+def write_shared(path: Path, text: str, mode: int = 0o666, dir_mode: int = 0o777) -> None:
+    """ペルソナが書ける権限で置き換える（sandbox は別 uid で動く）。
+
+    wiki は rw マウントで persona が編集する場所だ。nous（root）が 0644 で置くと
+    edit_file が Permission denied になる。
+
+    tmp 名は ``mkstemp`` で選ぶ。``.{name}.tmp`` のような予測可能な名前だと、
+    wiki を書けるペルソナが先に symlink を置いて、nous（root）に
+    別ペルソナの DB を truncate させられる（os.replace はリンク自体を消すが、
+    書き込みはリンクを辿る）。親ディレクトリ自体が symlink の場合も辿らない。
+
+    履歴のように「ペルソナに書かせたくない」場所は ``mode=0o644, dir_mode=0o755``
+    で呼ぶ。dir に write があるとファイル mode に関係なく差し替えられるため。
+    """
+    parent = path.parent
+    parent.mkdir(parents=True, exist_ok=True)
+    if parent.is_symlink():
+        raise WikiStoreError(f"wiki directory is a symlink: {parent}")
+    try:
+        os.chmod(parent, dir_mode)  # nosec B103 - persona 専用ディレクトリ。sandbox が同階層に作れるように。
+    except OSError:
+        logger.warning("Wiki dir chmod failed: %s", parent, exc_info=True)
+    fd, tmp = tempfile.mkstemp(dir=parent, prefix=f".{path.name}.", suffix=".tmp")
+    try:
+        with os.fdopen(fd, "w", encoding="utf-8") as fh:
+            fh.write(text)
+            fh.flush()
+            os.fchmod(fh.fileno(), mode)  # nosec B103 - persona 専用の wiki。
+        os.replace(tmp, path)
+    except BaseException:
+        with contextlib.suppress(OSError):
+            Path(tmp).unlink(missing_ok=True)
+        raise
 
 
 @dataclass(frozen=True)
@@ -209,6 +246,10 @@ class WikiStore:
         resolved_root = self.root.resolve()
         if not path.parent.resolve().is_relative_to(resolved_root):
             raise WikiStoreError(f"slug escapes wiki root: {slug!r}")
+        # ページ実体が symlink だと、nous（root）が他ペルソナのファイルを読む/書く。
+        # wiki はペルソナが 0777 で書ける場所なので、リンクは受け付けない。
+        if path.is_symlink():
+            raise WikiStoreError(f"wiki page is a symlink: {slug!r}")
         return path
 
     def wiki_dir(self) -> Path:
@@ -223,6 +264,8 @@ class WikiStore:
             return []
         slugs: list[str] = []
         for path in sorted(self.root.rglob("*.md")):
+            if path.is_symlink():
+                continue
             rel = path.relative_to(self.root).with_suffix("")
             slug = "/".join(rel.parts)
             if slug == INDEX_SLUG or all(_SLUG_SEGMENT_RE.match(part) for part in rel.parts):
@@ -300,11 +343,8 @@ class WikiStore:
         except (OSError, WikiStoreError) as exc:
             logger.warning("Wiki history push failed for %s: %s", slug, exc)
         try:
-            path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_name(f".{path.name}.tmp")
-            tmp.write_text(rendered, encoding="utf-8")
-            os.replace(tmp, path)
-        except OSError as exc:
+            write_shared(path, rendered)
+        except (OSError, WikiStoreError) as exc:
             logger.error("Wiki write failed for %s: %s", slug, exc)
             return Failure(WikiStoreError(f"cannot write {slug}: {exc}"))
         if created:
@@ -381,10 +421,21 @@ class WikiStore:
 
     def _history_path(self, slug: str) -> Path:
         _validate_slug(slug)
-        return self.root / HISTORY_DIRNAME / Path(*slug.split("/")).with_suffix(".jsonl")
+        path = self.root / HISTORY_DIRNAME / Path(*slug.split("/")).with_suffix(".jsonl")
+        # 履歴 dir を symlink に差し替えられると、他ペルソナの場所へ nous が書く。
+        if not path.parent.resolve().is_relative_to(self.root.resolve()):
+            raise WikiStoreError(f"slug escapes wiki root: {slug!r}")
+        if path.is_symlink():
+            raise WikiStoreError(f"wiki history is a symlink: {slug!r}")
+        return path
 
     def _history_entries(self, slug: str) -> list[dict]:
-        path = self._history_path(slug)
+        try:
+            path = self._history_path(slug)
+        except WikiStoreError as exc:
+            # 履歴が壊れていてもページ表示は落とさない。
+            logger.warning("Wiki history path rejected for %s: %s", slug, exc)
+            return []
         try:
             lines = path.read_text(encoding="utf-8").splitlines()
         except FileNotFoundError:
@@ -410,14 +461,18 @@ class WikiStore:
             return
         rev = max((_rev_of(e) for e in entries), default=0) + 1
         entries.append({"rev": rev, "at": _now_iso(), "action": action, "raw": raw})
-        path = self._history_path(slug)
-        path.parent.mkdir(parents=True, exist_ok=True)
-        tmp = path.with_name(f".{path.name}.tmp")
-        tmp.write_text(
+        try:
+            path = self._history_path(slug)
+        except WikiStoreError as exc:
+            logger.warning("Wiki history push skipped for %s: %s", slug, exc)
+            return
+        # 履歴は nous しか書かない。ペルソナに書かせると版の改竄になるので 0644 のまま。
+        write_shared(
+            path,
             "".join(json.dumps(e, ensure_ascii=False) + "\n" for e in entries[-MAX_REVISIONS:]),
-            encoding="utf-8",
+            mode=0o644,
+            dir_mode=0o755,
         )
-        os.replace(tmp, path)
 
     def history(self, slug: str) -> list[dict]:
         """``{rev, action, at, title, updated, bytes, hash}`` を新しい順に返す（本文は含めない）。"""
@@ -491,12 +546,9 @@ class WikiStore:
                 rows.append(f"- … 他 {rest} 日分（wiki_ls で全件）")
         rows.append("")
         try:
-            self.root.mkdir(parents=True, exist_ok=True)
             path = self.root / f"{INDEX_SLUG}.md"
-            tmp = path.with_name(f".{path.name}.tmp")
-            tmp.write_text("\n".join(rows), encoding="utf-8")
-            os.replace(tmp, path)
-        except OSError as exc:
+            write_shared(path, "\n".join(rows))
+        except (OSError, WikiStoreError) as exc:
             logger.error("Wiki index rebuild failed: %s", exc)
             return Failure(WikiStoreError(f"cannot write index: {exc}"))
         return Success(None)

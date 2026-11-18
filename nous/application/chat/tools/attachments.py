@@ -11,6 +11,7 @@ sandbox 稼働中はホストのワークスペースが見えない。manager �
 
 from __future__ import annotations
 
+import contextlib
 import mimetypes
 import os
 import shlex
@@ -48,7 +49,8 @@ def _unique_path(directory: Path, filename: str) -> Path:
     """
     dest = directory / filename
     counter = 0
-    while dest.exists():
+    # dangling symlink は exists() が False を通す。辿ると root で任意の場所に書く。
+    while dest.exists() or dest.is_symlink():
         counter += 1
         dest = directory / f"{Path(filename).stem}_{counter}{Path(filename).suffix}"
     return dest
@@ -106,9 +108,15 @@ async def _copy_from_sandbox(manager: object, persona: str, path: str, name: str
             raise AttachmentError(f"コピーできなかった: {detail[0] if detail else 'cp failed'}")
     except BaseException:
         # タイムアウト切断でも部分ファイルを uploads に残さない
-        dest.unlink(missing_ok=True)
-        (directory / part_name).unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
+            dest.unlink(missing_ok=True)
+        with contextlib.suppress(OSError):
+            (directory / part_name).unlink(missing_ok=True)
         raise
+    # コンテナ内の cp はペルソナ自身の所有になるが、sandbox 無効時に
+    # root が作った既存ファイルと同じ扱いに揃えておく。
+    with contextlib.suppress(OSError):
+        os.chmod(dest, 0o666)
     return dest
 
 
@@ -118,10 +126,14 @@ def _copy_on_host(config: ChatConfig, persona: str, path: str, name: str | None)
         raise AttachmentError(f"ファイルが無い: {path}")
     if source.stat().st_size > MAX_ATTACHMENT_BYTES:
         raise AttachmentError(f"大きすぎる（上限 {MAX_ATTACHMENT_BYTES // (1024 * 1024)}MB）: {path}")
+    if source.is_symlink():
+        raise AttachmentError(f"symlink は添付できない: {path}")
     directory = Path(get_settings().persona_uploads_dir(persona))
     directory.mkdir(parents=True, exist_ok=True)
     dest = _unique_path(directory, name or _safe_name(source.name, "file"))
     shutil.copy2(source, dest)
+    with contextlib.suppress(OSError):
+        os.chmod(dest, 0o666)
     return dest
 
 
