@@ -55,6 +55,10 @@ function _handleChatEvent(evt) {
       t.rafPending = true;
       requestAnimationFrame(function() {
         t.rafPending = false;
+        // 最終描画（_finalizeTurn の markdown）より後に発火したフレームは捨てる。
+        // 同じタスクで text_delta と done が届くと、素の textContent が
+        // 整形済み HTML を上書きしてしまう（リロードで直るように見えるバグ）。
+        if (N.Chat._send.turn() !== t) return;
         if (t.currentTextBubble) {
           t.currentTextBubble.textContent = t.currentTextContent;
         }

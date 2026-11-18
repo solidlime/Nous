@@ -38,7 +38,8 @@ beforeAll(() => {
   N.Core.api = vi.fn();
   N.Chat = {
     state: { messages: [], streaming: false, attachments: [] },
-    markdown: { render: (s) => s },
+    // 整形結果を検知できるよう、素のテキストとは違う HTML を返す
+    markdown: { render: (s) => '<p>' + s + '</p>' },
     history: {
       getSessionId: () => 'main',
       restore: vi.fn(),
@@ -144,6 +145,20 @@ describe('chat hub — send flow', () => {
     const userDiv = document.querySelector('.chat-msg.user');
     expect(userDiv.dataset.msgId).toBe('u1');
     expect(N.Chat.history.restore).not.toHaveBeenCalled();
+    // done で最終 markdown 描画
+    expect(bubbles()[1].innerHTML).toBe('<p>げんきだよ</p>');
+  });
+
+  it('keeps the finalized markdown when a delta and done land in the same frame', async () => {
+    const es = chatStream();
+    await sendTurn('整形して');
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '整形して', session_id: 'main' }), '1');
+    // 同じタスクで text_delta と done — delta の rAF はまだ発火していない
+    es.emit('message', JSON.stringify({ type: 'text_delta', content: '**太字**' }), '2');
+    es.emit('message', JSON.stringify({ type: 'done', message: 'completed' }), '3');
+    await raf();
+    await raf();
+    expect(bubbles()[1].innerHTML).toBe('<p>**太字**</p>');
   });
 
   it('409 holds the message, shows one info toast, and retries after the backoff', async () => {
