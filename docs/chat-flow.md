@@ -326,7 +326,7 @@ session.flush()   # PostProcessStep が done を出す前に必ずディスク�
 | `tool_result` | ツール完了 | 結果の折り畳み表示 |
 | `image_gen_start` | 画像生成の直前 | プレースホルダ |
 | `image_gen_result` | 画像生成の完了 | 画像差し込み |
-| `attachment` | エージェントがファイルを渡す | 添付チップ（`file_attach`） |
+| `file_attach` | エージェントがファイルを渡す | 添付チップ（`AttachmentSSE`） |
 | `memory_activity` | 速報（`preliminary`）／後処理 | 記憶パネル |
 | `context_compressed` | 圧縮発生 | 「圧縮した」バッジ |
 | `session_summarized` | 退避の要約完了 | 履歴の要約表示 |
@@ -334,7 +334,7 @@ session.flush()   # PostProcessStep が done を出す前に必ずディスク�
 | `context_update` | 状態変化 | 状態パネル更新 |
 | `inventory_update` | 装備変化 | 装備パネル更新 |
 | `debug_info` | `debug=true` のみ | デバッグ表示 |
-| `approval_required` | 承認待ちツール | モーダル |
+| `approval_requested` | 承認待ちツール（120 秒で deny） | モーダル |
 | `error` | 失敗 | エラー表示 |
 | `done` | ターン完了（後処理の途中） | typing 解除・履歴確定・保留送信 |
 
