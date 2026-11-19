@@ -439,6 +439,27 @@ class AppContextRegistry:
             return list(cls._contexts)
 
     @classmethod
+    def all_personas(cls) -> list[str]:
+        """ディスク上の persona ディレクトリと生成済みコンテキストの和集合。
+
+        レジストリは遅延生成なので、再起動後まだ誰も触っていない persona は
+        ``personas()`` に出てこない。ワーカーの巡回対象を ``personas()`` にすると
+        「毎朝9時の予定」が永久に発火しない (kanban #85)。
+        ディスク列挙は best-effort（失敗しても生成済み分は返す）。
+        """
+        with cls._lock:
+            names = set(cls._contexts)
+            deleting = set(cls._deleting)
+        if cls._settings is not None:
+            try:
+                for entry in Path(cls._settings.persona_dir).iterdir():
+                    if entry.is_dir() and not entry.name.startswith("."):
+                        names.add(entry.name)
+            except OSError:
+                logger.debug("persona_dir listing failed", exc_info=True)
+        return sorted(names - deleting)
+
+    @classmethod
     def snapshot(cls) -> list[tuple[str, AppContext]]:
         """live context の安定したスナップショット。
 

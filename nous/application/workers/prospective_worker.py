@@ -97,7 +97,7 @@ class ProspectiveWorker:
 
         now = get_now()
         waits: list[float] = []
-        for persona in list(AppContextRegistry.personas()):
+        for persona in AppContextRegistry.all_personas():
             try:
                 ctx = AppContextRegistry.get(persona)
                 result = ctx.memory_service.get_by_tags([AGENT_TASK_TAG])
@@ -116,7 +116,7 @@ class ProspectiveWorker:
         """1 サイクル（手動運転・検証用に public）。"""
         from nous.application.use_cases import AppContextRegistry
 
-        for persona in list(AppContextRegistry.personas()):
+        for persona in AppContextRegistry.all_personas():
             try:
                 ctx = AppContextRegistry.get(persona)
                 due = self._due(ctx)
@@ -143,7 +143,7 @@ class ProspectiveWorker:
         """
         from nous.application.use_cases import AppContextRegistry
 
-        for persona in list(AppContextRegistry.personas()):
+        for persona in AppContextRegistry.all_personas():
             try:
                 ctx = AppContextRegistry.get(persona)
                 result = ctx.memory_service.get_by_tags([AGENT_TASK_TAG])

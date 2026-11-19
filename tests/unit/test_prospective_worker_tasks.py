@@ -36,7 +36,7 @@ def ctx(sqlite_conn):
 def worker(monkeypatch, ctx):
     from nous.application.use_cases import AppContextRegistry
 
-    monkeypatch.setattr(AppContextRegistry, "personas", classmethod(lambda cls: [PERSONA]))
+    monkeypatch.setattr(AppContextRegistry, "all_personas", classmethod(lambda cls: [PERSONA]))
     monkeypatch.setattr(AppContextRegistry, "get", classmethod(lambda cls, persona: ctx))
     turn = AsyncMock(return_value="")
     monkeypatch.setattr(prospective_worker, "run_self_turn", turn)

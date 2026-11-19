@@ -99,7 +99,7 @@ def tools(monkeypatch):
 def _run(monkeypatch, ctx) -> activity_worker.ActivityWorker:
     from nous.application.use_cases import AppContextRegistry
 
-    monkeypatch.setattr(AppContextRegistry, "personas", classmethod(lambda cls: [PERSONA]))
+    monkeypatch.setattr(AppContextRegistry, "all_personas", classmethod(lambda cls: [PERSONA]))
     monkeypatch.setattr(AppContextRegistry, "get", classmethod(lambda cls, persona: ctx))
     worker = activity_worker.ActivityWorker()
     worker.run_cycle()

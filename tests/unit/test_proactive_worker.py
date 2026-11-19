@@ -83,7 +83,7 @@ def published(monkeypatch):
 def _run(monkeypatch, ctx) -> proactive_worker.ProactiveWorker:
     from nous.application.use_cases import AppContextRegistry
 
-    monkeypatch.setattr(AppContextRegistry, "personas", classmethod(lambda cls: [PERSONA]))
+    monkeypatch.setattr(AppContextRegistry, "all_personas", classmethod(lambda cls: [PERSONA]))
     monkeypatch.setattr(AppContextRegistry, "get", classmethod(lambda cls, persona: ctx))
     worker = proactive_worker.ProactiveWorker()
     worker.run_cycle()

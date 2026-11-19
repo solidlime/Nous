@@ -97,7 +97,7 @@ class ProactiveWorker:
         """1 サイクル（手動運転・検証用に public）。"""
         from nous.application.use_cases import AppContextRegistry
 
-        for persona in list(AppContextRegistry.personas()):
+        for persona in AppContextRegistry.all_personas():
             try:
                 ctx = AppContextRegistry.get(persona)
             except Exception:
