@@ -543,3 +543,25 @@ async def test_error_shapes_never_become_hits(tmp_path, mcp_servers_env, fake_st
 
     assert result.get("hits") is None
     assert result["reason"] == "no_url"
+
+    async def test_no_budget_reports_failed_not_no_url(self, tmp_path, mcp_servers_env, fake_steps) -> None:
+        """予算 0 で「URL が無かった」と報告しない（1 手も打っていない）。"""
+        pool = mcp_servers_env([{"name": "mcp-hub", "url": "http://x/mcp"}], [_tool()])
+        steps = fake_steps({"tool": "mcp-hub__search", "args": {"q": "x"}})
+        assert await research_mod.research(_ctx(tmp_path), _PERSONA, "調べもの", max_calls=0) == {"reason": "failed"}
+        assert pool.calls == []
+        assert steps == []
+
+
+class TestPoolToolNaming:
+    def test_list_all_tools_names_are_qualified(self) -> None:
+        """``list_all_tools`` の名前がそのまま ``call_tool`` に通る（server__tool 形式）。
+
+        フェッチ層が接頭辞を付けるので、探索は素の名前を受け取らない。
+        """
+        from nous.infrastructure.mcp_client.pool import MCPClientPool
+        from nous.infrastructure.mcp_client.types import MCPTool
+
+        pool = MCPClientPool([{"name": "mcp-hub", "url": "http://hub/mcp"}])
+        pool._tools = [MCPTool(name="mcp-hub__search", description="d", server_name="mcp-hub", original_name="search")]
+        assert [t.name for t in pool.list_all_tools()] == ["mcp-hub__search"]

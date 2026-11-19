@@ -75,6 +75,9 @@ async def research(ctx: Any, persona: str, question: str, *, max_calls: int = 3)
     """
     if not question.strip():
         return {"reason": "failed"}
+    if max_calls <= 0:
+        # 1手も打っていないのに「調べたが URL が無かった」と報告しないように。
+        return {"reason": "failed"}
     try:
         return await _research(ctx, persona, question, max_calls=max_calls)
     except Exception as e:  # noqa: BLE001 — worker を落とさないのが最優先
