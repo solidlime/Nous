@@ -216,29 +216,19 @@ def test_dashboard_nav_wiring_is_complete():
     for btn in re.findall(r'<button class="tab-btn[^"]*?"[^>]*>', html):
         assert "data-loader=" in btn, f"nav button without loader: {btn}"
     panel_ids = set(re.findall(r'id="tab-([^"]+)"', html))
-    assert set(nav_tabs) == panel_ids, (
-        f"nav/panel drift: nav={sorted(nav_tabs)} panels={sorted(panel_ids)}"
-    )
+    assert set(nav_tabs) == panel_ids, f"nav/panel drift: nav={sorted(nav_tabs)} panels={sorted(panel_ids)}"
     # SSR 'active' is authored in two places (nav first tab / overview.py
     # panel) — keep them pointing at the same tab.
-    active_nav = re.findall(
-        r'class="tab-btn active"[^>]*data-tab="([^"]+)"', html
-    )
+    active_nav = re.findall(r'class="tab-btn active"[^>]*data-tab="([^"]+)"', html)
     active_panel = re.findall(r'id="tab-([^"]+)" class="tab-panel active"', html)
-    assert active_nav == active_panel, (
-        f"active tab drift: nav={active_nav} panel={active_panel}"
-    )
+    assert active_nav == active_panel, f"active tab drift: nav={active_nav} panel={active_panel}"
     # #93: attributes the JS side reads must survive render — self-managed
     # markers and loader args come from the same dashboard.py source.
     sm_tabs = re.findall(r'data-tab="([^"]+)"[^>]*data-self-managed', html)
     assert sm_tabs, "no self-managed markers rendered"
-    assert "data-loader-args=\"[true]\"" in html, (
-        "activity loaderArgs [true] missing from SSR"
-    )
+    assert 'data-loader-args="[true]"' in html, "activity loaderArgs [true] missing from SSR"
     # loader-args appears exactly once (activity), on a self-managed tab
-    args_tabs = re.findall(
-        r'data-tab="([^"]+)"[^>]*data-loader-args', html
-    )
+    args_tabs = re.findall(r'data-tab="([^"]+)"[^>]*data-loader-args', html)
     assert args_tabs == ["activity"], f"unexpected loaderArgs tabs: {args_tabs}"
     assert "activity" in sm_tabs, "activity must be self-managed"
 

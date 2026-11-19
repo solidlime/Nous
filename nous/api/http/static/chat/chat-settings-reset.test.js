@@ -52,6 +52,11 @@ function buildForm() {
       </div>
       <div class="chat-check-row"><input type="checkbox" id="chat-show-timestamps" /><label for="chat-show-timestamps">ts</label></div>
       <div class="chat-check-row"><input type="checkbox" id="chat-voice-streaming" checked /><label for="chat-voice-streaming">stream</label></div>
+      <div><input type="text" id="chat-max-tokens" value="8192" /></div>
+      <div><input type="number" id="chat-extract-max-tokens" value="512" /></div>
+      <div><input type="number" id="chat-stored-msgs" value="200" /></div>
+      <div><input type="number" id="chat-irodori-num-steps" value="" /></div>
+      <div id="chat-irodori-num-steps-val"></div>
       <div><input type="number" id="chat-brain-max-tokens" value="" /></div>
       <div><input type="number" id="chat-brain-decision-max-hops" value="" /></div>
       <div><input type="number" id="chat-brain-decision-threshold" value="" /></div>
@@ -215,6 +220,23 @@ describe('reset to default', () => {
     });
     window.Nous.Chat.settings.injectResetButtons();
     expect(btn('chat-temperature').classList.contains('is-dirty')).toBe(true);
+  });
+
+  it('falls back to the defaults API value when the config omits a field', async () => {
+    // apply.js used to硬code 8192/512/30 etc. The single source is the defaults
+    // API, so a server-side default change must show through.
+    apiStub.mockResolvedValue({
+      fields: Object.assign({}, DEFAULTS.fields, {
+        max_tokens: { default: 4096, help: '', type: 'int', section: 'core' },
+        extract_max_tokens: { default: 256, help: '', type: 'int', section: 'core' },
+        irodori_num_steps: { default: 48, help: '', type: 'int', section: 'voice' },
+      }),
+    });
+    await window.Nous.Chat.settings.loadDefaults(true);
+    window.Nous.Chat.settings.apply({ base_url: 'https://api.example.com' });
+    expect(document.getElementById('chat-max-tokens').value).toBe('4096');
+    expect(document.getElementById('chat-extract-max-tokens').value).toBe('256');
+    expect(document.getElementById('chat-irodori-num-steps').value).toBe('48');
   });
 
   it('tolerates float representation noise on a numeric field', async () => {

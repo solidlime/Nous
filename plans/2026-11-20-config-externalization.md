@@ -130,6 +130,7 @@ status: PLAN（らうらう承認済 — Phase 1〜4 全部 / 審査指摘反映
 1. **重複記憶閾値**: memory.duplicate_threshold 既定 **0.85**（判別 fixture 先行）。general.contradiction_threshold は docstring deprecated。
 2. **MCP 検索重み**: chat 面と MCP 面は設計意図の可能性 → 一本化しない。MCP 面は search.mcp_recency_weight へ。
 3. **要約 prompt 二重管理**: pipeline/summarizer.py と summarizer.py（英/日）→ 使用実態確認し死んでいる方を削除。
+   - **実測で前提が外れた（2026-11-20 fix-aux レーン）**: 両方とも生きている。A=pipeline/summarizer.py は予算超過時に古いメッセージを要約し system prompt へ注入、B=summarizer.py は退避/終了ターンをペルソナ一人称で要約し記憶に保存。トリガ・出力先・本文がすべて別で統合対象外。日英ペアは ADR-001 で既に解消済み。実処置は compress.py:8 の死んだ再エクスポート削除（importer ゼロ）のみ。
 4. **ヘルスチェック**: irodori 2箇所は同一概念（#18 へ統合）。image_gen/health.py:18=3s は別リソース → 既存 imagegen 設定があればそこへ、無ければ D5 扱いとし混ぜない。
 
 ### D5: 意図的固定値（変更しない — 記録のみ）
