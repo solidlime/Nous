@@ -192,6 +192,8 @@ def test_get_filtered_tools_dynamic_off_returns_all():
     mock_config.workspace_root = ""
     mock_config.sandbox_enabled = False
     mock_config.sandbox_manager_url = ""
+    # MagicMock の属性は勝手に truthy になる — image_gen 除外が効かない前提を明示する
+    mock_config.image_gen_enabled = True
 
     result = get_filtered_tools(mock_config)
     assert len(result) == len(MEMORY_TOOLS)
@@ -203,6 +205,7 @@ def test_get_filtered_tools_dynamic_off_returns_all():
 def test_get_filtered_tools_dynamic_on_returns_all_currently():
     """dynamic_tool_selection=True でも現状は全ツールが返る（将来の制限基盤）。"""
     mock_config = MagicMock()
+    mock_config.image_gen_enabled = True  # truthy 依存を避けて明示
     mock_config.dynamic_tool_selection = True
     mock_config.workspace_root = ""
     mock_config.sandbox_enabled = False
@@ -239,6 +242,22 @@ def test_get_filtered_tools_includes_image_gen_when_enabled():
     result_names = {td.name for td in result}
 
     assert "image_generate" in result_names, "image_generate should be included when image_gen_enabled=True"
+
+
+def test_get_filtered_tools_excludes_image_gen_when_disabled_even_static():
+    """
+    #89: dynamic_tool_selection=False でも image_gen_enabled=False なら image_generate は出ない。
+    """
+    mock_config = MagicMock()
+    mock_config.dynamic_tool_selection = False
+    mock_config.disabled_tools = []
+    mock_config.image_gen_enabled = False
+    mock_config.workspace_root = ""
+    mock_config.sandbox_enabled = False
+    mock_config.sandbox_manager_url = ""
+
+    result_names = {td.name for td in get_filtered_tools(mock_config)}
+    assert "image_generate" not in result_names
 
 
 def test_schedule_task_is_offered_and_can_be_disabled():

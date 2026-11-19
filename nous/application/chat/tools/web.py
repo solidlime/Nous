@@ -28,7 +28,7 @@ import httpx
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
-    from nous.application.context.app_context import AppContext
+    from nous.application.use_cases import AppContext
     from nous.domain.config.chat_config import ChatConfig
 
 logger = get_logger(__name__)
@@ -173,7 +173,7 @@ async def handle_web_search(ctx: AppContext, config: ChatConfig, tool_input: dic
     if not query:
         return {"status": "error", "message": "query が空"}
     try:
-        limit = min(int(tool_input.get("limit") or _DEFAULT_LIMIT), _MAX_LIMIT)
+        limit = max(1, min(int(tool_input.get("limit") or _DEFAULT_LIMIT), _MAX_LIMIT))  # 下限1（負値防止, #89）
     except (TypeError, ValueError):
         limit = _DEFAULT_LIMIT
 

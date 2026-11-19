@@ -28,4 +28,5 @@ def compute_exponential_decay(
     new_value = target + (current_value - target) * decay_factor
     if abs(new_value - target) < threshold:
         return target
-    return round(new_value, 4)
+    # float() は no-op ではなく mypy 用キャスト: `0.5 ** x`(pow) が Any になるため
+    return float(round(new_value, 4))

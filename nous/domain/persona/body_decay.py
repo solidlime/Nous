@@ -7,6 +7,7 @@ from typing import TYPE_CHECKING
 
 from nous.domain.persona.body_state import extract_body_metrics
 from nous.domain.persona.decay import compute_exponential_decay
+from nous.domain.shared.result import Success
 
 if TYPE_CHECKING:
     from nous.domain.persona.entities import PersonaState
@@ -91,7 +92,7 @@ async def apply_body_decay_if_needed(
 
     try:
         result = persona_service.update_physical_state(persona, **updates)
-        if result.is_ok:
+        if isinstance(result, Success):
             logger.info(
                 "BodyDecay: %s (elapsed=%.1fh)",
                 ", ".join(f"{k}={v}" for k, v in updates.items()),
@@ -99,8 +100,8 @@ async def apply_body_decay_if_needed(
             )
             # Record body state AFTER decay (re-read fresh state)
             after_result = persona_service.get_context(persona)
-            if after_result.is_ok:
-                after_state = after_result.value  # type: ignore[union-attr]
+            if isinstance(after_result, Success):
+                after_state = after_result.value
                 after_body = extract_body_metrics(after_state)
                 persona_service.record_body_state(persona, after_body, context="after_body_decay")
             return True

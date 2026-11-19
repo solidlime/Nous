@@ -67,7 +67,8 @@ def _persona_error_envelope(exc: BaseException) -> str | None:
 
 async def _patched_tool_run(self, arguments, context=None, convert_result=False):
     try:
-        return await _original_tool_run(self, arguments, context, convert_result)
+        # fastmcp Tool.run の context 引数は Optional を受ける（型は None を許さず宣言される）
+        return await _original_tool_run(self, arguments, context, convert_result)  # pyright: ignore[reportArgumentType]
     except ToolError as e:
         cause = e.__cause__ or e.__context__
         if isinstance(cause, MCPError):
@@ -81,7 +82,8 @@ async def _patched_tool_run(self, arguments, context=None, convert_result=False)
         raise
 
 
-Tool.run = _patched_tool_run
+# fastmcp の Tool.run をエラー変換パッチで置き換える（monkey patch: setattr で割当てる）
+setattr(Tool, "run", _patched_tool_run)  # noqa: B010
 
 
 def _parse_allowlist(value: object, default: list[str]) -> list[str]:
@@ -252,12 +254,12 @@ def create_app() -> MemoryFastMCP:
 
     # Health check endpoint (docker-compose healthcheck)
     @mcp.custom_route("/health", methods=["GET", "HEAD"])
-    async def health(request: Request):  # type: ignore[no-redef]  # noqa: F811
+    async def health(request: Request):  # noqa: F811
         import json as _json
 
         from starlette.responses import Response
 
-        status = {"status": "healthy", "services": {}}
+        status: dict[str, Any] = {"status": "healthy", "services": {}}
 
         # Check Qdrant
         try:

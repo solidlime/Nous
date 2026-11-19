@@ -15,15 +15,7 @@ from typing import Any
 import pytest
 
 from nous.api.http.routers.memory import search as search_router
-
-
-class _Ok:
-    def __init__(self, value: Any) -> None:
-        self.value = value
-
-    @property
-    def is_ok(self) -> bool:
-        return True
+from nous.domain.shared.result import Success
 
 
 def _mem(key: str, content: str = "c", tags: list | None = None, related: list | None = None):
@@ -66,7 +58,7 @@ def graph_handler():
 
 def _install_ctx(monkeypatch, memories: list, entity_repo: Any) -> None:
     ctx = SimpleNamespace(
-        memory_repo=SimpleNamespace(find_recent=lambda limit: _Ok(memories)),
+        memory_repo=SimpleNamespace(find_recent=lambda limit: Success(memories)),
         entity_repo=entity_repo,
     )
     monkeypatch.setattr(search_router, "_safe_get_context", lambda persona: ctx)

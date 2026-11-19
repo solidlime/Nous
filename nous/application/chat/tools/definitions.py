@@ -420,26 +420,26 @@ def get_filtered_tools(config: ChatConfig) -> list[ToolDefinition]:
         base.append(DELEGATE_TOOL)
 
     if not config.dynamic_tool_selection:
-        return [t for t in base if t.name not in disabled]
+        result = [t for t in base if t.name not in disabled]
+    else:
+        # 常時ツールを収集
+        always_tools = [t for t in base if t.name in CORE_ALWAYS_TOOLS]
 
-    # 常時ツールを収集
-    always_tools = [t for t in base if t.name in CORE_ALWAYS_TOOLS]
+        # 条件付きツール（dynamic_tool_selection=True なら全追加 = 現状同じ）
+        conditional_tools = [t for t in base if t.name not in CORE_ALWAYS_TOOLS]
 
-    # 条件付きツール（dynamic_tool_selection=True なら全追加 = 現状同じ）
-    conditional_tools = [t for t in base if t.name not in CORE_ALWAYS_TOOLS]
-
-    result = always_tools + conditional_tools
-    # disabled_tools でフィルタリング
-    if disabled:
-        result = [t for t in result if t.name not in disabled]
-    # image_gen_enabled に基づいて image_generate をフィルタリング
+        result = always_tools + conditional_tools
+        # disabled_tools でフィルタリング
+        if disabled:
+            result = [t for t in result if t.name not in disabled]
+    # image_gen_enabled は dynamic_tool_selection の設定に関係なく効く（#89）
     if not getattr(config, "image_gen_enabled", False):
         result = [t for t in result if t.name != "image_generate"]
+    # フィルタ後の実返却件数で出す（#89 review: 位置が件数と食い違わないように）
     logger.debug(
-        "Tools: %d always + %d conditional = %d total (disabled: %d)",
-        len(always_tools),
-        len(conditional_tools),
+        "get_filtered_tools: %d tools, dynamic=%s, disabled=%d",
         len(result),
+        config.dynamic_tool_selection,
         len(disabled),
     )
     return result

@@ -223,7 +223,7 @@ Create a new memory directly via HTTP.
 }
 ```
 
-`emotion_type` は `emotion` のエイリアス（どちらでも可）。
+`emotion_type` は `emotion` のエイリアス（どちらでも可）。body が JSON object でない（list/str 等）場合は 422。
 
 **Response (201):** `{ "status": "ok", "memory": { ...Memory レコード... }, "cache_invalidated": true }`
 
@@ -231,7 +231,7 @@ Create a new memory directly via HTTP.
 
 Update an existing memory by key.
 
-**Request body:** Same fields as POST (all optional; 空ボディは 400）。
+**Request body:** Same fields as POST (all optional; 空ボディは 400。object でない body は 422）。
 
 **Response:** `{ "status": "ok", "memory": { ...Memory レコード... } }`
 
@@ -256,7 +256,7 @@ Delete a memory by key.
 
 Memory relationship graph for visualization (nodes + edges).
 
-**Query params:** `limit` (int, default 200)
+**Query params:** `limit` (int, default 200, 1〜1000。範囲外・非整数は 400)
 
 **Response:**
 

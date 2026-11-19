@@ -14,6 +14,7 @@ from nous.api.http.deps import (
 )
 from nous.api.http.routers._error_handlers import error_from_result
 from nous.domain.search.engine import SearchQuery, final_rank_key
+from nous.domain.shared.result import Success
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -181,7 +182,10 @@ def register_search_routes(mcp) -> None:
         except ValueError:
             return JSONResponse({"error": "limit must be an integer"}, status_code=400)
         if limit < 1:
-            return JSONResponse({"error": "limit must be between 1 and 100"}, status_code=400)
+            # 上限超過は黙って 100 にクランプするが、0/負は弾く（#89）
+            return JSONResponse(
+                {"error": "limit must be a positive integer (larger values are clamped to 100)"}, status_code=400
+            )
         limit = min(limit, 100)
         mode = request.query_params.get("mode", "hybrid")
         date_range = request.query_params.get("date_range")
@@ -260,7 +264,7 @@ def register_search_routes(mcp) -> None:
                 ctx.search_engine._semantic.persona = persona  # noqa: SLF001
 
             result = await ctx.search_engine.search(query)
-            if not result.is_ok:
+            if not isinstance(result, Success):
                 return error_from_result(result)
             # 観測性（kanban #10）: レイテンシと zero-result をプロセス内に残す。
             # 記録失敗で検索を落とさない。
@@ -317,13 +321,19 @@ def register_search_routes(mcp) -> None:
     @mcp.custom_route("/api/graph/{persona}", methods=["GET"])
     async def graph_data(request: Request) -> JSONResponse:
         persona = _resolve_persona_from_request(request)
-        limit = int(request.query_params.get("limit", "200"))
+        try:
+            limit = int(request.query_params.get("limit", "200"))
+        except ValueError:
+            return JSONResponse({"error": "limit must be an integer"}, status_code=400)
+        if not 1 <= limit <= 1000:
+            # 兄弟ルートと同じ上限。超過は 500 ではなく 400（#89 review）
+            return JSONResponse({"error": "limit must be between 1 and 1000"}, status_code=400)
         ctx = _safe_get_context(persona)
         if ctx is None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
             result = ctx.memory_repo.find_recent(limit=limit)
-            if not result.is_ok:
+            if not isinstance(result, Success):
                 return error_from_result(result)
             memories = result.value
 

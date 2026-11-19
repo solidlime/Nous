@@ -36,7 +36,7 @@ class SimpleEntityExtractor:
     MENTION = re.compile(r"@[\w\u3040-\u30FF\u4e00-\u9fff]{1,50}")
 
     # Common katakana stopwords to exclude
-    _STOPWORDS: set[str] = frozenset(
+    _STOPWORDS: frozenset[str] = frozenset(
         {
             "メモリ",
             "コンテキスト",

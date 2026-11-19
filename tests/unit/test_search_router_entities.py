@@ -24,15 +24,7 @@ import pytest
 from nous.api.http.routers.memory import search as search_router
 from nous.domain.memory.entities import Memory
 from nous.domain.search.engine import SearchResult
-
-
-class _Ok:
-    def __init__(self, value: Any) -> None:
-        self.value = value
-
-    @property
-    def is_ok(self) -> bool:
-        return True
+from nous.domain.shared.result import Success
 
 
 class _FakeMCP:
@@ -82,7 +74,7 @@ def _entity_repo(entities=None):
 
 def _install(monkeypatch, results, entity_repo) -> None:
     async def _fake_search(query):
-        return _Ok(results)
+        return Success(results)
 
     ctx = SimpleNamespace(
         search_engine=SimpleNamespace(search=_fake_search),

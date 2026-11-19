@@ -127,8 +127,10 @@ def _schema_for(node_type: str, node: dict, object_info: dict) -> dict | None:
     properties = node.get("properties") or {}
     alt_name = properties.get("Node name for S&R")
     if isinstance(alt_name, str) and alt_name in object_info:
-        return object_info[alt_name]
-    return object_info.get(node_type) if isinstance(node_type, str) else None
+        schema: dict | None = object_info[alt_name]  # mypy: Any を dict|None に受ける
+        return schema
+    schema = object_info.get(node_type) if isinstance(node_type, str) else None
+    return schema
 
 
 def _schema_input_def(schema: Any) -> dict:
@@ -148,7 +150,8 @@ def _is_widget_input(input_spec: Any) -> bool:
     options = input_spec[1] if len(input_spec) >= 2 and isinstance(input_spec[1], dict) else {}
     if options.get("forceInput") or options.get("defaultInput"):
         return False
-    input_type = input_spec[0]
+    # pyright は Any を isinstance narrow すると tuple[()] を仮定して [0] を弾くため next(iter) で取る
+    input_type = next(iter(input_spec), None)
     if isinstance(input_type, (list, tuple)):
         return True  # COMBO（選択肢リスト）
     if isinstance(input_type, str):

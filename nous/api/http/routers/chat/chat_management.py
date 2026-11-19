@@ -716,7 +716,13 @@ async def execute_chat_tool(request: Request) -> JSONResponse:
     if not ctx:
         return JSONResponse({"error": "Persona not found"}, status_code=404)
 
-    body = await request.json()
+    try:
+        body = await request.json()
+    except (ValueError, TypeError):  # 不正 JSON・不正 UTF-8 も 400 で返す（#89）
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+    if not isinstance(body, dict):
+        # JSON として妥当でも object でなければ body.get が落ちる（#89 review）
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
     tool_name = body.get("tool", "")
     if not tool_name:
         return JSONResponse({"status": "error", "message": "tool name required"}, status_code=400)

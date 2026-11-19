@@ -15,6 +15,7 @@ from nous.api.http.deps import (
     _safe_get_context,
 )
 from nous.api.http.routers._error_handlers import error_from_result
+from nous.domain.shared.result import Success
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -59,7 +60,7 @@ def register_memory_routes(mcp) -> None:
         if not ctx:
             return JSONResponse({"blocks": []})
         result = ctx.memory_service.list_blocks(persona=persona)
-        blocks = result.value if result.is_ok else []
+        blocks = result.value if isinstance(result, Success) else []
         return JSONResponse({"persona": persona, "blocks": blocks})
 
     @mcp.custom_route("/api/blocks/{persona}", methods=["POST"])
@@ -81,7 +82,7 @@ def register_memory_routes(mcp) -> None:
             max_tokens=body.get("max_tokens") or 500,
             priority=body.get("priority", 0),
         )
-        if result.is_ok:
+        if isinstance(result, Success):
             return JSONResponse({"ok": True, "block_name": block_name})
         return error_from_result(result)
 
@@ -93,7 +94,7 @@ def register_memory_routes(mcp) -> None:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
         block_name = request.path_params.get("block_name", "")
         result = ctx.memory_service.delete_block(block_name, persona=persona)
-        if result.is_ok:
+        if isinstance(result, Success):
             return JSONResponse({"ok": True})
         return error_from_result(result)
 
@@ -127,7 +128,7 @@ def register_memory_routes(mcp) -> None:
             if ctx is None:
                 return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
             result = ctx.memory_service.get_recent(limit=limit)
-            if not result.is_ok:
+            if not isinstance(result, Success):
                 return error_from_result(result)
             return JSONResponse(
                 {
@@ -147,7 +148,7 @@ def register_memory_routes(mcp) -> None:
                 query=q,
                 sort_order=sort_order,
             )
-            if not result.is_ok:
+            if not isinstance(result, Success):
                 return error_from_result(result)
             memories, total_count = result.value
             total_pages = (total_count + per_page - 1) // per_page
@@ -198,7 +199,7 @@ def register_memory_routes(mcp) -> None:
                 query=q,
                 sort_order=sort_order,
             )
-            if not result.is_ok:
+            if not isinstance(result, Success):
                 return error_from_result(result)
             memories, total_count = result.value
             return JSONResponse(
@@ -226,7 +227,7 @@ def register_memory_routes(mcp) -> None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
             result = ctx.memory_service.get_memory(key)
-            if not result.is_ok:
+            if not isinstance(result, Success):
                 return JSONResponse({"error": str(result.error)}, status_code=404)
             return JSONResponse({"persona": persona, "memory": _memory_to_dict(result.value)})
         # 最終防衛線
@@ -242,11 +243,11 @@ def register_memory_routes(mcp) -> None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
             raw = await request.json()
-        except (json.JSONDecodeError, TypeError):
+        except (ValueError, TypeError):  # 不正 JSON・不正 UTF-8（#89）
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         try:
             body = CreateMemoryRequest(**raw)
-        except ValueError as exc:
+        except (ValueError, TypeError) as exc:  # list/str の JSON は TypeError（#89）
             logger.exception("Validation error: %s", exc)
             return JSONResponse({"error": "Validation error"}, status_code=422)
         try:
@@ -259,7 +260,7 @@ def register_memory_routes(mcp) -> None:
                 privacy_level=body.privacy_level,
                 source_context=body.source_context,
             )
-            if not result.is_ok:
+            if not isinstance(result, Success):
                 return error_from_result(result)
             mem = result.value
             if ctx.vector_store is not None:
@@ -305,11 +306,11 @@ def register_memory_routes(mcp) -> None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
             raw = await request.json()
-        except (json.JSONDecodeError, TypeError):
+        except (ValueError, TypeError):  # 不正 JSON・不正 UTF-8（#89）
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         try:
             body = UpdateMemoryRequest(**raw)
-        except ValueError as exc:
+        except (ValueError, TypeError) as exc:  # list/str の JSON は TypeError（#89 review）
             logger.exception("Validation error: %s", exc)
             return JSONResponse({"error": "Validation error"}, status_code=422)
         try:
@@ -324,7 +325,7 @@ def register_memory_routes(mcp) -> None:
                 )
 
                 target = ctx.memory_service.get_memory(key)
-                if not getattr(target, "is_ok", False):
+                if not isinstance(target, Success):
                     return JSONResponse({"error": "Memory not found"}, status_code=404)
                 question = question_key_of(target.value)
                 if not is_open_question(target.value):
@@ -338,7 +339,7 @@ def register_memory_routes(mcp) -> None:
             if not updates:
                 return JSONResponse({"error": "No valid fields to update"}, status_code=400)
             result = ctx.memory_service.update_memory(key, **updates)
-            if not result.is_ok:
+            if not isinstance(result, Success):
                 return JSONResponse({"error": str(result.error)}, status_code=404)
             mem = result.value
             if "content" in updates and ctx.vector_store is not None:
@@ -367,7 +368,7 @@ def register_memory_routes(mcp) -> None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
             result = ctx.memory_service.delete_memory(key)
-            if not result.is_ok:
+            if not isinstance(result, Success):
                 return JSONResponse({"error": str(result.error)}, status_code=404)
             if ctx.vector_store is not None:
                 with contextlib.suppress(Exception):
