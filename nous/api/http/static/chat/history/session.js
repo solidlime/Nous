@@ -128,9 +128,7 @@ async function rollbackChat(fromId, shouldResend) {
       }
     }
 
-    const body = typeof fromId === "number"
-      ? { keep_until: fromId, exclusive: !!shouldResend }
-      : { from_id: String(fromId), exclusive: !!shouldResend };
+    const body = { from_id: String(fromId), exclusive: !!shouldResend };
 
     const result = await api(
       "/api/chat/" +
@@ -393,9 +391,7 @@ async function deleteChatMessage(msgId) {
       }
     }
 
-    const body = typeof msgId === "number"
-      ? { keep_until: msgId, exclusive: true }
-      : { from_id: String(msgId), exclusive: true };
+    const body = { from_id: String(msgId), exclusive: true };
 
     CHAT._justReset = true;
     const result = await api(
