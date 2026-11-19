@@ -58,7 +58,7 @@ def register_memory_routes(mcp) -> None:
         ctx = _safe_get_context(persona)
         if not ctx:
             return JSONResponse({"blocks": []})
-        result = ctx.memory_service.list_blocks()
+        result = ctx.memory_service.list_blocks(persona=persona)
         blocks = result.value if result.is_ok else []
         return JSONResponse({"persona": persona, "blocks": blocks})
 
@@ -76,6 +76,7 @@ def register_memory_routes(mcp) -> None:
         result = ctx.memory_service.write_block(
             block_name,
             content,
+            persona=persona,
             block_type=body.get("block_type", "custom"),
             max_tokens=body.get("max_tokens") or 500,
             priority=body.get("priority", 0),
@@ -91,7 +92,7 @@ def register_memory_routes(mcp) -> None:
         if not ctx:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
         block_name = request.path_params.get("block_name", "")
-        result = ctx.memory_service.delete_block(block_name)
+        result = ctx.memory_service.delete_block(block_name, persona=persona)
         if result.is_ok:
             return JSONResponse({"ok": True})
         return error_from_result(result)

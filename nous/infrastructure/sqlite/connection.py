@@ -20,6 +20,28 @@ class _ThreadConnections(threading.local):
     connections: dict[str, sqlite3.Connection]
 
 
+def _exec_schema(conn: sqlite3.Connection, script: str, label: str) -> None:
+    """Run a schema script one statement at a time.
+
+    ``executescript`` stops at the first failing statement, and with
+    autocommit the earlier statements stay applied — a single bad index on an
+    old DB left the rest of the tables uncreated and migrations unrun, silently
+    (kanban #80). Failing statements are logged at ERROR and the run continues;
+    the migrations that follow can still repair what they know about.
+    """
+    failed: list[str] = []
+    for statement in script.split(";"):
+        if not statement.strip():
+            continue
+        try:
+            # pi-lens-ignore: python-sql-injection
+            conn.execute(statement)  # statement は module 定数の DDL（外部入力ではない）
+        except sqlite3.Error as exc:
+            failed.append(f"{statement.strip().splitlines()[0][:80]} -> {exc}")
+    if failed:
+        logger.error("Schema init '%s': %d statement(s) failed: %s", label, len(failed), " | ".join(failed))
+
+
 class SQLiteConnection:
     """SQLite connection manager with WAL mode and per-persona DB isolation.
 
@@ -76,7 +98,7 @@ class SQLiteConnection:
         from nous.infrastructure.sqlite.migrations import run_migrations
 
         memory_conn = self.get_memory_db()
-        memory_conn.executescript(_MEMORY_SCHEMA + _CHAT_SESSIONS_SCHEMA)
+        _exec_schema(memory_conn, _MEMORY_SCHEMA + _CHAT_SESSIONS_SCHEMA, self.persona)
         self._init_fts_schema(memory_conn)
         memory_conn.execute(
             "CREATE TABLE IF NOT EXISTS _migration_version ("
@@ -88,7 +110,7 @@ class SQLiteConnection:
         logger.info("Memory schema initialized for persona '%s'", self.persona)
 
         inventory_conn = self.get_inventory_db()
-        inventory_conn.executescript(_INVENTORY_SCHEMA)
+        _exec_schema(inventory_conn, _INVENTORY_SCHEMA, f"{self.persona}/inventory")
 
         # Migration: accessories → accessory_1 rename (slot expansion v1)
         try:

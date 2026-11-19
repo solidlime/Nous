@@ -392,6 +392,40 @@ def _migrate_h5_stability_clamp_v13(
         logger.info("H5 migration: clamped emotion-inflated stability on %d rows", clamped)
 
 
+def _migrate_backfill_persona_v15(
+    db_conn: sqlite3.Connection,
+    persona: str,
+) -> None:
+    """Fill in ``persona`` on rows written before the column meant anything.
+
+    v5 added ``emotion_history.persona`` with ``DEFAULT ''`` and v11 rebuilt
+    ``memory_blocks`` copying old rows as ``'default'``; nothing ever filled
+    those in, so pre-migration emotion history and blocks disappeared from every
+    persona-scoped read (kanban #80). The DB is per-persona, so those rows belong
+    to *persona*. ``UPDATE OR IGNORE`` on memory_blocks skips a row whose
+    (persona, block_name) pair already exists.
+    """
+    if not persona:
+        return
+
+    emotions = 0
+    if "persona" in {row[1] for row in db_conn.execute("PRAGMA table_info(emotion_history)").fetchall()}:
+        emotions = db_conn.execute("UPDATE emotion_history SET persona = ? WHERE persona = ''", (persona,)).rowcount
+
+    blocks = 0
+    if persona != "default" and "persona" in {
+        row[1] for row in db_conn.execute("PRAGMA table_info(memory_blocks)").fetchall()
+    }:
+        blocks = db_conn.execute(
+            "UPDATE OR IGNORE memory_blocks SET persona = ? WHERE persona = 'default'",
+            (persona,),
+        ).rowcount
+
+    db_conn.commit()
+    if emotions or blocks:
+        logger.info("Migration v15: backfilled persona='%s' (%d emotion rows, %d blocks)", persona, emotions, blocks)
+
+
 MIGRATIONS = [
     (1, "Add last_consumed_at column to memories", _migrate_add_last_consumed_at),
     (2, "Backfill FTS5 index", _migrate_fts_backfill),
@@ -406,4 +440,5 @@ MIGRATIONS = [
     (12, "Create curation_runs table", _migrate_curation_runs_v12),
     (13, "Clamp emotion-inflated stability once (H5)", _migrate_h5_stability_clamp_v13),
     (14, "Prune ghost rows from FTS index", _migrate_fts_prune_ghosts_v14),
+    (15, "Backfill persona on pre-migration emotion_history/memory_blocks rows", _migrate_backfill_persona_v15),
 ]
