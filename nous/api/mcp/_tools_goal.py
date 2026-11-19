@@ -43,7 +43,7 @@ async def _tool_goal_manage(
                     "success": False,
                 },
             )
-            return {"ok": False, "error": tag_result.error}
+            return {"ok": False, "error": str(tag_result.error)}
         memories = tag_result.value or []
         # scope="self" の場合は interpersonal タグ付きを除外
         if scope == "self":
@@ -106,7 +106,7 @@ async def _tool_goal_manage(
                 "success": False,
             },
         )
-        return {"ok": False, "error": result.error}
+        return {"ok": False, "error": str(result.error)}
     elif operation in ("achieve", "cancel"):
         new_status = "achieved" if operation == "achieve" else "cancelled"
         search_tags = ["goal", "active"]
@@ -127,7 +127,7 @@ async def _tool_goal_manage(
                         "success": False,
                     },
                 )
-                return {"ok": False, "error": get_result.error}
+                return {"ok": False, "error": str(get_result.error)}
             match = get_result.value
             if "goal" not in match.tags or "active" not in match.tags:
                 await ctx.event_bus.publish(
@@ -176,7 +176,7 @@ async def _tool_goal_manage(
                             "success": False,
                         },
                     )
-                    return {"ok": False, "error": tag_result.error}
+                    return {"ok": False, "error": str(tag_result.error)}
                 candidates = tag_result.value or []
                 match = next((m for m in candidates if content.strip().lower() == m.content.strip().lower()), None)
 
@@ -220,7 +220,7 @@ async def _tool_goal_manage(
                 "success": False,
             },
         )
-        return {"ok": False, "error": update_result.error}
+        return {"ok": False, "error": str(update_result.error)}
     else:
         await ctx.event_bus.publish(
             "tool.called",

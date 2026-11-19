@@ -197,3 +197,27 @@ class TestMcpDispatchEnvelope:
             out = await builtin._handle_mcp_dispatch("goal_manage", MagicMock(), MagicMock(), {})
 
         assert out["message"] == "unknown"
+
+
+class TestGoalErrorIsJsonSafe:
+    """_tools_goal は旧 dict 契約で error に例外インスタンスを入れていた（kanban #73）。
+
+    dispatcher がそのまま返すと ToolResultSSE → json.dumps で TypeError になり、
+    ターンが internal error で終わるうえ原因メッセージも消える。
+    """
+
+    async def test_goal_manage_failure_returns_serializable_error(self):
+        from nous.api.mcp._tools_goal import _tool_goal_manage
+        from nous.domain.shared.errors import RepositoryError
+        from nous.domain.shared.result import Failure
+
+        ctx = MagicMock()
+        ctx.memory_service.get_by_tags.return_value = Failure(RepositoryError("db is down"))
+        ctx.event_bus.publish = AsyncMock()
+
+        out = await _tool_goal_manage(ctx, "herta", operation="list")
+
+        assert out["ok"] is False
+        assert isinstance(out["error"], str)
+        assert "db is down" in out["error"]
+        json.dumps(out)

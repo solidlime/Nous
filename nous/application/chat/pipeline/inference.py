@@ -555,7 +555,8 @@ class InferenceStep:
             messages.append(
                 LLMMessage(
                     role="tool",
-                    content=json.dumps(truncated, ensure_ascii=False),
+                    # ツール結果に直列化できない値が混ざってもターンを落とさない (kanban #73)
+                    content=json.dumps(truncated, ensure_ascii=False, default=str),
                     tool_call_id=tc.tool_use_id,
                 )
             )

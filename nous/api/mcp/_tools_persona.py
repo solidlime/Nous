@@ -53,7 +53,7 @@ async def _tool_get_context(
                 "success": False,
             },
         )
-        return {"ok": False, "error": state_result.error}
+        return {"ok": False, "error": str(state_result.error)}
     state = state_result.value
 
     state, decay_note = await _apply_emotion_decay(ctx, persona, state)
