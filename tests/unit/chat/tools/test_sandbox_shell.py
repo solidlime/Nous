@@ -194,3 +194,30 @@ class TestDispatch:
         result = await builtin.execute_tool(ctx, config, "read_file", {"path": "x"})
         assert calls == [("read_file", "p1", {"path": "x"})]
         assert result == {"status": "ok", "path": "x"}
+
+
+class TestEnvFallback:
+    """compose スタックだけで sandbox を有効にできること（config.json を触らせない）。"""
+
+    def test_env_supplies_enabled_url_and_token(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from nous.application.chat.tools.sandbox import sandbox_settings
+
+        monkeypatch.setenv("NOUS_SANDBOX_ENABLED", "true")
+        monkeypatch.setenv("NOUS_SANDBOX_MANAGER_URL", "http://manager:8080/")
+        monkeypatch.setenv("NOUS_SANDBOX_MANAGER_TOKEN", "tok")
+        assert sandbox_settings(ChatConfig()) == (True, "http://manager:8080", "tok")
+
+    def test_url_and_token_config_wins_over_env(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        from nous.application.chat.tools.sandbox import sandbox_settings
+
+        monkeypatch.setenv("NOUS_SANDBOX_MANAGER_URL", "http://env:8080")
+        monkeypatch.setenv("NOUS_SANDBOX_MANAGER_TOKEN", "envtok")
+        config = ChatConfig(sandbox_manager_url="http://cfg:1", sandbox_manager_token="cfgtok")
+        assert sandbox_settings(config)[1:] == ("http://cfg:1", "cfgtok")
+
+    def test_env_enabled_wins_over_config(self, monkeypatch: pytest.MonkeyPatch) -> None:
+        """:27-37 の実装は enabled だけ env 優先（キルスイッチ）。docstring をこれに合わせた。"""
+        from nous.application.chat.tools.sandbox import sandbox_settings
+
+        monkeypatch.setenv("NOUS_SANDBOX_ENABLED", "false")
+        assert sandbox_settings(ChatConfig(sandbox_enabled=True))[0] is False

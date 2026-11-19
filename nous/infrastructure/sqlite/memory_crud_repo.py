@@ -459,7 +459,7 @@ class MemoryCrudMixin:
             content=row["content"],
             created_at=self._parse_iso_or_none(row["created_at"]) or get_now(),
             updated_at=self._parse_iso_or_none(row["updated_at"]) or get_now(),
-            importance=row["importance"] or 0.5,
+            importance=row["importance"] if row["importance"] is not None else 0.5,
             emotion=row["emotion"] or "neutral",
             emotion_intensity=row["emotion_intensity"] or 0.0,
             tags=_parse_json_list(row["tags"]),

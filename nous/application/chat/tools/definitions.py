@@ -405,7 +405,8 @@ def get_filtered_tools(config: ChatConfig) -> list[ToolDefinition]:
     この関数が CORE_ALWAYS_TOOLS を絶対に除外しないことを保証する。
     dynamic_tool_selection=False の場合は従来通り全ツールを返す。
     disabled_tools に指定されたツールは除外する（コアツールも対象）。
-    workspace_root 未設定ならワークスペースツールは一切公開しない。
+    workspace_root 未設定ならワークスペースツールは一切公開しない
+    （sandbox が使える場合は workspace_root 不要で公開する）。
     """
     disabled = set(config.disabled_tools or [])
     base = list(MEMORY_TOOLS)
@@ -525,24 +526,6 @@ WORKSPACE_TOOLS: list[ToolDefinition] = [
         },
     ),
 ]
-
-
-SANDBOX_TOOL: ToolDefinition = ToolDefinition(
-    name="sandbox",
-    description=(
-        "隔離コンテナ内でシェルコマンドを実行する。ホストのワークスペースは触れない。"
-        "出力は末尾120行のみ、全文は log_path。"
-        "sandbox は永続で、アイドルで停止し次回起動時に再開する。"
-    ),
-    input_schema={
-        "type": "object",
-        "properties": {
-            "command": {"type": "string", "description": "実行するシェルコマンド"},
-            "cwd": {"type": "string", "description": "コンテナ内の作業ディレクトリ（絶対パス）"},
-        },
-        "required": ["command"],
-    },
-)
 
 
 DELEGATE_TOOL: ToolDefinition = ToolDefinition(

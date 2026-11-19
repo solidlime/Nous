@@ -305,6 +305,7 @@ class SearchEngine:
         if query.lifecycle_status is not None:
             filtered = self._filter_by_lifecycle(filtered, query.lifecycle_status)
         filtered = self._filter_by_emotion(filtered, query.emotion)
+        filtered = self._filter_by_min_importance(filtered, query.min_importance)
         filtered = self._filter_by_kind(filtered, query.kind)
         filtered = self._filter_by_tags(filtered, query.tags)
         effective_valid_at = query.valid_at if query.valid_at is not None else get_now()
@@ -849,6 +850,16 @@ class SearchEngine:
     def _filter_out_tombstoned(results: list[SearchResult]) -> list[SearchResult]:
         """Drop logically deleted memories (tombstone is user-delete only, never recalled)."""
         return [r for r in results if getattr(r.memory, "lifecycle_status", "active") != "tombstoned"]
+
+    @staticmethod
+    def _filter_by_min_importance(
+        results: list[SearchResult],
+        min_importance: float | None,
+    ) -> list[SearchResult]:
+        """重要度の下限で絞る（未指定なら素通し）。"""
+        if min_importance is None:
+            return results
+        return [r for r in results if r.memory.importance >= min_importance]
 
     @staticmethod
     def _filter_by_emotion(

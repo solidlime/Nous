@@ -37,7 +37,8 @@ class MemoryStatsMixin:
 
         if tag:
             conditions.append("tags LIKE ?")
-            params.append(f"%{tag}%")
+            # JSON 配列の完全一致。`%{tag}%` だと work が homework/network に当たる。
+            params.append(f'%"{tag}"%')
         if query:
             conditions.append("content LIKE ?")
             params.append(f"%{query}%")
@@ -51,7 +52,7 @@ class MemoryStatsMixin:
         ).fetchone()
         total_count: int = count_row["cnt"]
 
-        offset = (page - 1) * per_page
+        offset = (max(page, 1) - 1) * per_page
         rows = self._db.execute(
             f"SELECT * FROM memories{where_clause} ORDER BY updated_at {order} LIMIT ? OFFSET ?",  # order whitelisted; where_clause internally built; params bound  # nosec B608
             [*params, per_page, offset],

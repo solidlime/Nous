@@ -164,7 +164,7 @@ PostProcessStep（DoneSSE の後に記憶抽出・状態更新）
 
 MCP として公開しないチャット組み込みツール（`move` / `invoke_skill` / `list_skills` / `search_tools` / `image_generate`）は `nous/application/chat/tools/` にあり、チャット経路でのみ使う。
 
-ワークスペースツール（`bash` / `read_file` / `write_file` / `edit_file`）は `nous/application/chat/tools/shell.py` にある。`ToolConfig.workspace_root` が未設定なら公開されない（オプトイン）。境界は `workspace_root` の `resolve()` 前方一致で、symlink も潰れる。`bash` は末尾 120 行だけを返し、全文は `{data_root}/persona/{persona}/artifacts/{session_id}/` に落ちる。実行内容（`command` / `exit_code`）は `tool.called` イベントの payload に載る。
+ワークスペースツール（`bash` / `read_file` / `write_file` / `edit_file`）は `nous/application/chat/tools/shell.py` にある。`ToolConfig.workspace_root` が未設定なら公開されない（オプトイン）。ただし sandbox が有効（`ToolConfig.sandbox_enabled` + `sandbox_manager_url`、または compose の `NOUS_SANDBOX_*`）なら、この 4 本は `sandbox_shell.run_tool` 経由でコンテナ内実行になり、`workspace_root` は不要（別ツール `sandbox` は出さない — モデルに見せるシェルは 1 本だけ）。境界は `workspace_root` の `resolve()` 前方一致で、symlink も潰れる。`bash` は末尾 120 行だけを返し、全文は `{data_root}/persona/{persona}/artifacts/{session_id}/` に落ちる。実行内容（`command` / `exit_code`）は `tool.called` イベントの payload に載る。
 
 エージェント→ユーザーのファイル受け渡しは `attach_file`（`nous/application/chat/tools/attachments.py`）。ワークスペースのファイルを `persona/{persona}/uploads` に複製し、`file_attach` SSE でチップを出す。配信はユーザー添付と同じ `GET /api/chat/{persona}/attachment/{filename}` で、扱いはワークスペースツールと同じくオプトイン（sandbox 稼働中でも可）。sandbox 稼働時はコンテナ内で `cp` する（uploads は `/home/agent/uploads` にマウント済み）。上限 10MB。
 

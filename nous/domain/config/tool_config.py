@@ -33,8 +33,11 @@ class ToolConfig(BaseModel):
         default=[], description="allowlist モードで無承認に通すコマンド名（先頭トークン）。"
     )
 
-    # サンドボックス（manager 経由の隔離コンテナ）。sandbox_manager_url が空ならツールを公開しない
-    sandbox_enabled: bool = Field(default=False, description="サンドボックスツールを有効にします。")
+    # サンドボックス（manager 経由の隔離コンテナ）。有効なら bash/read_file/write_file/edit_file が
+    # コンテナ内で動く（別ツール sandbox は出さない）。url が空なら公開しない。
+    sandbox_enabled: bool = Field(
+        default=False, description="bash などのワークスペースツールを sandbox コンテナ内で実行します。"
+    )
     sandbox_manager_url: str = Field(
         default="", description="sandbox-manager の URL（例 http://sandbox-manager:8080）。"
     )

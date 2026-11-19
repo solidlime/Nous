@@ -283,13 +283,14 @@ class SQLiteEquipmentRepository(SQLiteRepository):
     # ------------------------------------------------------------------
 
     def _row_to_item(self, row) -> Item:
+        row_keys = row.keys() if hasattr(row, "keys") else []  # sqlite3.Row の `in` は値の判定なので keys() を見る
         return Item(
             id=row["id"],
             name=row["name"],
             category=row["category"],
             description=row["description"],
-            visual_desc=row["visual_desc"] if "visual_desc" in row else None,  # noqa: SIM401 (sqlite3.Row has no .get)
-            quantity=row["quantity"] or 1,
+            visual_desc=row["visual_desc"] if "visual_desc" in row_keys else None,
+            quantity=row["quantity"] if row["quantity"] is not None else 1,
             tags=_parse_json_list(row["tags"]),
             created_at=_parse_or_none(row["created_at"]),
             updated_at=_parse_or_none(row["updated_at"]),

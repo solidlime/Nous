@@ -170,7 +170,7 @@ sandbox 既定になり（`workspace_root` は要らない）、別ツール `sa
 実装は `nous/application/chat/tools/sandbox_shell.py`。manager の `/exec` だけを使う
 （`read_file` は `base64 -w0` をデコード、`write_file` は本文を base64 にして流し込む。
 `edit_file` は読んで nous 側で exact-match 置換してから書き戻すので、コンテナに python/perl は要らない）。
-パスは相対なら `/home/<persona>/workspace` 起点。コマンドもパス（`..` を含む）も制限しない。
+パスは相対なら `/home/agent/workspace` 起点（全ペルソナ共通の HOME）。コマンドもパス（`..` を含む）も制限しない。
 
 | 設定 | 既定 | 意味 |
 |---|---|---|

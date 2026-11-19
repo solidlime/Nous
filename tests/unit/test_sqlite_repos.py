@@ -397,3 +397,52 @@ class TestMemoryRepositoryProtocolSatisfaction:
 
     def test_satisfies_core_memory_repository(self, memory_repo: SQLiteMemoryRepository):
         assert isinstance(memory_repo, MemoryRepository), "Core MemoryRepository Protocol を満たしていません"
+
+
+# ---------------------------------------------------------------------------
+# 0 / NULL / row.keys() の取り違え（kanban #79 B8 B9 B17 B18）
+# ---------------------------------------------------------------------------
+
+
+class TestZeroAndNullDefaults:
+    def test_importance_zero_survives_roundtrip(self, memory_repo: SQLiteMemoryRepository):
+        now = get_now()
+        memory_repo.save(Memory(key="m0", content="c", created_at=now, updated_at=now, importance=0.0))
+        found = memory_repo.find_by_key("m0")
+        assert found.is_ok
+        assert found.value is not None
+        assert found.value.importance == 0.0
+
+    def test_quantity_zero_survives_roundtrip(self, equipment_repo: SQLiteEquipmentRepository):
+        now = get_now()
+        equipment_repo.add_item(Item(name="空の瓶", quantity=0, created_at=now, updated_at=now))
+        found = equipment_repo.find_item("空の瓶")
+        assert found.is_ok
+        assert found.value is not None
+        assert found.value.quantity == 0
+
+    def test_visual_desc_is_read_from_row(self, equipment_repo: SQLiteEquipmentRepository):
+        now = get_now()
+        equipment_repo.add_item(Item(name="赤い服", visual_desc="鮮やかな赤", created_at=now, updated_at=now))
+        found = equipment_repo.find_item("赤い服")
+        assert found.value is not None
+        assert found.value.visual_desc == "鮮やかな赤"
+
+    def test_tag_filter_is_exact_not_substring(self, memory_repo: SQLiteMemoryRepository):
+        now = get_now()
+        memory_repo.save(Memory(key="m-work", content="a", created_at=now, updated_at=now, tags=["work"]))
+        memory_repo.save(Memory(key="m-home", content="b", created_at=now, updated_at=now, tags=["homework"]))
+        result = memory_repo.find_with_pagination(page=1, per_page=10, tag="work")
+        assert result.is_ok
+        memories, total = result.value
+        assert total == 1
+        assert [m.key for m in memories] == ["m-work"]
+
+    def test_negative_page_returns_first_page(self, memory_repo: SQLiteMemoryRepository):
+        now = get_now()
+        for i in range(3):
+            memory_repo.save(Memory(key=f"p{i}", content="c", created_at=now, updated_at=now))
+        result = memory_repo.find_with_pagination(page=0, per_page=2)
+        assert result.is_ok
+        memories, _total = result.value
+        assert len(memories) == 2

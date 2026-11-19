@@ -12,7 +12,6 @@ from nous.api.mcp.tools import TOOL_DISPATCH
 from nous.application.chat.tools.attachments import _handle_attach_file
 from nous.application.chat.tools.definitions import _NOUS_TOOL_NAMES
 from nous.application.chat.tools.delegate import _handle_delegate
-from nous.application.chat.tools.sandbox import handle_sandbox
 from nous.application.chat.tools.sandbox_shell import run_tool as _run_sandbox_tool
 from nous.application.chat.tools.sandbox_shell import sandbox_manager
 from nous.application.chat.tools.schedule import handle_schedule_task
@@ -438,7 +437,6 @@ _BUILTIN_DISPATCH: dict[str, Any] = {
     "invoke_skill": _handle_invoke_skill,
     "move": _handle_move,
     "bash": _handle_bash,
-    "sandbox": handle_sandbox,
     "schedule_task": handle_schedule_task,
     "read_file": _handle_read_file,
     "write_file": _handle_write_file,

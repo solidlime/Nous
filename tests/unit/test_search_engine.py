@@ -688,3 +688,32 @@ class TestLifecyclePostFilter:
         """lifecycle_status=None は管理・監査用の逃げ道（tombstoned だけ落とす）。"""
         out = self._engine()._post_filter(self._results(), SearchQuery(text="x", lifecycle_status=None))
         assert [r.memory.key for r in out] == ["k-active", "k-archived"]
+
+
+# ---------------------------------------------------------------------------
+# min_importance フィルタ（kanban #79 B10）
+# ---------------------------------------------------------------------------
+
+
+class TestSearchEngineMinImportance:
+    @staticmethod
+    def _engine() -> SearchEngine:
+        return SearchEngine(keyword_search=MagicMock())
+
+    def _results(self) -> list[SearchResult]:
+        return [
+            SearchResult(memory=_mem("k-high", importance=0.9), score=1.0, source="keyword"),
+            SearchResult(memory=_mem("k-zero", importance=0.0), score=0.9, source="keyword"),
+        ]
+
+    def test_unset_keeps_everything(self) -> None:
+        out = self._engine()._post_filter(self._results(), SearchQuery(text="x"))
+        assert [r.memory.key for r in out] == ["k-high", "k-zero"]
+
+    def test_threshold_drops_low_importance(self) -> None:
+        out = self._engine()._post_filter(self._results(), SearchQuery(text="x", min_importance=0.5))
+        assert [r.memory.key for r in out] == ["k-high"]
+
+    def test_zero_threshold_is_not_treated_as_unset(self) -> None:
+        out = self._engine()._post_filter(self._results(), SearchQuery(text="x", min_importance=0.0))
+        assert [r.memory.key for r in out] == ["k-high", "k-zero"]
