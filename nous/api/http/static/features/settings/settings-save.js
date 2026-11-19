@@ -27,6 +27,9 @@ const BUILTIN_PROFILES = {
 
 const RELOAD_CATEGORIES = new Set(['embedding', 'reranker', 'qdrant']);
 
+/* reset 後に一覧を読み直すまでの待ち（サーバ側の反映待ち） — 単一の正 */
+const RELOAD_AFTER_RESET_MS = 800;
+
 /* ═══════════════════════════════════════════════════════════════════
    AUTO-SAVE DEBOUNCE & HELPERS
    ═══════════════════════════════════════════════════════════════════ */
@@ -185,7 +188,7 @@ async function resetField(cat, key, defaultVal) {
             if (RELOAD_CATEGORIES.has(cat)) startStatusPoll();
         } else {
             /* Restart-required field: reload to show updated source badge */
-            setTimeout(function() { N.Features.Settings.loadSettings(); }, 800);
+            setTimeout(function() { N.Features.Settings.loadSettings(); }, RELOAD_AFTER_RESET_MS);
         }
     } catch (e) {
         toast('<i data-lucide="x-circle"></i> Reset failed: ' + e.message, 'error');
@@ -196,7 +199,6 @@ async function resetCategory(cat) {
     if (!confirm('Reset all ' + cat + ' settings to defaults?')) return;
     var settings = S.settingsData;
     if (!settings || !settings[cat]) return;
-    var isHotCat = !RELOAD_CATEGORIES.has(cat) && cat !== 'server' && cat !== 'general';
     try {
         var count = 0;
         for (const [key, meta] of Object.entries(settings[cat])) {
@@ -209,7 +211,7 @@ async function resetCategory(cat) {
         if (RELOAD_CATEGORIES.has(cat)) {
             startStatusPoll();
         } else {
-            setTimeout(function() { N.Features.Settings.loadSettings(); }, 800);
+            setTimeout(function() { N.Features.Settings.loadSettings(); }, RELOAD_AFTER_RESET_MS);
         }
     } catch (e) {
         toast('<i data-lucide="x-circle"></i> Reset failed: ' + e.message, 'error');
@@ -315,8 +317,34 @@ function saveSettingsProfile() {
     renderSettingsProfiles();
 }
 
+/* BUILTIN_PROFILES は直書きのまま残す（サーバ側設定体系とは別管理）。
+   ただし適用値がサーバ既定（GET /api/settings の default_value）と
+   食い違う項目は、黙って上書きせず確認文に列挙する。 */
+function profileDrift(profile) {
+    var settings = S.settingsData || {};
+    var drift = [];
+    Object.entries(profile || {}).forEach(function(entry) {
+        var cat = entry[0], fields = entry[1];
+        var meta = settings[cat] || {};
+        Object.entries(fields || {}).forEach(function(e2) {
+            var key = e2[0], value = e2[1];
+            var def = meta[key] ? meta[key].default_value : undefined;
+            if (def === undefined || def === null) return;
+            if (String(def) !== String(value)) {
+                drift.push(cat + '.' + key + ' = ' + value + ' (サーバ既定 ' + def + ')');
+            }
+        });
+    });
+    return drift;
+}
+
 async function loadSettingsProfile(name, profile) {
-    if (!confirm('Load profile "' + esc(name) + '"? This will apply all settings from the profile.')) return;
+    var message = 'Load profile "' + esc(name) + '"? This will apply all settings from the profile.';
+    var drift = profileDrift(profile);
+    if (drift.length) {
+        message += '\n\n⚠ サーバ既定値と異なる値を適用します:\n' + drift.join('\n');
+    }
+    if (!confirm(message)) return;
     try {
         var count = 0;
         for (const [cat, fields] of Object.entries(profile)) {
@@ -326,7 +354,11 @@ async function loadSettingsProfile(name, profile) {
             }
         }
         toast('<i data-lucide="check-circle"></i> Loaded profile "' + esc(name) + '" (' + count + ' settings)', 'success');
-            setTimeout(function() { N.Features.Settings.loadSettings(); }, 1000);
+        /* 再起動が要るカテゴリを含むなら reload バッジを出して追跡する */
+        if (Object.keys(profile || {}).some(function(cat) { return RELOAD_CATEGORIES.has(cat); })) {
+            startStatusPoll();
+        }
+        setTimeout(function() { N.Features.Settings.loadSettings(); }, 1000);
     } catch (e) {
         toast('<i data-lucide="x-circle"></i> Failed to load profile: ' + e.message, 'error');
     }
@@ -379,6 +411,7 @@ Object.assign(N.Features.Settings, {
     updateCategoryStatusBanners: updateCategoryStatusBanners,
     saveSettingsProfile: saveSettingsProfile,
     loadSettingsProfile: loadSettingsProfile,
+    profileDrift: profileDrift,
     deleteSettingsProfile: deleteSettingsProfile,
     renderSettingsProfiles: renderSettingsProfiles,
 });
