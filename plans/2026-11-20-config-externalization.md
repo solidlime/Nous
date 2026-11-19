@@ -1,7 +1,7 @@
 # ハードコード棚卸しとコンフィグ化 — ダッシュボード対応
 
 date: 2026-11-20 / 改訂: 同日（ルアン・メェイ PLAN 審査 BLOCK 対応）
-status: PLAN（らうらう承認済 — Phase 1〜4 全部 / 審査指摘反映済み）
+status: 実行済み（2026-11-20 — Phase 0〜4 全完了。コミット: ad271a2 / 151bbba / 16410c2 / Phase 2 8コミット / Phase 3 4コミット (62007d5, 7dcd19c4, 6c08e497, c6bd9046, 020e1fc6) / fix-js 4コミット）
 由緒: らうらう依頼「nous全般のハードコードにすべきでない部分の棚卸しとコンフィグ化。ダッシュボードでコンフィグできるように改修」
 
 ## 決定記録（2026-11-20 らうらう + 審査後修正）
@@ -168,3 +168,12 @@ schedule.py _WHEN_UNITS、recurrence 写像、ポート範囲 1-65535、SSE バ�
 2. BUILTIN_PROFILES → **警告表示（初回 or 明示時のみ）**
 3. workers → **動的読みに改修**（None 既定 + ループ内解決）
 4. recency λ → **通常キー + tier: expert**（dangerous は認証ゲートで使う概念）
+
+## Phase 3 完了記録（2026-11-20）
+
+- mot_top_k 配線漏れ修正 + stale コメント更新: 62007d5
+- 添付上限 10MB を ChatConfig.max_attachment_bytes に統一（サーバ判定・JS 参照・テスト基準の三点一本化）: 7dcd19c4
+- 要約プロンプト文字数上限を CompressionConfig 化（summarize_message_max_chars / summarize_target_chars）: 6c08e497
+- journal_activity.py の ChatConfig 廃止系・emotion_decay.py の Settings λ 廃止系・wiki_journal.py 未使用引数: c6bd9046, 020e1fc6
+- core/constants.js 恒久置き場: fix-js レーンが Phase 2 で先行実施（b5bde006, N.Core.UI + PER_PAGE 統一）
+- aux LLM 引数マップ（character_judge 0.0/512, pattern_detector 0.3/512, summarizer 0.0/512, 256）: **Settings 化しない判断**。タスク特性由来の設計値で、SETTINGS_META のスカラー UI に合わない dict 形式。個別スカラー化は 10キー増のノイズ。専用 LLM の上限系は Settings 化済み（brain_max_tokens 等）で、残る直書きはフォールバック値とタスク固有値のみ。
