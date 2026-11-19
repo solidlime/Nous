@@ -15,7 +15,7 @@ logger = get_logger(__name__)
 
 SUMMARIZE_PROMPT = """Summarize the conversation history below, in {language}.
 Prioritize: user statements, decisions, preferences, promises, emotional events.
-Keep the summary within approximately 300 characters.
+Keep the summary within approximately {summarize_target_chars} characters.
 
 Conversation history:
 {conversation}
@@ -49,8 +49,8 @@ class SummarizerMixin:
         """Call LLM to summarize the Stage 0 removed message slice.
 
         The removed slice is everything Stage 0 cut off (before the recent
-        window). Strips tool messages, truncates long content to 500 chars,
-        and asks the LLM for a ~300 char summary.
+        window). Strips tool messages, truncates long content to the configured max chars,
+        and asks the LLM for a short summary (target from config).
 
         Returns:
             要約文字列。条件不成立時またはエラー時は None。
@@ -60,14 +60,15 @@ class SummarizerMixin:
 
         # Build conversation text for summarization:
         # - Only user and assistant roles (skip tool messages)
-        # - Truncate each message content to 500 chars
+        # - Truncate each message content to the configured max chars
+        max_chars = config.compression_config.summarize_message_max_chars
         lines: list[str] = []
         for msg in removed:
             if msg.role == "user":
-                content = (msg.content or "")[:500]
+                content = (msg.content or "")[:max_chars]
                 lines.append(f"User: {content}")
             elif msg.role == "assistant":
-                content = (msg.content or "")[:500]
+                content = (msg.content or "")[:max_chars]
                 lines.append(f"Assistant: {content}")
 
         if not lines:

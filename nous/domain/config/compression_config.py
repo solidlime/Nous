@@ -29,6 +29,12 @@ class CompressionConfig(BaseModel):
     )  # 0=all, N=preload top N
     memory_digest_count: int = Field(default=5, description="毎ターン注入する最近の記憶の件数。0で無効。")  # 0=無効
     context_use_llm_summary: bool = Field(default=True, description="圧縮の要約にLLMを使います。")
+    summarize_message_max_chars: int = Field(
+        default=500, ge=50, le=2000, description="要約プロンプトに載せる1メッセージの最大文字数。"
+    )
+    summarize_target_chars: int = Field(
+        default=300, ge=50, le=2000, description="LLMに依頼する要約の目標文字数。"
+    )
 
     @field_validator("context_compression_threshold")
     @classmethod
