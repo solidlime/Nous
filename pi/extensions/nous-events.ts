@@ -248,9 +248,28 @@ interface RecallConfig {
 
 interface HookConfig {
   endpoint: string;
+  /** ingest（plugin API key）。 */
   apiKey: string;
+  /**
+   * 検索用。/api/search は persona middleware が general.api_key を見るので、
+   * ingest とは別の鍵が必要になる（kanban #87）。未設定なら apiKey を使う。
+   */
+  searchApiKey: string;
   persona: string;
   recall: RecallConfig;
+}
+
+/**
+ * 検索用の鍵。`/api/search` は persona middleware が general.api_key を見るので、
+ * ingest の plugin key とは別の運用があり得る（kanban #87）。未設定なら ingest の鍵。
+ */
+function resolveSearchApiKey(nous: any, envFile: string, fallback: string): string {
+  const key =
+    process.env.NOUS_API_KEY ||
+    (typeof nous?.searchApiKey === "string" ? nous.searchApiKey : "") ||
+    (typeof nous?.search_api_key === "string" ? nous.search_api_key : "") ||
+    readEnvValue(envFile, ["NOUS_API_KEY"]);
+  return (key || fallback).trim();
 }
 
 /**
@@ -281,6 +300,10 @@ export function resolveConfig(): HookConfig {
 
   const persona = process.env.NOUS_PERSONA || (typeof nous?.persona === "string" ? nous.persona : "") || DEFAULT_PERSONA;
 
+  // 検索は general.api_key（NOUS_API_KEY）で守られている。ingest の鍵と違う運用があり得るので
+  // 別に解決する。
+  const searchApiKey = resolveSearchApiKey(nous, envFile, apiKey);
+
   const recallRaw: any = nous?.recall;
   const recall: RecallConfig = { enabled: recallRaw?.enabled === true, topK: 3, minScore: 0 };
   if (typeof recallRaw?.top_k === "number" && Number.isFinite(recallRaw.top_k)) {
@@ -290,7 +313,7 @@ export function resolveConfig(): HookConfig {
     recall.minScore = Math.max(0, Math.min(1, recallRaw.min_score));
   }
 
-  return { endpoint, apiKey: apiKey.trim(), persona, recall };
+  return { endpoint, apiKey: apiKey.trim(), searchApiKey, persona, recall };
 }
 
 // ---------------------------------------------------------------------------
@@ -368,7 +391,7 @@ export default function nousEvents(pi: ExtensionAPI): void {
     const suffix = project ? `&project=${encodeURIComponent(project)}` : "";
     const url = `${base}/api/search/${encodeURIComponent(config.persona)}?q=${encodeURIComponent(query)}&limit=${limit}${suffix}`;
     const res = await fetch(url, {
-      headers: { authorization: `Bearer ${config.apiKey}` },
+      headers: { authorization: `Bearer ${config.searchApiKey}` },
       signal: AbortSignal.timeout(RECALL_TIMEOUT_MS),
     });
     if (!res.ok) throw new Error(`search HTTP ${res.status}`);
@@ -409,7 +432,7 @@ export default function nousEvents(pi: ExtensionAPI): void {
       const setStatus = (text: string) => ctx?.ui?.setStatus?.("nous", text);
       try {
         refreshProject(ctx?.sessionManager?.getCwd?.() ?? "");
-        if (!config.recall?.enabled || !config.apiKey) return;
+        if (!config.recall?.enabled || !config.searchApiKey) return;
         if (event?.messageType !== "user") return; // custom 起点の run には差し込まない
         const prompt = String(event.prompt ?? "").replace(/\s+/g, " ").trim();
         if (!prompt) return;

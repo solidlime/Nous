@@ -191,6 +191,7 @@ MCP として公開しないチャット組み込みツール（`move` / `invoke
 | `NOUS_SERVER__HOST` | `0.0.0.0` | バインドアドレス。公開する場合は `NOUS_API_KEY` を事前設定すること（未設定はdev素通し）。 |
 | `NOUS_API_KEY` | `""`（空） | HTTP Bearer 資格情報。空はdev素通し（Bearer=persona名）。非空時は Bearer 一致必須（401）。復旧は `{data_root}/config/config_overrides.json` の `general.api_key` 削除→再起動。 |
 | `NOUS_CORS_ALLOWED_ORIGINS` | （未設定） | CORS上書き（カンマ区切り or JSON配列）。既定はlocalhost開発originのみ。`" * "` は明示時のみ（credentials強制off）。 |
+| `NOUS_PLUGIN__API_KEY` | `""`（空） | pi 拡張の ingest（`/api/events/ingest`）·wiki 手動起動の鍵。空なら 503。検索（`/api/search`）は `NOUS_API_KEY`（general）で守られるので、両方設定する環境では pi 拡張側に `NOUS_API_KEY` か `nous.json` の `searchApiKey` を渡すこと（未設定なら plugin key で検索するため 401 になる）。 |
 | `NOUS_QDRANT__URL` | `http://localhost:6333` | Qdrant 接続先 |
 | `NOUS_EMBEDDING__MODEL` | `cl-nagoya/ruri-v3-30m` | 埋め込みモデル（日本語特化） |
 | `NOUS_DEFAULT_PERSONA` | `default` | デフォルト Persona 名 |
