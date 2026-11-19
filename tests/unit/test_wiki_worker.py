@@ -1961,3 +1961,31 @@ def test_merge_activity_sorts_by_clock_and_keeps_unknown_last() -> None:
 
     merged = _merge_activity("- 15:20 会話", "- 09:12 研究\n- 14:40 紅茶\n- 時刻なし")
     assert merged.splitlines() == ["- 09:12 研究", "- 14:40 紅茶", "- 15:20 会話", "- 時刻なし"]
+
+
+def test_compile_is_serialized_per_persona() -> None:
+    """定刻サイクルと手動 API が同じ topic を同時に書かない（kanban #82 B5）。"""
+    from unittest.mock import MagicMock
+
+    from nous.application.workers import wiki_worker
+
+    calls: list[str] = []
+
+    def _fake_unlocked(self, ctx, persona: str) -> None:
+        calls.append(persona)
+
+    wiki_worker.WikiWorker._compile_persona_unlocked = _fake_unlocked  # type: ignore[method-assign]
+    try:
+        worker = wiki_worker.WikiWorker(MagicMock())
+        lock = wiki_worker._compile_lock("herta")
+        assert lock.acquire(blocking=False)
+        try:
+            worker._compile_persona(MagicMock(), "herta")
+            assert calls == []  # 先に走っている人は待たずに降りる
+        finally:
+            lock.release()
+
+        worker._compile_persona(MagicMock(), "herta")
+        assert calls == ["herta"]
+    finally:
+        del wiki_worker.WikiWorker._compile_persona_unlocked

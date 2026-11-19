@@ -11,7 +11,7 @@ from nous.application.chat.tools import schedule
 from nous.application.workers import prospective_worker
 from nous.domain.memory.cue import time_cue_tag
 from nous.domain.memory.entities import Memory
-from nous.domain.shared.result import Success
+from nous.domain.shared.result import Failure, Success
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
 
@@ -236,3 +236,30 @@ class TestNextWait:
         ctx.memory_service.get_by_tags.return_value = Success([soon])
 
         assert 200 <= w._next_wait() <= 301
+
+
+class TestTagRewriteFailure:
+    """タグ書き換えの失敗を成功扱いにしない（kanban #82 B1）。
+
+    タグが消えないまま done を記録すると、同じ予定が次サイクルも due として拾われ、
+    同じ発言を main に繰り返す（LLM 課金も無限に回る）。
+    """
+
+    def test_finish_raises_when_tag_rewrite_fails(self, worker, ctx) -> None:
+        w, _turn = worker
+        ctx.memory_service.update_memory = MagicMock(return_value=Failure(RuntimeError("db down")))
+
+        with pytest.raises(RuntimeError):
+            w._finish(ctx, PERSONA, _memory([]))
+
+    def test_sweep_records_failure_instead_of_done(self, worker, ctx) -> None:
+        w, turn = worker
+        turn.return_value = "散歩してきた"
+        ctx.memory_service.get_by_tags.return_value = Success([_memory(_due_tags())])
+        ctx.memory_service.update_memory = MagicMock(return_value=Failure(RuntimeError("db down")))
+
+        w.run_agent_tasks()
+
+        events = _events(ctx)
+        assert prospective_worker.TASK_DONE_EVENT not in events
+        assert prospective_worker.TASK_FAILED_EVENT in events

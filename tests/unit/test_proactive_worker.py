@@ -185,3 +185,54 @@ class TestSpeak:
         _run(monkeypatch, _ctx(sqlite_conn, proactive_enabled=True))
         # 自発発言は chat.message を発行しない（ユーザー発言に数えると idle がリセットされる）
         assert _events(sqlite_conn).count("chat.message") == 1
+
+
+class TestFailureDoesNotFreeze:
+    """LLM 失敗で判断間隔を進めない・イベント記録失敗でも cooldown を効かせる（kanban #82 B3/B6）。"""
+
+    def test_llm_failure_does_not_advance_check(self, sqlite_conn, chat, published, monkeypatch) -> None:
+        _insert(sqlite_conn, "chat.message", 300)
+        chat["text"] = ""  # LLM 失敗・ターン衝突は空文字で返る
+
+        worker = _run(monkeypatch, _ctx(sqlite_conn, proactive_enabled=True, proactive_idle_minutes=120))
+
+        assert worker._last_check == {}
+        assert published == []
+
+    def test_silent_decision_advances_check(self, sqlite_conn, chat, published, monkeypatch) -> None:
+        _insert(sqlite_conn, "chat.message", 300)
+        chat["text"] = proactive_worker.SILENT_MARK
+
+        worker = _run(monkeypatch, _ctx(sqlite_conn, proactive_enabled=True, proactive_idle_minutes=120))
+
+        assert PERSONA in worker._last_check
+
+    def test_event_write_failure_keeps_cooldown(self, sqlite_conn, chat, published, monkeypatch) -> None:
+        from nous.application.workers import announce
+
+        _insert(sqlite_conn, "chat.message", 300)
+
+        class _BrokenRepo:
+            def __init__(self, *_a, **_kw) -> None:
+                pass
+
+            def insert(self, *_a, **_kw) -> None:
+                raise RuntimeError("db down")
+
+        monkeypatch.setattr(announce, "SessionEventRepository", _BrokenRepo)
+        worker = _run(
+            monkeypatch,
+            _ctx(
+                sqlite_conn,
+                proactive_enabled=True,
+                proactive_idle_minutes=120,
+                proactive_cooldown_minutes=180,
+                proactive_interval_minutes=0,
+            ),
+        )
+
+        assert PERSONA in worker._spoke_at
+        # 2 周目はイベントが無くてもプロセス内の時刻で止まる（話し続けない）
+        spoken = len(published)
+        worker.run_cycle()
+        assert len(published) == spoken

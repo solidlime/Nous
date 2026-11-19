@@ -208,3 +208,41 @@ class TestStateText:
         ctx = _ctx(sqlite_conn)
         ctx.persona_service.get_context.return_value = Failure(MagicMock())
         assert activity_worker.ActivityWorker()._state_text(ctx) == ""
+
+
+class TestFailureDoesNotFreezeOrLoseLimits:
+    """判断失敗で間隔を進めない・イベント記録失敗でも日次上限を守る（kanban #82 B3/B6）。"""
+
+    def test_llm_failure_does_not_advance_check(self, sqlite_conn, chat, tools, monkeypatch) -> None:
+        _insert(sqlite_conn, "chat.message", 300)
+        chat["text"] = ""  # LLM 失敗／パース不能
+
+        worker = _run(monkeypatch, _ctx(sqlite_conn, activity_enabled=True, activity_idle_minutes=120))
+
+        assert worker._last_check == {}
+        assert tools == []
+
+    def test_unrecorded_action_counts_toward_daily_limit(self, sqlite_conn) -> None:
+        now = get_now()
+        worker = activity_worker.ActivityWorker()
+        worker._acted_fallback[(PERSONA, now.date().isoformat())] = 2
+        ctx = _ctx(sqlite_conn)
+
+        assert worker._acted_today(ctx, now) == 2
+
+    async def test_record_falls_back_when_event_insert_fails(self, sqlite_conn, monkeypatch) -> None:
+        worker = activity_worker.ActivityWorker()
+        ctx = _ctx(sqlite_conn)
+
+        class _BrokenRepo:
+            def __init__(self, *_a, **_kw) -> None:
+                pass
+
+            def insert(self, *_a, **_kw) -> None:
+                raise RuntimeError("db down")
+
+        monkeypatch.setattr(activity_worker, "SessionEventRepository", _BrokenRepo)
+
+        assert await worker._record(ctx, "move", {"reason": "散歩"}, {"status": "ok"}) is False
+        key = (PERSONA, get_now().date().isoformat())
+        assert worker._acted_fallback[key] == 1

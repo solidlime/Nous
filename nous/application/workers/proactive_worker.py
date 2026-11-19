@@ -71,6 +71,8 @@ class ProactiveWorker:
         #: persona → 直前に判断した時刻（``proactive_interval_minutes`` の間隔を空ける）。
         #: shortcut: tick は固定 30 分。設定が tick より短い間隔を望んでもそこまで詰まらない。
         self._last_check: dict[str, datetime] = {}
+        #: persona → 話した時刻（イベント記録に失敗したときのクールダウン代替、kanban #82 B3）。
+        self._spoke_at: dict[str, datetime] = {}
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -123,14 +125,17 @@ class ProactiveWorker:
             interval = config.session_config.proactive_interval_minutes
             if (now - last_check).total_seconds() / 60 < interval:
                 return None
-        self._last_check[ctx.persona] = now
 
         idle_minutes = self._idle_minutes(ctx, now)
         if idle_minutes is None:
             return None
 
         text = await self._deliberate(ctx, idle_minutes, now)
-        if not text or SILENT_MARK in text:
+        if not text:
+            # LLM 失敗・ターン衝突は「判断できなかった」ので間隔を進めない (kanban #82 B6)。
+            return None
+        self._last_check[ctx.persona] = now
+        if SILENT_MARK in text:
             return None
         self._speak(ctx, text, config.max_stored_messages)
         return text
@@ -143,11 +148,17 @@ class ProactiveWorker:
             return None
 
         last_spoke = SessionEventRepository(ctx.connection).last_event_at(ctx.persona, SPOKE_EVENT)
-        if last_spoke is not None:
-            if last_spoke.tzinfo is None:
-                last_spoke = last_spoke.replace(tzinfo=now.tzinfo)
-            if (now - last_spoke).total_seconds() / 60 < session_config.proactive_cooldown_minutes:
-                return None
+        if last_spoke is not None and last_spoke.tzinfo is None:
+            last_spoke = last_spoke.replace(tzinfo=now.tzinfo)
+        # イベントを書けなかった回はプロセス内の時刻で代用する（kanban #82 B3）。
+        fallback = self._spoke_at.get(ctx.persona)
+        if fallback is not None and (last_spoke is None or fallback > last_spoke):
+            last_spoke = fallback
+        if (
+            last_spoke is not None
+            and (now - last_spoke).total_seconds() / 60 < session_config.proactive_cooldown_minutes
+        ):
+            return None
         return idle
 
     async def _deliberate(self, ctx: AppContext, idle_minutes: float, now: datetime) -> str:
@@ -189,4 +200,6 @@ class ProactiveWorker:
 
     def _speak(self, ctx: AppContext, text: str, max_messages: int) -> None:
         """main 履歴へ追記し、既存 chat() と同じ形の SSE で届ける。"""
-        speak_to_main(ctx, text, max_messages, SPOKE_EVENT)
+        if not speak_to_main(ctx, text, max_messages, SPOKE_EVENT):
+            # イベントを書けなかったので、クールダウンはプロセス内の時刻で代用する。
+            self._spoke_at[ctx.persona] = get_now()

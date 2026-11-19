@@ -31,12 +31,16 @@ def speak_to_main(
     max_messages: int,
     event_type: str = SPOKE_EVENT,
     ref: str = "",
-) -> None:
+) -> bool:
     """main 履歴へ追記し、既存 chat() と同じ形の SSE で届ける。
 
     ``ref`` は session event の summary 先頭に付ける相関子（例 ``task=<memory key>``）。
     実行ログ（``agent.task.ran``）とこの発言を後から突き合わせるために使う
     （kanban #69）。話す本文には入れない。
+
+    Returns:
+        イベントを記録できたら True。False のときは呼び出し元がクールダウン側で
+        補わないと、レート制限が効かなくなる（kanban #82 B3）。
     """
     # ワーカースレッドから呼ばれるので、sqlite 接続は追記するスレッドで作る
     # （db_factory はマーシャル先のループで解決される。kanban #86）。
@@ -57,6 +61,7 @@ def speak_to_main(
     hub.publish(ctx.persona, TextDeltaSSE(content=text).to_sse())
     hub.publish(ctx.persona, DoneSSE().to_sse())
 
+    recorded = True
     try:
         SessionEventRepository(ctx.connection).insert(
             SessionEvent(
@@ -68,8 +73,11 @@ def speak_to_main(
             )
         )
     except Exception:
-        logger.debug("speak_to_main: failed to record %s", event_type, exc_info=True)
+        # cooldown の唯一の根拠なので、消すと話し続ける（旧 debug だと気づけなかった）。
+        recorded = False
+        logger.warning("speak_to_main: failed to record %s", event_type, exc_info=True)
     logger.info("speak_to_main: persona=%s %s %s", ctx.persona, event_type, text[:60])
+    return recorded
 
 
 def _summarise(text: str, ref: str) -> str:

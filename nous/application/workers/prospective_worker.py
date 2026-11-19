@@ -183,17 +183,34 @@ class ProspectiveWorker:
         except Exception:
             logger.warning("ProspectiveWorker: speak failed persona=%s", ctx.persona, exc_info=True)
 
+    def _rewrite_tags(self, ctx: AppContext, persona: str, task: Memory, tags: list[str], what: str) -> bool:
+        """タグを書き換える。失敗を握り潰すと、同じタスクが毎サイクル再実行される (kanban #82 B1)。"""
+        result = ctx.memory_service.update_memory(task.key, tags=tags)
+        if result.is_ok:
+            return True
+        logger.warning(
+            "ProspectiveWorker: %s failed to rewrite tags persona=%s key=%s: %s",
+            what,
+            persona,
+            task.key,
+            result.error,
+        )
+        return False
+
     def _finish(self, ctx: AppContext, persona: str, task: Memory) -> None:
         recur = recur_of(task)
         tags = done_tags(task, recur)
-        ctx.memory_service.update_memory(task.key, tags=tags)
+        if not self._rewrite_tags(ctx, persona, task, tags, "finish"):
+            # タグが消せないまま成功扱いにすると、次サイクルで同じ発言を繰り返す。
+            raise RuntimeError(f"failed to clear task tags: {task.key}")
         self._event(ctx, persona, TASK_DONE_EVENT, f"task={task.key} {task.content[:80]} (recur={recur or '-'})")
 
     def _fail(self, ctx: AppContext, persona: str, task: Memory, error: Exception) -> None:
         fails = fail_count(task) + 1
         give_up = fails >= FAIL_LIMIT
         tags = done_tags(task, None) if give_up else retry_tags(task, fails)
-        ctx.memory_service.update_memory(task.key, tags=tags)
+        # 失敗カウンタが書けないと FAIL_LIMIT に永久に届かないので、少なくとも警告は残す。
+        self._rewrite_tags(ctx, persona, task, tags, f"fail ({fails}/{FAIL_LIMIT})")
         summary = f"task={task.key} {task.content[:60]} ({fails}/{FAIL_LIMIT}) {type(error).__name__}: {error}"
         self._event(ctx, persona, TASK_FAILED_EVENT, summary)
         logger.warning("ProspectiveWorker: task failed persona=%s %s", persona, summary)

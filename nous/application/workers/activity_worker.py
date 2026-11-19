@@ -62,6 +62,8 @@ class ActivityWorker:
         #: persona → 直前に判断した時刻。
         #: shortcut: 判断間隔は tick と同じ。設定で tick より短くしても詰まらない。
         self._last_check: dict[str, datetime] = {}
+        #: (persona, YYYY-MM-DD) → 当日の実行数（イベントを書けなかった分の代替、kanban #82 B3）。
+        self._acted_fallback: dict[tuple[str, str], int] = {}
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -123,10 +125,11 @@ class ActivityWorker:
         if self._acted_today(ctx, now) >= session_config.activity_daily_limit:
             return None
 
-        self._last_check[ctx.persona] = now
         choice = await self._choose(ctx, config, idle, now)
         if choice is None:
+            # 判断できなかったので間隔を進めない (kanban #82 B6)。
             return None
+        self._last_check[ctx.persona] = now
         action = str(choice.get("action") or "")
         if action not in CHOICES:
             logger.info("ActivityWorker: persona=%s unknown action %r", ctx.persona, action)
@@ -145,7 +148,8 @@ class ActivityWorker:
         events = SessionEventRepository(ctx.connection).get_by_persona(
             ctx.persona, event_type=ACTED_EVENT, since=start, limit=100
         )
-        return len(events)
+        # イベントを書けなかった回はここで数える（書けないと上限が効かなくなる、kanban #82 B3）。
+        return len(events) + self._acted_fallback.get((ctx.persona, now.date().isoformat()), 0)
 
     def _state_text(self, ctx: AppContext) -> str:
         """場所・感情・体調を 1 行に。取れなければ空文字。"""
@@ -266,7 +270,7 @@ class ActivityWorker:
             {"memory_key": str(choice.get("memory_key") or ""), "content": str(choice.get("content") or "")},
         )
 
-    async def _record(self, ctx: AppContext, action: str, choice: dict[str, Any], result: dict[str, Any]) -> None:
+    async def _record(self, ctx: AppContext, action: str, choice: dict[str, Any], result: dict[str, Any]) -> bool:
         """やったことを記憶とイベントに還す。失敗しても本体は止めない。"""
         reason = str(choice.get("reason") or "")
         outcome = str(result.get("status") or "")
@@ -282,6 +286,7 @@ class ActivityWorker:
             )
         except Exception:
             logger.debug("ActivityWorker: memory_create failed", exc_info=True)
+        recorded = True
         try:
             SessionEventRepository(ctx.connection).insert(
                 SessionEvent(
@@ -293,4 +298,9 @@ class ActivityWorker:
                 )
             )
         except Exception:
-            logger.debug("ActivityWorker: failed to record %s", ACTED_EVENT, exc_info=True)
+            # 日次上限はイベント件数で数えるので、書けないと上限が消える (kanban #82 B3)。
+            recorded = False
+            key = (ctx.persona, get_now().date().isoformat())
+            self._acted_fallback[key] = self._acted_fallback.get(key, 0) + 1
+            logger.warning("ActivityWorker: failed to record %s", ACTED_EVENT, exc_info=True)
+        return recorded

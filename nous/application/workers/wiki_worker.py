@@ -49,6 +49,17 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+#: persona → 編纂ロック。定刻サイクルと手動 API は ``WikiWorker`` を別インスタンスで作るので、
+#: インスタンス変数では排他にならない（同じ topic を同時に書くと片方の改訂が消える、kanban #82 B5）。
+_COMPILE_LOCKS: dict[str, threading.Lock] = {}
+_COMPILE_LOCKS_GUARD = threading.Lock()
+
+
+def _compile_lock(persona: str) -> threading.Lock:
+    with _COMPILE_LOCKS_GUARD:
+        return _COMPILE_LOCKS.setdefault(persona, threading.Lock())
+
+
 #: 編纂対象クラスタの最小記憶数（これ未満の topic はページ化しない）。
 MIN_TOPIC_MEMORIES = 3
 
@@ -380,6 +391,17 @@ class WikiWorker(JournalMixin, ConflictsMixin):
     # ------------------------------------------------------------------
 
     def _compile_persona(self, ctx, persona: str) -> None:
+        """persona 単位で直列化して編纂する。先に走っている人が居たら何もしない。"""
+        lock = _compile_lock(persona)
+        if not lock.acquire(blocking=False):
+            logger.info("WikiWorker: compile already running persona=%s — skipped", persona)
+            return
+        try:
+            self._compile_persona_unlocked(ctx, persona)
+        finally:
+            lock.release()
+
+    def _compile_persona_unlocked(self, ctx, persona: str) -> None:
         from nous.domain.shared.time_utils import get_now
         from nous.infrastructure.wiki.store import WikiStore
 
