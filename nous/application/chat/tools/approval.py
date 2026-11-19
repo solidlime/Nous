@@ -14,7 +14,14 @@ if TYPE_CHECKING:
 # 承認が要り得るツール。read_file は読み取りなので常に素通し。
 APPROVAL_REQUIRED_TOOLS = frozenset({"bash", "write_file", "edit_file", "delegate"})
 
-APPROVAL_TIMEOUT_SECONDS = 120.0
+# 承認ダイアログの待ち上限は Settings.approval_timeout_seconds。
+# inference.py が import する定数名は維持しつつ、実値を設定から遅延解決する。
+def __getattr__(name: str) -> float:
+    if name == "APPROVAL_TIMEOUT_SECONDS":
+        from nous.config.settings import get_settings
+
+        return float(get_settings().approval_timeout_seconds)
+    raise AttributeError(f"module {__name__!r} has no attribute {name!r}")
 
 
 def _command_head(tool_input: dict | None) -> str:
