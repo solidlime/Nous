@@ -22,13 +22,6 @@ var C = window.Nous.Core;
 var safeSetHTML = C.safeSetHTML;
 
 /* Persona storage helpers — write to both keys for backward compatibility */
-function getStoredPersona() {
-  return (
-    localStorage.getItem("mmcp-persona") ||
-    localStorage.getItem("selected_persona") ||
-    null
-  );
-}
 function setStoredPersona(persona) {
   localStorage.setItem("mmcp-persona", persona);
   localStorage.setItem("selected_persona", persona);
@@ -534,7 +527,7 @@ document.addEventListener("keydown", function (e) {
    ARIA LABELS ON LOAD
    ================================================================= */
 document.addEventListener("DOMContentLoaded", function () {
-  document.querySelectorAll(".tab-btn").forEach(function (btn, i) {
+  document.querySelectorAll(".tab-btn").forEach(function (btn) {
     btn.setAttribute("role", "tab");
     btn.setAttribute("aria-label", btn.textContent.trim());
     btn.setAttribute("tabindex", "0");
@@ -577,7 +570,7 @@ function submitCreatePersona(e) {
   var nameInput = document.getElementById('new-persona-name');
   var name = nameInput.value.trim();
   if (!name) return false;
-  C.api('/api/personas', {method: 'POST', body: JSON.stringify({name: name})}).then(function(data) {
+  C.api('/api/personas', {method: 'POST', body: JSON.stringify({name: name})}).then(function() {
     closeCreatePersonaModal();
     var sel = document.getElementById('persona-select');
     var exists = Array.from(sel.options).some(function(o) { return o.value === name; });
@@ -601,7 +594,7 @@ function deleteCurrentPersona() {
   var name = sel.value;
   if (!name || name === 'None') return;
   if (!confirm('Delete persona "' + name + '"? This cannot be undone.')) return;
-  C.api('/api/personas/' + encodeURIComponent(name), {method: 'DELETE'}).then(function(data) {
+  C.api('/api/personas/' + encodeURIComponent(name), {method: 'DELETE'}).then(function() {
     var opt = sel.querySelector('option[value="' + name.replace(/"/g, '\\"') + '"]');
     if (opt) opt.remove();
     var first = sel.options[0];
