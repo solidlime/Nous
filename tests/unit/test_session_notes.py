@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from types import SimpleNamespace
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -95,6 +96,26 @@ class TestSilenceBoundary:
         ctx.config = None
         note = await session_notes.fill_silence(ctx, PERSONA, 6.0)
         assert note is not None and note.startswith("warning:")
+
+
+class TestSilenceHoursPriority:
+    """閾値の 3 段優先: fill_silence(hours) > ChatConfig.fill_silence_hours > DEFAULT_SILENCE_HOURS。"""
+
+    async def test_three_tier_priority(self, sqlite_conn, generate) -> None:
+        _stop(sqlite_conn, 2.0)  # gap = 2h
+        ctx = _ctx(sqlite_conn)
+        ctx.config.fill_silence_hours = 1.0
+        # ① 呼び出し側の hours 引数が最優先: gap 2h < 3h → 何もしない
+        assert await session_notes.fill_silence(ctx, PERSONA, 3.0) is None
+        generate.assert_not_awaited()
+        # ② 引数なしなら ChatConfig の 1.0 で発動（gap 2h >= 1h）
+        assert await session_notes.fill_silence(ctx, PERSONA) is None
+        generate.assert_awaited_once()
+        # ③ config に値が無ければ DEFAULT_SILENCE_HOURS(6.0): gap 2h < 6h → 何もしない
+        ctx.config = SimpleNamespace()
+        generate.reset_mock()
+        assert await session_notes.fill_silence(ctx, PERSONA) is None
+        generate.assert_not_awaited()
 
 
 class TestHoursSince:

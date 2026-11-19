@@ -16,6 +16,7 @@ from nous.infrastructure.logging.structured import get_logger
 if TYPE_CHECKING:
     from nous.application.chat.pipeline.context import ChatTurnContext
     from nous.application.use_cases import AppContext
+    from nous.domain.config.chat_config import ChatConfig
 
 logger = get_logger(__name__)
 
@@ -94,6 +95,7 @@ async def _build_context_section(
     compress_mode: str = "auto",
     decay_note: str = "",
     emotion_bands: tuple[float, float] | None = None,
+    config: ChatConfig | None = None,
 ) -> str:
     """get_context() 同等の充実したコンテキストサマリーを構築する。
 
@@ -312,7 +314,7 @@ async def _build_context_section(
                 # get_by_tags は無 LIMIT・updated_at DESC。全件 encode はレイテンシが単調増加するため直近のみ。
                 # 相対閾値の比較基準もこの「直近N件の候補集合」内で完結する。
                 contents = [r.content for r in reflection_result.value if r.content][:20]
-                insights = _select_reflection_insights(ctx, query_text, contents)
+                insights = _select_reflection_insights(ctx, query_text, contents, config)
                 if insights:
                     sanitized = [_sanitize_text(i) for i in insights if i]
                     if sanitized:
@@ -396,23 +398,32 @@ async def _build_context_section(
     return result
 
 
-def _reflection_similarity_threshold(ctx) -> float:
+def _reflection_config(ctx, config: ChatConfig | None):
+    """リクエスト毎の ChatConfig を優先し、無ければ ctx の config（従来経路）を返す。
+
+    ``ctx._config`` は AppContext 生成時に 1 回だけ読まれる（Registry が persona 毎に
+    キャッシュする）ため、これだけを見ると UI での変更が再起動まで効かない。
+    """
+    return config if config is not None else getattr(ctx, "_config", None)
+
+
+def _reflection_similarity_threshold(ctx, config: ChatConfig | None = None) -> float:
     """reflection 注入のベクトル類似の絶対下限 (floor)。未設定/不正値はデフォルト 0.45。"""
     try:
-        return float(getattr(getattr(ctx, "_config", None), "reflection_injection_min_similarity", 0.45))
+        return float(getattr(_reflection_config(ctx, config), "reflection_injection_min_similarity", 0.45))
     except (TypeError, ValueError):
         return 0.45
 
 
-def _reflection_injection_margin(ctx) -> float:
+def _reflection_injection_margin(ctx, config: ChatConfig | None = None) -> float:
     """reflection 注入の相対閾値マージン。未設定/不正値はデフォルト 0.08。"""
     try:
-        return float(getattr(getattr(ctx, "_config", None), "reflection_injection_margin", 0.08))
+        return float(getattr(_reflection_config(ctx, config), "reflection_injection_margin", 0.08))
     except (TypeError, ValueError):
         return 0.08
 
 
-def _select_reflection_insights(ctx, query: str, contents: list[str]) -> list[str]:
+def _select_reflection_insights(ctx, query: str, contents: list[str], config: ChatConfig | None = None) -> list[str]:
     """reflection 注入候補を選択する（相対閾値フィルタ）。
 
     実測コサイン (ruri-v3-30m, is_query=True) では関連 0.8151-0.9242 /
@@ -425,7 +436,7 @@ def _select_reflection_insights(ctx, query: str, contents: list[str]) -> list[st
     fail-open ショートサーキット（floor<=0 / 空 query / 埋め込みモデル無し /
     例外）は埋め込みを一切呼ばず元リストの先頭3件を返す（現行動作）。
     """
-    threshold = _reflection_similarity_threshold(ctx)
+    threshold = _reflection_similarity_threshold(ctx, config)
     if threshold <= 0.0 or not query.strip():
         return contents[:3]
     embedding = getattr(ctx, "_embedding", None)
@@ -434,7 +445,7 @@ def _select_reflection_insights(ctx, query: str, contents: list[str]) -> list[st
     try:
         import numpy as np
 
-        margin = _reflection_injection_margin(ctx)
+        margin = _reflection_injection_margin(ctx, config)
         q = embedding.encode(query, is_query=True)
         sims = [float(np.dot(q, embedding.encode(c))) for c in contents]
         logger.debug(

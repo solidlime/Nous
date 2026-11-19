@@ -226,6 +226,7 @@ class PrepareStep:
                         getattr(config, "emotion_hint_low", 0.35),
                         getattr(config, "emotion_hint_high", 0.7),
                     ),
+                    config=config,
                 )
             )
             # Progressive disclosure: only preload N memories; LLM searches for more if needed
