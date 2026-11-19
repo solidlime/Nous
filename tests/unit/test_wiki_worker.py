@@ -1369,10 +1369,32 @@ class TestJournalActivity:
             assert prompt.index("## 活動") < prompt.index("## やったこと")
             assert "材料に書かれていない設定は書かない" in prompt
             assert "- 11:36 起きた" in prompt
+            # 仕事と暮らしを混ぜる指示（生活優先の旧指示は廃止）
+            assert "仕事と暮らしが連続するその人の一日として書く" in prompt
+            assert "どちらかに偏らせない" in prompt
+            assert "やったこと は活動に書いた行を繰り返さず" in prompt
+            assert "優先して拾う" not in prompt
             # 省略条件は見出し単位（日単位にすると材料が少ない日に空見出しを並べる）。
             assert "各見出しは、その見出しに書ける材料が無ければ省略してよい" in prompt
             # 営みが無い日は「(なし)」を渡す（見出しの省略をプロンプトが許す）。
             assert "(なし)" in worker._build_journal_prompt(self._day, [], [], self._now, activity="")
+        finally:
+            conn.close()
+
+    def test_prompt_length_hint_counts_activity_rows(self, tmp_path) -> None:
+        # length_hint の材料数には営みの行も数える（短い枝は活動を例外扱いし、
+        # 活動列挙が「1〜3 行」制限に潰されないようにする）。
+        conn, worker, _ctx = _journal_setup(tmp_path, [], self._body)
+        try:
+            four = "\n".join(f"- 1{i}:00 x" for i in range(4))
+            prompt = worker._build_journal_prompt(self._day, [], [], self._now, activity=four)
+            assert "短く書く" in prompt
+            assert "## 活動 は材料の行を時刻順に洩らさず拾い" in prompt
+            assert "他の見出しは最大 3 行" in prompt
+            five = "\n".join(f"- 1{i}:00 x" for i in range(5))
+            prompt = worker._build_journal_prompt(self._day, [], [], self._now, activity=five)
+            assert "短く書く" not in prompt
+            assert "## 活動 だけは材料の行を時刻順に列挙する" in prompt
         finally:
             conn.close()
 
@@ -1385,6 +1407,48 @@ class TestJournalActivity:
             _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 11, 36), {"user_text": "起きた"})
             activity = worker._journal_activity(ctx, "test_ww", self._win_start, self._win_end, _JST)
             assert "お菓子作り" in activity and "起きた" in activity
+        finally:
+            conn.close()
+
+    def test_turn_completed_includes_project_in_activity_line(self, tmp_path) -> None:
+        """turn.completed 行には detail の project を時刻の後ろ・本文の先頭に [slug] で付ける。
+
+        「活動」に仕事の内容と時間を混ぜる（m00447）ため、日記 LLM はどの
+        プロジェクトの作業かを読める必要がある。空白・非文字列は付けない。
+        """
+        conn, worker, ctx = _journal_setup(tmp_path, [], self._body)
+        try:
+            _sess_event(
+                conn,
+                "turn.completed",
+                datetime(2026, 11, 9, 21, 14, tzinfo=_JST),
+                {"user_text": "root 権限を渡して", "assistant_text": "完了したわ", "project": "nous"},
+            )
+            _sess_event(
+                conn,
+                "turn.completed",
+                datetime(2026, 11, 9, 22, 0, tzinfo=_JST),
+                {"user_text": "おやすみ", "assistant_text": "おやすみなさい"},
+            )
+            _sess_event(
+                conn,
+                "turn.completed",
+                datetime(2026, 11, 9, 22, 30, tzinfo=_JST),
+                {"user_text": "雑談", "project": "   "},
+            )
+            _sess_event(
+                conn,
+                "turn.completed",
+                datetime(2026, 11, 9, 22, 40, tzinfo=_JST),
+                {"user_text": "雑談2", "project": {"a": 1}},
+            )
+            activity = worker._journal_activity(ctx, "test_ww", self._win_start, self._win_end, _JST)
+            assert activity.splitlines() == [
+                "- 21:14 [nous] root 権限を渡して / 完了したわ",
+                "- 22:00 おやすみ / おやすみなさい",
+                "- 22:30 雑談",
+                "- 22:40 雑談2",
+            ]
         finally:
             conn.close()
 

@@ -54,15 +54,20 @@ _JOURNAL_PROMPT = """あなたは日記を書く記録係です。{day} の記�
   ## 決めたこと
   ## 引っかかったこと
   ## 未解決
-- ## 活動 は「その日の本人が何をしていたか」の記録。営みの材料にある時刻を使う。
-  仕事の中身より生活の動き（作りもの・片づけ・移動・休憩・雑談）を優先して拾う。
+- ## 活動 は「その日の本人が何をしていたか」の記録。各行は `- HH:MM [プロジェクト名] 何をしたか`
+  の形で時刻の順に並べる（暮らしの動きはプロジェクト名を省略してよい）。
+  [プロジェクト名] は材料の各行の本文先頭に付くマーカーで、その作業の対象プロジェクト（角括弧は 1 重）。
+  マーカーの無い会話の行も、その時間に話していたこと・進めていたこととして拾う。
+  会話や材料の文をそのまま写さず、本人が何をしたかの記録に書き直す。
+  研究や片づけ、移動、休憩といった暮らしの動きも材料にあるぶんだけ同じ時間軸に混ぜ、
+  仕事と暮らしが連続するその人の一日として書く。どちらかに偏らせない。
 - 営みの材料には、本人の会話・移動に加えて、人物設定から起こした暮らし（研究・料理・手入れなど）も入る。
   どちらも本人が実際に過ごしたこととして扱う。
 - **各見出しは、その見出しに書ける材料が無ければ省略してよい**（空見出しを並べない）。
   行数は材料にある事実の数まで。材料が少ない日に埋め草を書かない。
 - 場所・天気・相手など、材料に書かれていない設定は書かない（推測で補わない）。
 - ## 未解決 には下の「未解決の問い」をそのまま列挙する（答えを創作しない）。1 件も無ければ見出しごと省略。
-- ## やったこと は作業とその成果を書く。
+- ## やったこと は活動に書いた行を繰り返さず、成果と学びだけをまとめる。
 - ## 感想 は「その日に起きたことに対して何を感じたか・どう思ったか」を本人の口調で書く。事実の列挙にはしない。
 - 材料に無い事実は書かない（推測・脚色・一般論での補完は禁止）。
 - {length_hint}
@@ -459,7 +464,7 @@ class JournalMixin:
     def _journal_life(self, ctx, persona: str, day: date, activity: str) -> str:
         """その日の「暮らし」を人物設定から起こす（記憶には残さず、日記の材料だけ）。
 
-        設定が読めない人物の生活をでっち上げないため、character が空なら何もしない。
+        設定が読めない人物の暮らしをでっち上げないため、character が空なら何もしない。
         失敗しても日記は通常どおり書けるよう、例外は warning と監査に閉じる。
         """
         if not self._cfg.life_enabled:
@@ -522,7 +527,7 @@ class JournalMixin:
 
         材料は pi hook が残した ``session_events``（``turn.completed`` の発話、
         ``session.started`` のプロジェクト名、``place.moved`` の移動）。記憶は要点抽出後なので、
-        「何をしていたか」が落ちる。日記に生活の営みを残すには生ログを読むしかない。
+        「何をしていたか」が落ちる。日記に暮らしの営みを残すには生ログを読むしかない。
 
         ``timestamp`` は offset 混在の ISO 文字列（hook は UTC の ``Z``、worker は JST）
         なので文字列比較では日を切れない。``julianday()`` で引数側も同じ形式に変換して
@@ -592,10 +597,12 @@ class JournalMixin:
             )
             for m in memories
         ]
+        activity_rows = len([line for line in activity.splitlines() if line.strip()])
+        # 営みだけの日は「他の見出し最大 3 行」が活動指示と衝突するので、材料数には営みも数える。
         length_hint = (
-            "材料が 5 件未満なので短く書く（各見出し 1〜3 行、水増し禁止）"
-            if len(memories) < 5
-            else "材料が多い日は列挙せず、要点を統合して書く"
+            "材料が 5 件未満なので短く書く（## 活動 は材料の行を時刻順に洩らさず拾い、他の見出しは最大 3 行（材料が無ければ省略）。水増し禁止）"
+            if len(memories) + activity_rows < 5
+            else "材料が多い日は他の見出しは列挙せず要点を統合して書く（## 活動 だけは材料の行を時刻順に列挙する）"
         )
         question_lines = [
             line for line in (_clip(m.content, _CONTENT_PREVIEW_CHARS) for m in (questions or [])) if line
@@ -710,6 +717,9 @@ def _activity_line(event, tz: tzinfo | None) -> str:
     if event.event_type == "turn.completed":
         parts = [str(detail.get(k) or "").strip() for k in ("user_text", "assistant_text")]
         body = " / ".join(p for p in parts if p)
+        project = detail.get("project")
+        if isinstance(project, str) and project.strip():
+            body = f"[{project.strip()}] {body}"
     elif event.event_type == "place.moved":
         to = str(detail.get("to") or "").strip()
         body = f"{to} へ移動" if to else ""
