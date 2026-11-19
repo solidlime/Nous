@@ -343,6 +343,16 @@ class AppContext(VectorStackMixin, EventHandlersMixin, LifecycleMixin):
 
             _logging.getLogger("nous").warning("tool.called→hub bridge init failed: %s", e)
 
+        # config.updated / context.* も同名の SSE として hub へ流す。
+        # フロント（core/sse.js）はハンドラを持っているのに、購読者が無くて捨てられていた（#81 W4）。
+        for _event in ("config.updated", "context.updated", "context.emotion_changed", "context.body_state_changed"):
+            try:
+                self.event_bus.subscribe(_event, self._forward_to_hub)
+            except Exception as e:
+                import logging as _logging
+
+                _logging.getLogger("nous").warning("%s→hub bridge init failed: %s", _event, e)
+
         # tool.called をユーザー由来の対話活動として last_conversation_time に記録
         try:
             self.event_bus.subscribe("tool.called", self._on_tool_called_record_conversation)

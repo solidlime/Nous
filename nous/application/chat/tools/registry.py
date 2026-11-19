@@ -12,6 +12,7 @@ from nous.application.chat.tools.workspace import artifact_path
 from nous.domain.config.redaction import redact_params, redact_text
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
+from nous.infrastructure.metrics.registry import observe_tool
 
 if TYPE_CHECKING:
     from collections.abc import Awaitable, Callable
@@ -111,6 +112,9 @@ class ToolRegistry:
         if not isinstance(persona, str):
             persona = ""
         started = perf_counter()
+        # 呼び出し回数は失敗・タイムアウトも含める（routers/metrics.py の tools が常に空だった、#81 W3）。
+        if persona:
+            observe_tool(persona, tool_name)
         timeout_s = float(getattr(config, "tool_timeout_seconds", 120) or 120)
         try:
             # ハングしたツールでターンが終わらなくなるのを防ぐ（TurnHub が解けず 409 固定になる）

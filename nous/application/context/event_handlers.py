@@ -49,6 +49,23 @@ class EventHandlersMixin:
         except Exception:
             logger.debug("record_memory_access failed for %s", key, exc_info=True)
 
+    async def _forward_to_hub(self, event_type: str, data: dict) -> None:
+        """EventBus のイベントを同名の SSE イベントとして chat hub へ流す。
+
+        ``config.updated`` / ``context.*`` は publish 側だけで購読者が無く、
+        フロント（``nous/api/http/static/core/sse.js``）の同名ハンドラに届かなかった
+        （kanban #81 W4）。名前を変えないので、handlers はそのまま反応する。
+        """
+        try:
+            persona = (data or {}).get("persona") or getattr(self, "persona", None)
+            if not persona:
+                return
+            from nous.application.chat.service import get_turn_hub
+
+            get_turn_hub().publish_event(persona, event_type, data or {})
+        except Exception:
+            logger.debug("event→hub forward failed: %s", event_type, exc_info=True)
+
     async def _on_tool_called_to_hub(self, event_type: str, data: dict) -> None:
         """Forward ``tool.called`` to this persona's chat SSE hub (best-effort).
 

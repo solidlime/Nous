@@ -20,28 +20,6 @@ def split_system_prompt(system: str) -> tuple[str, str]:
     return system, ""
 
 
-def build_anthropic_system(system: str) -> str | list[dict]:
-    """Build Anthropic API ``system`` parameter with prompt caching.
-
-    When the boundary marker is present::
-
-        [{"type": "text", "text": static, "cache_control": {"type": "ephemeral"}},
-         {"type": "text", "text": dynamic}]
-
-    Without the marker, returns the original string unchanged.
-    """
-    static_part, dynamic_part = split_system_prompt(system)
-    if not dynamic_part:
-        return system
-
-    blocks: list[dict] = [
-        {"type": "text", "text": static_part, "cache_control": {"type": "ephemeral"}},
-    ]
-    if dynamic_part:
-        blocks.append({"type": "text", "text": dynamic_part})
-    return blocks
-
-
 def build_openai_system_messages(system: str) -> list[dict]:
     """Build OpenAI/OpenRouter ``messages`` entry with prompt caching.
 

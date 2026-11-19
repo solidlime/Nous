@@ -587,8 +587,3 @@ def specs_for_surface(surface: str) -> tuple[ToolSpec, ...]:
 def tool_names(surface: str) -> frozenset[str]:
     """``surface`` のツール名集合。"""
     return frozenset(spec.name for spec in specs_for_surface(surface))
-
-
-def multi_surface_specs() -> tuple[ToolSpec, ...]:
-    """2 面以上に現れるツールスペック（ドリフト検出の対象）。"""
-    return tuple(TOOL_SPECS[k] for k in sorted(TOOL_SPECS) if len(TOOL_SPECS[k].surfaces) > 1)

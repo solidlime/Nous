@@ -54,8 +54,3 @@ def estimate_tokens(text: str) -> int:
         return 0
     raw = sum(_weight(c) for c in text)
     return ceil(raw * TOKEN_WEIGHTS["safety"])
-
-
-def exceeds_profile_limit(text: str, max_tokens: int = DEFAULT_PROFILE_MAX_TOKENS) -> bool:
-    """上限ゲート。``estimate_tokens(text) > max_tokens`` の糖衣."""
-    return estimate_tokens(text) > max_tokens

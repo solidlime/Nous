@@ -123,6 +123,22 @@ class TestRegistryPublishInvariant:
         assert events[0]["tool_name"] == SEARCH_TOOLS_NAME
         assert events[0]["success"] is True
 
+    def test_registry_counts_tool_calls_for_metrics(self, mock_app_context):
+        """observe_tool の呼び出し元が無く metrics の tools が常に空だった（kanban #81 W3）。"""
+        from unittest.mock import AsyncMock
+
+        from nous.infrastructure.metrics import registry as metrics
+
+        mock_app_context.persona = "test_persona"
+        metrics.reset()
+        try:
+            handler = AsyncMock(return_value={"status": "ok", "content": "[]"})
+            registry = ToolRegistry(builtin_tools=[], search_handler=handler)
+            asyncio.run(registry.execute(mock_app_context, MagicMock(), SEARCH_TOOLS_NAME, {"query": "x"}))
+            assert metrics.snapshot("test_persona")["tools"][SEARCH_TOOLS_NAME] >= 1
+        finally:
+            metrics.reset()
+
 
 # ---------------------------------------------------------------------------
 # (c) audit: all 13 MCP tool functions publish on success AND failure

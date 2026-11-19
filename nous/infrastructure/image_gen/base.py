@@ -18,17 +18,6 @@ class GeneratedImage:
     display: bool = True  # NOUS:display タグによる表示対象か（False は保存・表示しない）
 
 
-@dataclass
-class ImageGenConfig:
-    """画像生成設定"""
-
-    provider: str = "comfyui"  # "comfyui" | "auto"
-    comfyui_url: str = ""  # ComfyUI APIエンドポイント (caller must provide, no default here)
-    timeout_seconds: float = 180.0  # 生成タイムアウト（秒）
-    size: str = "1024x1024"  # 画像サイズ (例: "1024x1024")
-    quality: str = "standard"  # 品質 ("standard" | "hd")
-
-
 class ImageGenProvider(ABC):
     """画像生成プロバイダの抽象基底クラス"""
 
