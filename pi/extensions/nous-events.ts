@@ -323,6 +323,8 @@ export function resolveConfig(): HookConfig {
 interface ToolLog {
   tool: string;
   args_summary: string;
+  // 引数値は送らない（privacy 不変条件）。キー名だけ送り、nous 側の skip 判定に使う。
+  arg_keys: string[];
   ok: boolean;
   ms: number | null;
 }
@@ -343,7 +345,7 @@ export default function nousEvents(pi: ExtensionAPI): void {
   let projectSlug = "";
   let lastCwd = "";
   let tools: ToolLog[] = [];
-  const pendingTools = new Map<string, { tool: string; args_summary: string }>();
+  const pendingTools = new Map<string, { tool: string; args_summary: string; arg_keys: string[] }>();
   const inflight = new Set<Promise<void>>();
 
   function refreshProject(cwd?: unknown): void {
@@ -543,6 +545,7 @@ export default function nousEvents(pi: ExtensionAPI): void {
       pendingTools.set(event.toolCallId, {
         tool: String(event.toolName ?? ""),
         args_summary: argsSummary(event.args),
+        arg_keys: Object.keys((event.args as Record<string, unknown>) ?? {}),
       });
     } catch {
       // 記録対象を落としても本処理は続行
@@ -557,6 +560,7 @@ export default function nousEvents(pi: ExtensionAPI): void {
       tools.push({
         tool: pending ? pending.tool : String(event.toolName ?? ""),
         args_summary: pending ? pending.args_summary : "",
+        arg_keys: pending ? pending.arg_keys : [],
         ok: !event.isError,
         ms: typeof event.durationMs === "number" ? event.durationMs : null,
       });

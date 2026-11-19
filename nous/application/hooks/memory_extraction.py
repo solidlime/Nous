@@ -321,6 +321,10 @@ def _apply_context_update(ctx: AppContext, persona: str, ctx_update: dict, tool_
         state_fields.update(_body_delta_state(ctx, persona, ctx_update, skip_body=skip_body))
         if state_fields:
             ctx.persona_service.update_physical_state(persona, **state_fields)
+        # relationship_status は空文字で Failure になるので strip 後の空は呼ばない
+        rel = ctx_update.pop("relationship_status", None)
+        if isinstance(rel, str) and rel.strip():
+            ctx.persona_service.update_relationship(persona, rel.strip())
         # 場所は移動と同じ経路（生理コスト + ``place.moved``）。直接書くと滞在時間の
         # 起点が残らず、ダッシュボードが「新しい場所 + 古い到着時刻」を出す。
         env_raw = ctx_update.pop("environment", None)
@@ -334,6 +338,7 @@ def _apply_context_update(ctx: AppContext, persona: str, ctx_update: dict, tool_
                 logger.warning("hook_extraction: environment not applied: %s", moved.error)
     else:
         ctx_update.pop("environment", None)  # 適用されない値は SSE に流さない
+        ctx_update.pop("relationship_status", None)
 
     if not skip_user_info:
         user_info = {

@@ -108,7 +108,7 @@ Authorization: Bearer <NOUS_PLUGIN__API_KEY>
       "detail": {
         "user_text": "...",           // ellipsize 4000 文字
         "assistant_text": "...",      // ellipsize 4000
-        "tool_calls_log": [{"tool":"read","args_summary":"a.p:12","ok":true,"ms":31}]
+        "tool_calls_log": [{"tool":"read","args_summary":"a.p:12","arg_keys":["path"],"ok":true,"ms":31}]
       },
       "metadata": {"kv_keep": "..." } // optional
     }

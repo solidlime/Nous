@@ -259,3 +259,92 @@ class TestIngestTurnCompletedHook:
         resp, mock_hook = self._post(body, headers={"Authorization": "Bearer wrong"})
         assert resp.status_code == 401
         assert mock_hook.await_count == 0
+
+
+# ---------------------------------------------------------------------------
+# context_update: relationship_status
+# ---------------------------------------------------------------------------
+
+
+class TestRelationshipStatusApply:
+    async def test_relationship_status_is_persisted(self):
+        """context_update.relationship_status → update_relationship に渡る。"""
+        from nous.application.hooks.memory_extraction import run_hook_extraction
+
+        ctx = _mock_ctx(_settings())
+        result = _llm_result(context_update={"relationship_status": "信頼している友人"})
+
+        with patch(
+            "nous.application.hooks.memory_extraction.MemoryLLM.process",
+            new=AsyncMock(return_value=result),
+        ):
+            await run_hook_extraction(ctx, "herta", _turn_event(), "sess_rel_1")
+
+        ctx.persona_service.update_relationship.assert_called_once_with("herta", "信頼している友人")
+
+    async def test_update_context_tool_call_skips_relationship_status(self):
+        """Web 経路（input 付き）: メインLLMが書いたターンは抽出側の関係性を適用しない。"""
+        from nous.application.hooks.memory_extraction import run_hook_extraction
+
+        ctx = _mock_ctx(_settings())
+        result = _llm_result(context_update={"relationship_status": "他人"})
+        event = _turn_event()
+        event["detail"]["tool_calls_log"] = [
+            {"name": "update_context", "input": {"relationship_status": "信頼している友人"}}
+        ]
+
+        with patch(
+            "nous.application.hooks.memory_extraction.MemoryLLM.process",
+            new=AsyncMock(return_value=result),
+        ):
+            await run_hook_extraction(ctx, "herta", event, "sess_rel_2")
+
+        ctx.persona_service.update_relationship.assert_not_called()
+
+    async def test_pi_tool_log_shape_skips_relationship_status(self):
+        """pi 経路: 本物の nous-events.ts が積む shape（name/input 無し、arg_keys のみ）でも skip する。"""
+        from nous.application.hooks.memory_extraction import run_hook_extraction
+
+        ctx = _mock_ctx(_settings())
+        result = _llm_result(context_update={"relationship_status": "他人"})
+        event = _turn_event()
+        event["detail"]["tool_calls_log"] = [
+            {
+                "tool": "mcp__nous__update_context",
+                "args_summary": "",
+                "arg_keys": ["relationship_status"],
+                "ok": True,
+                "ms": 10,
+            }
+        ]
+
+        with patch(
+            "nous.application.hooks.memory_extraction.MemoryLLM.process",
+            new=AsyncMock(return_value=result),
+        ):
+            await run_hook_extraction(ctx, "herta", event, "sess_rel_pi_1")
+
+        ctx.persona_service.update_relationship.assert_not_called()
+
+    async def test_pi_item_tool_name_skips_inventory(self):
+        """pi の MCP 名（mcp__nous__item_add）でも inventory 上書きを skip する。"""
+        from nous.application.chat.memory_extractor import _context_update_skips, item_tools_used
+
+        log = [{"tool": "mcp__nous__item_add", "args_summary": "x", "arg_keys": ["name"], "ok": True, "ms": 3}]
+        assert _context_update_skips(log)[4] is True
+        assert item_tools_used(log) is True
+
+    async def test_blank_relationship_status_is_not_applied(self):
+        """空文字は update_relationship が Failure を返すので呼ばない。"""
+        from nous.application.hooks.memory_extraction import run_hook_extraction
+
+        ctx = _mock_ctx(_settings())
+        result = _llm_result(context_update={"relationship_status": "   "})
+
+        with patch(
+            "nous.application.hooks.memory_extraction.MemoryLLM.process",
+            new=AsyncMock(return_value=result),
+        ):
+            await run_hook_extraction(ctx, "herta", _turn_event(), "sess_rel_3")
+
+        ctx.persona_service.update_relationship.assert_not_called()

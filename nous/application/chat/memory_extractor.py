@@ -344,7 +344,19 @@ def _body_delta_state(ctx: AppContext, persona: str, ctx_update: dict, *, skip_b
     return updates
 
 
-_STATE_TEXT_KEYS = {"mental_state", "physical_state", "environment"}
+_STATE_TEXT_KEYS = {
+    "mental_state",
+    "physical_state",
+    "environment",
+    "relationship_status",
+}
+# 注: skip はキー単位ではなくフラグ単位。relationship_status だけを書いたターンでも
+# environment/physical_state/mental_state の抽出側適用が丸ごと skip される（安全側に倒している）。
+
+
+def _is_item_write_tool(name: str) -> bool:
+    """inventory を変化させる item_* ツールか（Web 直名と pi の mcp__<server>__item_* 両方）。item_search は read-only なので除外。"""
+    return (name.startswith("item_") or name.split("__")[-1].startswith("item_")) and not name.endswith("item_search")
 
 
 def _context_update_skips(tool_calls_log: list[dict] | None) -> tuple[bool, bool, bool, bool, bool]:
@@ -358,10 +370,16 @@ def _context_update_skips(tool_calls_log: list[dict] | None) -> tuple[bool, bool
     for entry in tool_calls_log or []:
         if not isinstance(entry, dict):
             continue
-        name = entry.get("name")
+        name = entry.get("name") or entry.get("tool") or ""
         raw_input = entry.get("input")
-        tool_input: dict = raw_input if isinstance(raw_input, dict) else {}
-        if name == "update_context":
+        if isinstance(raw_input, dict):
+            tool_input: dict = raw_input
+        else:
+            # pi 経路は引数値を送らない設計（nous-events.ts の privacy 不変条件）。
+            # キー名だけで判定する（判定に値は不要）。
+            arg_keys = entry.get("arg_keys")
+            tool_input = {str(k): None for k in arg_keys} if isinstance(arg_keys, list) else {}
+        if name == "update_context" or (isinstance(name, str) and name.endswith("__update_context")):
             if "emotion" in tool_input or "emotion_intensity" in tool_input:
                 skip_emotion = True
             if {"body_state", "fatigue", "warmth", "arousal"} & tool_input.keys():
@@ -370,7 +388,7 @@ def _context_update_skips(tool_calls_log: list[dict] | None) -> tuple[bool, bool
                 skip_state_text = True
             if any(k.startswith("user_") for k in tool_input):
                 skip_user_info = True
-        elif isinstance(name, str) and name.startswith("item_") and name != "item_search":
+        elif isinstance(name, str) and _is_item_write_tool(name):
             skip_inventory = True
     return skip_emotion, skip_body, skip_state_text, skip_user_info, skip_inventory
 
@@ -385,8 +403,8 @@ def item_tools_used(tool_calls_log: list[dict] | None) -> bool:
     for entry in tool_calls_log or []:
         if not isinstance(entry, dict):
             continue
-        name = entry.get("name")
-        if isinstance(name, str) and name.startswith("item_") and name != "item_search":
+        name = entry.get("name") or entry.get("tool") or ""
+        if isinstance(name, str) and _is_item_write_tool(name):
             return True
     return False
 
@@ -705,10 +723,11 @@ async def _apply_context_update(
 
     state_fields: dict[str, object] = {}
     env_val: str | None = None
+    rel_val: str | None = None
     # physical_state/mental_state → persona state（恒久メモリを汚さず
     # state フィールドとして永続化する）。値は SSE に流さない（従来契約）
     if skip_state_text:
-        for key in ("physical_state", "mental_state", "environment"):
+        for key in ("physical_state", "mental_state", "environment", "relationship_status"):
             ctx_update.pop(key, None)
     else:
         for key in ("physical_state", "mental_state"):
@@ -719,6 +738,11 @@ async def _apply_context_update(
         env_raw = ctx_update.pop("environment", None)  # 非 str は適用されない → SSE にも流さない
         if isinstance(env_raw, str) and env_raw.strip():
             env_val = env_raw
+        # relationship_status は空文字で Failure になるので strip 後の空は呼ばない
+        rel_raw = ctx_update.get("relationship_status")
+        if isinstance(rel_raw, str) and rel_raw.strip():
+            rel_val = rel_raw
+        ctx_update.pop("relationship_status", None)
     body_applied = _body_delta_state(ctx, persona, ctx_update, skip_body=skip_body)
     state_fields.update(body_applied)
     # 適用値（delta 変換後）で生の絶対値を置換 — post.py の ContextUpdateSSE が
@@ -731,6 +755,8 @@ async def _apply_context_update(
                 ctx_update.pop(key, None)
     if state_fields:
         ctx.persona_service.update_physical_state(persona, **state_fields)
+    if rel_val is not None:
+        ctx.persona_service.update_relationship(persona, rel_val.strip())
     if env_val is not None:
         # 場所は移動と同じ経路（生理コスト + ``place.moved``）。ここで直接 state に
         # 書くと滞在時間の起点が残らず、ダッシュボードが「新しい場所 + 古い到着時刻」を出す。

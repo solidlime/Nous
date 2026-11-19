@@ -127,3 +127,101 @@ class TestIngestConversationTime:
         assert status == 200, j
         assert j.get("count") == 3
         env.ctx.persona_service.record_conversation_time.assert_called_once_with("herta-test")
+
+
+class TestIngestDecayPass:
+    """turn.completed ingest は Web チャットと対称に減衰 3 種を回す。"""
+
+    @staticmethod
+    def _decay_state():
+        from nous.domain.persona.entities import PersonaState
+        from nous.domain.shared.result import Success
+
+        state = PersonaState(persona="herta-test", emotion="joy", emotion_intensity=0.8)
+        return state, Success(state)
+
+    def test_turn_completed_applies_decay(self) -> None:
+        from unittest.mock import AsyncMock, MagicMock
+
+        env = _make_env()
+        state, ok = self._decay_state()
+        env.ctx.persona_service.get_context.return_value = ok
+        with (
+            patch(
+                "nous.api.mcp._tools_helpers._apply_emotion_decay",
+                new=AsyncMock(return_value=(state, "")),
+            ) as emotion_decay,
+            patch(
+                "nous.api.mcp._tools_helpers._apply_body_decay",
+                new=AsyncMock(return_value=state),
+            ) as body_decay,
+            patch("nous.api.mcp._tools_helpers._apply_circadian_drift", new=MagicMock(return_value=state)) as drift,
+            patch("nous.api.mcp._tools_helpers._apply_relationship_decay", new=AsyncMock()) as rel_decay,
+        ):
+            status, j, _ = _post_with_event(env, {"type": "turn.completed", "summary": "turn: smoke"})
+        assert status == 200, j
+        assert emotion_decay.await_count == 1
+        assert emotion_decay.await_args is not None
+        assert emotion_decay.await_args.args[1] == "herta-test"
+        assert body_decay.await_count == 1
+        assert drift.call_count == 1
+        # relationship 減衰はノート生成のみで永続化しない（pi 経路に消費先が無い）ので呼ばない
+        rel_decay.assert_not_called()
+
+    def test_other_events_do_not_apply_decay(self) -> None:
+        from unittest.mock import AsyncMock
+
+        env = _make_env()
+        with patch(
+            "nous.api.mcp._tools_helpers._apply_emotion_decay",
+            new=AsyncMock(return_value=(None, "")),
+        ) as emotion_decay:
+            status, j, _ = _post_with_event(env, {"type": "tool_call", "summary": "x"})
+        assert status == 200, j
+        assert emotion_decay.await_count == 0
+
+    def test_decay_runs_before_insert(self) -> None:
+        """drift は last_activity_at を基準にする。insert 後だと elapsed≈0 で必ず空振りする。"""
+        from unittest.mock import AsyncMock, MagicMock
+
+        import nous.main as main_mod
+
+        env = _make_env()
+        state, ok = self._decay_state()
+        env.ctx.persona_service.get_context.return_value = ok
+        order: list[str] = []
+
+        def _drift(*_a: object, **_k: object) -> object:
+            order.append("drift")
+            return state
+
+        def _insert(_ev: object) -> None:
+            order.append("insert")
+
+        original_getter = main_mod.get_settings
+        main_mod.get_settings = lambda: env.settings  # type: ignore[assignment]
+        try:
+            with (
+                patch("nous.api.http.routers.chat.events._safe_get_context", return_value=env.ctx),
+                patch("nous.api.http.routers.chat.events.SessionEventRepository") as repo_cls,
+                patch(
+                    "nous.api.mcp._tools_helpers._apply_emotion_decay",
+                    new=AsyncMock(return_value=(state, "")),
+                ),
+                patch("nous.api.mcp._tools_helpers._apply_body_decay", new=AsyncMock(return_value=state)),
+                patch("nous.api.mcp._tools_helpers._apply_circadian_drift", new=MagicMock(side_effect=_drift)),
+            ):
+                repo_cls.return_value.insert.side_effect = _insert
+                resp = env.client.post(
+                    "/api/events/ingest",
+                    json={
+                        "session_id": "sess_order",
+                        "persona": "herta-test",
+                        "events": [{"type": "turn.completed", "summary": "turn: smoke"}],
+                    },
+                    headers={"Authorization": "Bearer k"},
+                )
+        finally:
+            main_mod.get_settings = original_getter
+        assert resp.status_code == 200
+        assert order == ["drift", "insert"], order

@@ -161,7 +161,7 @@ def service(repo):
 class TestGetContext:
     def test_default_state(self, service: PersonaService):
         result = service.get_context(PERSONA)
-        assert result.is_ok
+        assert isinstance(result, Success)  # is_ok は narrow 不能
         state = result.value
         assert state.persona == PERSONA
         assert state.emotion == "neutral"
@@ -170,7 +170,7 @@ class TestGetContext:
     def test_reflects_updates(self, service: PersonaService):
         service.update_emotion(PERSONA, "joy", 0.8)
         result = service.get_context(PERSONA)
-        assert result.is_ok
+        assert isinstance(result, Success)  # is_ok は narrow 不能
         state = result.value
         assert state.emotion == "joy"
 
@@ -305,14 +305,14 @@ class TestUpdatePersonaInfo:
         desc = "短い黒髪、青い眼"
         service.update_persona_info(PERSONA, {"appearance": desc})
         result = service.get_context(PERSONA)
-        assert result.is_ok
+        assert isinstance(result, Success)  # is_ok は narrow 不能
         state = result.value
         assert state.appearance == desc
 
     def test_appearance_defaults_to_none(self, service: PersonaService):
         """Fresh persona should have appearance=None."""
         result = service.get_context(PERSONA)
-        assert result.is_ok
+        assert isinstance(result, Success)  # is_ok は narrow 不能
         state = result.value
         assert state.appearance is None
 
@@ -322,3 +322,40 @@ class TestRecordConversationTime:
         result = service.record_conversation_time(PERSONA)
         assert result.is_ok
         assert "last_conversation_time" in repo._state.get(PERSONA, {})
+
+
+class TestLastStateUpdateTouch:
+    """全更新系が last_state_update を進めること（メモリ自動スナップショットの基準）。"""
+
+    def test_update_relationship_touches_last_state_update(
+        self, service: PersonaService, repo: InMemoryPersonaRepository
+    ):
+        from datetime import datetime
+
+        from nous.domain.shared.time_utils import get_now
+
+        before = get_now()
+        assert service.update_relationship(PERSONA, "信頼している友人").is_ok
+        stamp = datetime.fromisoformat(repo._state[PERSONA]["last_state_update"])
+        assert stamp >= before
+
+    def test_update_user_info_touches_last_state_update(self, service: PersonaService, repo: InMemoryPersonaRepository):
+        assert service.update_user_info(PERSONA, {"name": "マダム"}).is_ok
+        assert "last_state_update" in repo._state[PERSONA]
+
+    def test_update_persona_info_touches_last_state_update(
+        self, service: PersonaService, repo: InMemoryPersonaRepository
+    ):
+        assert service.update_persona_info(PERSONA, {"appearance": "黒髪"}).is_ok
+        assert "last_state_update" in repo._state[PERSONA]
+
+    def test_update_state_touches_last_state_update(self, service: PersonaService, repo: InMemoryPersonaRepository):
+        assert service.update_state(PERSONA, "mental_state", "落ち着いている").is_ok
+        assert repo._state[PERSONA]["last_state_update"]
+
+    def test_update_state_of_last_state_update_itself_does_not_touch(
+        self, service: PersonaService, repo: InMemoryPersonaRepository
+    ):
+        """last_state_update 自身の書き込みで上書きし直さない。"""
+        assert service.update_state(PERSONA, "last_state_update", "2020-01-01T00:00:00+09:00").is_ok
+        assert repo._state[PERSONA]["last_state_update"] == "2020-01-01T00:00:00+09:00"

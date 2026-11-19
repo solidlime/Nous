@@ -158,7 +158,10 @@ class PersonaService:
         """Update relationship status."""
         if not status or not status.strip():
             return Failure(PersonaValidationError("Relationship status must not be empty"))
-        return self._repo.update_state(persona, "relationship_status", status.strip())
+        result = self._repo.update_state(persona, "relationship_status", status.strip())
+        if result.is_ok:
+            self._touch_last_state_update(persona)
+        return result
 
     def update_user_info(self, persona: str, user_info: dict) -> Result[None, DomainError]:
         """Merge updates into user info."""
@@ -168,6 +171,7 @@ class PersonaService:
             result = self._repo.set_user_info(persona, str(key), str(value))
             if not result.is_ok:
                 return Failure(result.error)
+        self._touch_last_state_update(persona)
         return Success(None)
 
     def update_persona_info(self, persona: str, persona_info: dict) -> Result[None, DomainError]:
@@ -196,6 +200,7 @@ class PersonaService:
             # appearance は PersonaState の専用フィールドにも反映
             if key == "appearance" and value is not None:
                 self._repo.update_state(persona, "appearance", str(value))
+        self._touch_last_state_update(persona)
         return Success(None)
 
     def _extract_goals(self, goals_raw: object) -> None:
@@ -276,10 +281,21 @@ class PersonaService:
         """Update an arbitrary persona state key-value pair.
 
         Low-level access for fields not covered by dedicated methods.
+        副作用: 成功時は ``last_state_update`` を前進させる（``key`` が ``last_state_update`` 自身のときを除く）。
         ``environment`` はここではなく :func:`nous.application.persona.movement.apply_move` を通すこと
         （通さないと ``place.moved`` が残らず、滞在時間が嘘になる）。
         """
-        return self._repo.update_state(persona, key, value)
+        result = self._repo.update_state(persona, key, value)
+        if result.is_ok and key != "last_state_update":
+            self._touch_last_state_update(persona)
+        return result
+
+    def _touch_last_state_update(self, persona: str) -> None:
+        """best-effort: 失敗（例外と Result の Failure 両方）は無視する。戻り値なし。"""
+        try:
+            self._repo.update_state(persona, "last_state_update", get_now().isoformat())
+        except Exception:  # noqa: BLE001 - best-effort（Result の Failure も同様に捨てる）
+            _logger.debug("last_state_update touch failed", exc_info=True)
 
     def record_conversation_time(self, persona: str) -> Result[None, DomainError]:
         """Record current time as last conversation time."""

@@ -266,3 +266,49 @@ def test_drift_is_wired_into_both_entry_points():
 
     assert "_apply_circadian_drift" in inspect.getsource(_tools_persona._tool_get_context)
     assert "_apply_circadian_drift" in inspect.getsource(prepare.PrepareStep.run)
+
+
+# ----------------------------------------------------------------------
+# last_conversation_time も基準に混ぜる（ツールだけ叩いて喋らないセッション）
+# ----------------------------------------------------------------------
+
+
+def test_recent_conversation_time_blocks_drift_despite_empty_session_events(tmp_path):
+    """get_context / session_begin は last_conversation_time を進めるが session_events は空のまま。"""
+    moment = datetime(2026, 11, 15, 3, 30, tzinfo=JST)
+    ctx, _ = _ctx(
+        tmp_path,
+        state=PersonaState(
+            persona=PERSONA,
+            environment="ラウンジ",
+            fatigue=0.3,
+            last_conversation_time=moment - timedelta(minutes=10),
+        ),
+    )
+
+    assert maybe_drift(ctx, PERSONA, now=moment) is None
+
+
+def test_old_conversation_time_alone_triggers_drift(tmp_path):
+    """session_events が空でも、古い last_conversation_time だけを基準に動ける。"""
+    moment = datetime(2026, 11, 15, 3, 30, tzinfo=JST)
+    ctx, _ = _ctx(
+        tmp_path,
+        state=PersonaState(
+            persona=PERSONA,
+            environment="ラウンジ",
+            fatigue=0.3,
+            last_conversation_time=moment - timedelta(hours=9),
+        ),
+    )
+
+    moved = maybe_drift(ctx, PERSONA, now=moment)
+    assert moved is not None
+    assert moved.place == "自室"
+
+
+def test_no_conversation_time_and_no_events_stays_none(tmp_path):
+    """どちらも無ければ従来通り None（判定できないので動かない）。"""
+    ctx, _ = _ctx(tmp_path)
+    assert ctx.persona_service.get_context.return_value.value.last_conversation_time is None
+    assert maybe_drift(ctx, PERSONA, now=datetime(2026, 11, 15, 3, 30, tzinfo=JST)) is None

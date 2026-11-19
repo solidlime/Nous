@@ -21,6 +21,7 @@ from nous.application.event_bus import (
     SESSION_ROLLBACK,
 )
 from nous.domain.memory.session_event import SessionEvent
+from nous.domain.shared.result import Success
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
 
@@ -232,6 +233,28 @@ def register_events_routes(mcp) -> None:
         db.execute("CREATE INDEX IF NOT EXISTS idx_session_events_type ON session_events(event_type, timestamp)")
         db.commit()
 
+        # 5.9 turn.completed の ingest は Web チャットのターン開始と対称に減衰を回す。
+        #     insert より前に行う: circadian drift は session_events の last_activity_at を
+        #     基準にするため、insert 後だと elapsed が 0 になり必ず発火しない。
+        #     relationship 減衰はノート生成のみで永続化しないため呼ばない（pi 側に消費先が無い）。
+        has_turn_completed = any(isinstance(ev, dict) and ev.get("type") == "turn.completed" for ev in raw_events)
+        if has_turn_completed:
+            try:
+                state_result = ctx.persona_service.get_context(persona)
+                if isinstance(state_result, Success):
+                    # 循環 import 回避のため関数内 import（8.5 の memory_extraction と同じ規約）
+                    from nous.api.mcp._tools_helpers import (
+                        _apply_body_decay,
+                        _apply_circadian_drift,
+                        _apply_emotion_decay,
+                    )
+
+                    state, _ = await _apply_emotion_decay(ctx, persona, state_result.value)
+                    state = await _apply_body_decay(ctx, persona, state)
+                    _apply_circadian_drift(ctx, persona, state)
+            except Exception as e:
+                logger.warning("events_ingest: decay pass failed: %s", e)
+
         # 6. Process events
         repo = SessionEventRepository(ctx.connection)
         inserted = 0
@@ -302,7 +325,7 @@ def register_events_routes(mcp) -> None:
 
         # 7.5 turn.completed は「対話」なので最終会話時刻を更新する（pi 経由の対話が
         #     proactive の idle 判定に「放置」と誤認されないように）。
-        if any(isinstance(ev, dict) and ev.get("type") == "turn.completed" for ev in raw_events):
+        if has_turn_completed:
             try:
                 ctx.persona_service.record_conversation_time(persona)
             except Exception as e:

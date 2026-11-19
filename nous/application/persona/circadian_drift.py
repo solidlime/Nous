@@ -64,10 +64,18 @@ def maybe_drift(
 
     moment = now or get_now()
     last = _last_activity(ctx, persona)
+    if last is not None and last.tzinfo is None:  # sqlite に naive で入った古い行を JST とみなす
+        last = last.replace(tzinfo=moment.tzinfo)
+    # get_context / session_begin ツールは last_conversation_time を進めるが
+    # session_events は触らない。ツールだけ叩いて喋らないセッションを
+    # 「無会話」と誤判定しないよう、こちらも基準に混ぜる。
+    conv = getattr(state, "last_conversation_time", None)
+    if conv is not None:
+        if conv.tzinfo is None:  # naive は JST とみなす（上の last と同じ規約）
+            conv = conv.replace(tzinfo=moment.tzinfo)
+        last = conv if last is None else max(last, conv)
     if last is None:
         return None
-    if last.tzinfo is None:  # sqlite に naive で入った古い行を JST とみなす
-        last = last.replace(tzinfo=moment.tzinfo)
     elapsed_hours = (moment - last).total_seconds() / 3600.0
 
     decision: DriftDecision | None = decide_drift(
