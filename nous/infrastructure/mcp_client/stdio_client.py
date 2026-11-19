@@ -51,6 +51,7 @@ async def list_tools(config: MCPServerConfig) -> list[MCPTool]:
 async def call_tool(config: MCPServerConfig, tool_name: str, args: dict) -> dict:
     from mcp import ClientSession
     from mcp.client.stdio import StdioServerParameters, stdio_client
+    from mcp.types import TextContent
 
     async def _inner() -> dict:
         params = StdioServerParameters(command=_resolve_command(config), args=config.args)
@@ -59,7 +60,7 @@ async def call_tool(config: MCPServerConfig, tool_name: str, args: dict) -> dict
             result = await session.call_tool(tool_name, args)
             content_parts = []
             for item in result.content:
-                if hasattr(item, "text"):
+                if isinstance(item, TextContent):
                     content_parts.append(item.text)
                 else:
                     content_parts.append(str(item))

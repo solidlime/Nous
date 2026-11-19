@@ -16,6 +16,7 @@ from unittest.mock import AsyncMock, MagicMock
 import numpy as np
 import pytest
 
+from nous.application.chat.pipeline.context import ChatTurnContext
 from nous.domain.config.chat_config import ChatConfig
 from nous.domain.memory.entities import Memory
 from nous.domain.search.engine import SearchResult
@@ -143,7 +144,7 @@ class TestReflectionInjectionSimilarity:
             "unrelated": np.array([0.0, 1.0]),
         }
         ctx = _ctx_with_reflections(refs, vecs, ChatConfig())
-        turn_ctx = SimpleNamespace(user_message="ユーザーの発言")
+        turn_ctx = ChatTurnContext(session_id="t", user_message="ユーザーの発言")
         section = await _build_context_section(ctx, _state(), turn_ctx)
         assert "related" in section
         assert "unrelated" not in section
@@ -156,7 +157,7 @@ class TestReflectionInjectionSimilarity:
         refs = [_mem("r1", "related"), _mem("r2", "unrelated")]
         vecs: dict = {}
         ctx = _ctx_with_reflections(refs, vecs, ChatConfig(reflection_injection_min_similarity=0.0))
-        turn_ctx = SimpleNamespace(user_message="ユーザーの発言")
+        turn_ctx = ChatTurnContext(session_id="t", user_message="ユーザーの発言")
         section = await _build_context_section(ctx, _state(), turn_ctx)
         assert "related" in section
         assert "unrelated" in section
@@ -170,7 +171,7 @@ class TestReflectionInjectionSimilarity:
         refs = [_mem("r1", "related"), _mem("r2", "unrelated")]
         ctx = _ctx_with_reflections(refs, {}, ChatConfig())
         ctx._embedding = None
-        turn_ctx = SimpleNamespace(user_message="ユーザーの発言")
+        turn_ctx = ChatTurnContext(session_id="t", user_message="ユーザーの発言")
         section = await _build_context_section(ctx, _state(), turn_ctx)
         assert "related" in section
         assert "unrelated" in section
@@ -198,7 +199,7 @@ class TestReflectionInjectionMargin:
 
         refs = [_mem("r1", "best"), _mem("r2", "middle"), _mem("r3", "weak")]
         ctx = _ctx_with_reflections(refs, self._vecs(), ChatConfig(reflection_injection_margin=0.08))
-        turn_ctx = SimpleNamespace(user_message="ユーザーの発言")
+        turn_ctx = ChatTurnContext(session_id="t", user_message="ユーザーの発言")
         section = await _build_context_section(ctx, _state(), turn_ctx)
         assert "best" in section
         # middle (0.8) は floor 0.45 以上だが max-0.08=0.82 未満 → 落ちる
@@ -212,7 +213,7 @@ class TestReflectionInjectionMargin:
 
         refs = [_mem("r1", "best"), _mem("r2", "middle"), _mem("r3", "weak")]
         ctx = _ctx_with_reflections(refs, self._vecs(), ChatConfig(reflection_injection_margin=1.0))
-        turn_ctx = SimpleNamespace(user_message="ユーザーの発言")
+        turn_ctx = ChatTurnContext(session_id="t", user_message="ユーザーの発言")
         section = await _build_context_section(ctx, _state(), turn_ctx)
         assert "best" in section
         assert "middle" in section
@@ -225,7 +226,7 @@ class TestReflectionInjectionMargin:
 
         refs = [_mem("r1", "middle")]
         ctx = _ctx_with_reflections(refs, self._vecs(), ChatConfig(reflection_injection_margin=0.08))
-        turn_ctx = SimpleNamespace(user_message="ユーザーの発言")
+        turn_ctx = ChatTurnContext(session_id="t", user_message="ユーザーの発言")
         section = await _build_context_section(ctx, _state(), turn_ctx)
         assert "middle" in section  # 0.8 >= floor 0.45 かつ max=自分 → 残る
 
@@ -292,7 +293,7 @@ class TestPerRequestConfigWins:
         }
         # ctx 側は 0.9（無関係側は落ちる設定）、引数側は 0.0（フィルタ無効 = embed せず先頭3件）
         ctx = _ctx_with_reflections(refs, vecs, ChatConfig(reflection_injection_min_similarity=0.9))
-        turn_ctx = SimpleNamespace(user_message="ユーザーの発言")
+        turn_ctx = ChatTurnContext(session_id="t", user_message="ユーザーの発言")
         section = await _build_context_section(
             ctx, _state(), turn_ctx, config=ChatConfig(reflection_injection_min_similarity=0.0)
         )

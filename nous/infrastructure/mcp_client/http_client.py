@@ -51,6 +51,7 @@ async def call_tool(config: MCPServerConfig, tool_name: str, args: dict) -> dict
     import httpx2
     from mcp import ClientSession
     from mcp.client.streamable_http import streamable_http_client
+    from mcp.types import TextContent
 
     async def _inner() -> dict:
         _http = httpx2.AsyncClient(headers=dict(config.headers))
@@ -63,7 +64,7 @@ async def call_tool(config: MCPServerConfig, tool_name: str, args: dict) -> dict
                 result = await session.call_tool(tool_name, args)
                 content_parts = []
                 for item in result.content:
-                    if hasattr(item, "text"):
+                    if isinstance(item, TextContent):
                         content_parts.append(item.text)
                     else:
                         content_parts.append(str(item))
