@@ -1,3 +1,4 @@
 {
-  "reportPropertyDecorator": "none"
+  "venvPath": ".",
+  "venv": ".venv"
 }
