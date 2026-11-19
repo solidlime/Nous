@@ -4,11 +4,12 @@ var N = window.Nous;
 /* =================================================================
    STATE
    ================================================================= */
+const PER_PAGE = 20;
 const S = {
   persona: null,
   tab: localStorage.getItem("mmcp-tab") || "overview",
   charts: {},
-  mem: { page: 1, tag: "", q: "", perPage: 20 },
+  mem: { page: 1, tag: "", q: "", perPage: PER_PAGE },
   statusPoll: null,
   dashCache: null,
   initTime: Date.now(),
@@ -20,6 +21,21 @@ window.S = S;
    ================================================================= */
 var C = window.Nous.Core;
 var safeSetHTML = C.safeSetHTML;
+
+/* 複数モジュールで共有する UI の閾値・上限（core/ は別レーンなのでここに置く） */
+const UI = {
+  SCROLL_BOTTOM_PX: 100,     // これを超えたら「最下部付近」とみなして追従する
+  PROMPT_PREVIEW_CHARS: 80,  // 画像プロンプトのプレビュー切り詰め
+  SEARCH_LIMIT: 20,          // /api/search の取得件数
+};
+C.UI = UI;
+
+function truncatePrompt(text) {
+  return text.length > UI.PROMPT_PREVIEW_CHARS
+    ? text.substring(0, UI.PROMPT_PREVIEW_CHARS) + "..."
+    : text;
+}
+C.truncatePrompt = truncatePrompt;
 
 /* #93: shared guidance for the no-persona path (init + loadTab) */
 const NO_PERSONA_MSG = "ペルソナがありません。右上の ＋ から作成してください。";
@@ -167,7 +183,7 @@ async function init() {
       persona: null,
       tab: localStorage.getItem("mmcp-tab") || "overview",
       charts: {},
-      mem: { page: 1, tag: "", q: "", perPage: 20 },
+      mem: { page: 1, tag: "", q: "", perPage: PER_PAGE },
       statusPoll: null,
       dashCache: null,
       initTime: Date.now(),
@@ -230,7 +246,7 @@ async function init() {
       page: 1,
       tag: "",
       q: "",
-      perPage: 20,
+      perPage: PER_PAGE,
       selectMode: false,
       advOpen: false,
       dateFrom: "",

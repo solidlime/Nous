@@ -192,7 +192,8 @@ async function execCodeBlock(code, language, resultEl, runBtn) {
 let _imageGenSpinnerId = null;
 
 function _isNearBottom(c) {
-  return (c.scrollHeight - c.scrollTop - c.clientHeight) < 100;
+  var limit = (C.UI && C.UI.SCROLL_BOTTOM_PX) || 100;
+  return c.scrollHeight - c.scrollTop - c.clientHeight < limit;
 }
 
 function showImageGenSpinner(evt) {
@@ -359,7 +360,7 @@ function showImageGenResult(evt) {
     if (rp) {
       var promptSpan = document.createElement("span");
       promptSpan.textContent =
-        "生成イメージ: " + (rp.length > 80 ? rp.substring(0, 80) + "..." : rp);
+        "生成イメージ: " + (C.truncatePrompt ? C.truncatePrompt(rp) : rp);
       promptSpan.style.fontStyle = "italic";
       meta.appendChild(promptSpan);
     }

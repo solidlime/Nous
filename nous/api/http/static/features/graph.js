@@ -641,7 +641,9 @@ var G = N.Features.Graph;
 var api = N.Core.api;
 var truncate = N.Core.truncate;
 var FIRE_CHANNEL = 'graph-fire'; /* 一意チャンネル名（graph-flash と分離） */
-var SEARCH_LIMIT = 20;
+/* 検索件数の単一の正は base.js の N.Core.UI.SEARCH_LIMIT。
+   base.js を読まないハーネス（vitest は core/ のみ）向けの保険として 20。 */
+var SEARCH_LIMIT = (N.Core.UI && N.Core.UI.SEARCH_LIMIT) || 20;
 var FIRE_DEFAULT_HOPS = 2; /* 既定ホップ数（送信時 1..5 に clamp） */
 
 /* ---- 状態 ---- */
@@ -1074,7 +1076,7 @@ function openTurnSession(turnId) {
     };
 }
 
-function onHopStart(ev, meta) {
+function onHopStart(_ev, meta) {
     var s = fireState.session;
     var hop = parseInt(meta.hop, 10);
     s.done = false; /* turn モードの同ターン次 request の連鎖を再始動 */
@@ -1087,7 +1089,7 @@ function onHopStart(ev, meta) {
     return true;
 }
 
-function onPprHit(ev, meta) {
+function onPprHit(ev, _meta) {
     var key = ev.source || ev.target;
     if (!key) return false;
     ensureFireNode(key, null, true);
@@ -1096,7 +1098,7 @@ function onPprHit(ev, meta) {
     return queueLight(key, 'ppr_hit', { scale: 1.5, duration: 640 });
 }
 
-function onPropagate(ev, meta) {
+function onPropagate(ev, _meta) {
     var a = ev.source, b = ev.target;
     if (!a || !b || a === b) return false;
     ensureFireNode(a);
@@ -1111,7 +1113,7 @@ function onPropagate(ev, meta) {
     return true;
 }
 
-function onConverge(ev, meta) {
+function onConverge(ev, _meta) {
     var hub = ev.target || ev.source;
     if (!hub) return false;
     ensureFireNode(hub);
@@ -1157,7 +1159,7 @@ function _bypassText(reason) {
 /* decision_bypass = fail-open で「判定を適用しなかった」事実（却下ではない）。
    ノード演出はしない — 却下と同じ見え方にすると嘘を描くことになる。沈黙も避けるため
    reason をステータスへ注記し、同じ hop の hop_stop が終端表示に併記する。 */
-function onDecisionBypass(ev, meta) {
+function onDecisionBypass(_ev, meta) {
     var s = fireState.session;
     if (!s) return false;
     s.bypassReason = String(meta.reason || '');
@@ -1168,7 +1170,7 @@ function onDecisionBypass(ev, meta) {
 /* prompt_inject: そのターンで system プロンプトへ挿入された記憶（挿入の確定）。
    LLM が実際にその記憶を使った証明ではないため「使用」ではなく「話に使った」
    バッジ相当の pink 枠 + _used フラグで示す（wiring_events.py 契約）。 */
-function onPromptInject(ev, meta) {
+function onPromptInject(ev, _meta) {
     var key = ev.source || ev.target;
     if (!key) return false;
     ensureFireNode(key, null, true);
@@ -1249,7 +1251,7 @@ function pruneBranches(key) {
     })();
 }
 
-function onHopStop(ev, meta) {
+function onHopStop(_ev, meta) {
     var s = fireState.session;
     var reason = String(meta.reason || '');
     s.done = true;

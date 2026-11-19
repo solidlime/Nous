@@ -162,7 +162,9 @@ function _appendSegmentsToBubble(msg, msgDiv) {
               var rp = img.revised_prompt || "";
               if (rp) {
                 var promptSpan = document.createElement("span");
-                promptSpan.textContent = rp.length > 80 ? rp.substring(0, 80) + "..." : rp;
+                promptSpan.textContent = C.truncatePrompt
+                  ? C.truncatePrompt(rp)
+                  : rp;
                 promptSpan.style.fontStyle = "italic";
                 meta.appendChild(promptSpan);
               }

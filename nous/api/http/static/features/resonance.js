@@ -9,7 +9,10 @@
 
 /* ---- Config ---- */
 var IDLE_NODE_CAP  = 120;   // idling background drift nodes
-var SEARCH_LIMIT   = 20;    // /api/search limit
+// /api/search limit — 単一の正は base.js の N.Core.UI.SEARCH_LIMIT。
+// このページは base.js を読まない（features/resonance.html）ため保険の 20。
+var SEARCH_LIMIT   = (window.Nous && window.Nous.Core && window.Nous.Core.UI &&
+                      window.Nous.Core.UI.SEARCH_LIMIT) || 20;
 var NEIGHBOR_CAP   = 140;   // propagated (tag-adjacent) nodes max
 var EDGE_CAP       = 320;   // drawn tag edges max
 var RECALL_STEP_MS = 110;   // per-seed lighting interval

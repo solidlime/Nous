@@ -81,7 +81,9 @@ function _beginTurnSession(localMessage) {
   if (_turn.chatMessages) {
     _turn.scrollListener = function _onChatScroll() {
       if (!_turn) return;
-      var threshold = 80;
+      /* 最下部付近とみなす距離 — 単一の正は base.js の N.Core.UI。
+         base.js を読まないハーネス向けの保険として 100。 */
+      var threshold = (C.UI && C.UI.SCROLL_BOTTOM_PX) || 100;
       CHAT._userScrolledUp = _turn.chatMessages.scrollHeight - _turn.chatMessages.scrollTop - _turn.chatMessages.clientHeight > threshold;
     };
     _turn.chatMessages.addEventListener("scroll", _turn.scrollListener, { passive: true });
