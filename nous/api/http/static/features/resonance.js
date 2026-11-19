@@ -142,15 +142,19 @@ function setPhase(label) {
 function connectSSE() {
   disconnectSSE();
   try {
-    es = new EventSource("/api/memory/wiring/stream?persona=" + encodeURIComponent(persona));
-  } catch (e) {
+    /* #103: EventSource はヘッダを送れないので auth.sign で ?token= を足す。
+       auth.js 未ロード（鍵なし運用）でも壊れないようガードする。 */
+    var sseUrl = "/api/memory/wiring/stream?persona=" + encodeURIComponent(persona);
+    if (window.Nous && window.Nous.Core.auth) sseUrl = window.Nous.Core.auth.sign(sseUrl);
+    es = new EventSource(sseUrl);
+  } catch {
     setStatus("standby", "STANDBY");
     return;
   }
   es.addEventListener("connected", function() { setStatus("live", "SIGNAL LIVE"); });
   es.addEventListener("wiring", function(ev) {
     var msg;
-    try { msg = JSON.parse(ev.data); } catch (e) { return; }
+    try { msg = JSON.parse(ev.data); } catch { return; }
     onWiring(msg);
   });
   es.onerror = function() { setStatus("standby", "STANDBY"); }; // EventSource auto-reconnects
