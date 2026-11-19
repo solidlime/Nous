@@ -226,7 +226,7 @@ function buildAttachChips(list) {
   list.forEach(function (att) {
     var chip = document.createElement("a");
     chip.className = "chat-file-chip";
-    chip.href = att.url || "#";
+    chip.href = att.url ? N.Core.auth.sign(att.url) : "#";  // #102: <a> の GET も鍵必須
     chip.target = "_blank";
     chip.rel = "noopener";
     chip.title = att.filename || "";
@@ -279,7 +279,7 @@ function showImageGenResult(evt) {
   if ((evt.self_portrait || evt.is_self_portrait) && evt.images[0]) {
     var portraitEl = document.getElementById('overview-portrait');
     if (portraitEl) {
-      var imgUrl = evt.images[0].url || ("data:image/png;base64," + (evt.images[0].base64 || ""));
+      var imgUrl = (evt.images[0].url) ? N.Core.auth.sign(evt.images[0].url) : ("data:image/png;base64," + (evt.images[0].base64 || ""));  // #102
       portraitEl.style.display = 'block';
       safeSetHTML(portraitEl, '<div class="glass p-4">'
           + '<img src="' + esc(imgUrl) + '" alt="自画像" data-tool-viewer="1" data-url="' + esc(imgUrl) + '">'

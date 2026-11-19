@@ -26,7 +26,7 @@ async function loadOverview() {
             return;
         }
         // ── Self-portrait in hero section ──
-        const portraitUrl = data.latest_self_portrait;
+        const portraitUrl = N.Core.auth.sign(data.latest_self_portrait);  // #102: <img src> はヘッダ不可
         const portraitEl = document.getElementById('overview-portrait');
         if (portraitUrl && portraitEl) {
             portraitEl.style.display = 'block';
@@ -49,7 +49,7 @@ async function loadOverview() {
                 const tooltipAttr = prompt ? ' title="' + esc(prompt) + '"' : '';
                 const badgeHtml = (img.self_portrait || img.is_self_portrait) ? '<span class="image-history-badge">🖼️ SP</span>' : '';
                 genImagesHtml += '<div class="image-history-thumb" data-ov-action="viewer" data-url="' + esc(img.url) + '" data-kind="image" data-revised="' + esc(prompt) + '" data-negative="' + esc(img.negative_prompt || '') + '"' + tooltipAttr + '>';
-                genImagesHtml += '<img src="' + esc(img.url) + '" alt="' + esc(img.filename) + '" loading="lazy">';
+                genImagesHtml += '<img src="' + esc(N.Core.auth.sign(img.url)) + '" alt="' + esc(img.filename) + '" loading="lazy">';  // #102
                 genImagesHtml += badgeHtml;
                 genImagesHtml += '</div>';
             });

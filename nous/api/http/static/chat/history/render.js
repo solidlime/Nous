@@ -124,7 +124,7 @@ function _appendSegmentsToBubble(msg, msgDiv) {
               card.className = "chat-image-gen-card";
               var imgEl = document.createElement("img");
               if (img.url) {
-                imgEl.src = img.url;
+                imgEl.src = N.Core.auth.sign(img.url);  // #102: img の src はヘッダ不可
               } else if (img.base64) {
                 try {
                   var binary = atob(img.base64);

@@ -55,14 +55,14 @@ function renderAttachmentBadge(att) {
   if (isImage) {
     const img = document.createElement("img");
     img.className = "thumb";
-    img.src = att.url;
+    img.src = N.Core.auth.sign(att.url);  // #102: img の src はヘッダを送れない
     img.alt = att.filename;
     img.onclick = () => openMediaViewer(att.url, "image");
     badge.appendChild(img);
   } else if (isVideo) {
     const vid = document.createElement("video");
     vid.className = "thumb";
-    vid.src = att.url;
+    vid.src = N.Core.auth.sign(att.url);  // #102
     vid.muted = true;
     vid.onclick = () => openMediaViewer(att.url, "video");
     badge.appendChild(vid);
@@ -108,6 +108,7 @@ function renderAttachmentBadge(att) {
 }
 
 function openMediaViewer(url, type, mimeType, data) {
+  url = N.Core.auth.sign(url);  // #102: img/audio/iframe は鍵を URL で受け取る
   const overlay = document.getElementById("media-viewer-overlay");
   const inner = document.getElementById("media-viewer-inner");
   if (!overlay || !inner) return;
@@ -151,17 +152,25 @@ function openMediaViewer(url, type, mimeType, data) {
     vid.autoplay = true;
     inner.appendChild(vid);
   } else if (type === "pdf") {
-    safeSetHTML(inner,
-      '<iframe src="' +
-      esc(url) +
-      '" width="100%" height="80vh" style="border:none;border-radius:8px;"></iframe>');
+    /* #102: createElement で組み立てる — safeSetHTML の DOMPurify は iframe を除去する。 */
+    const frame = document.createElement("iframe");
+    frame.src = url;
+    frame.width = "100%";
+    frame.height = "80vh";
+    frame.style.border = "none";
+    frame.style.borderRadius = "8px";
+    inner.appendChild(frame);
   } else if (type === "audio") {
-    safeSetHTML(inner,
-      '<audio controls autoplay style="max-width:90vw;"><source src="' +
-      esc(url) +
-      '" type="' +
-      esc(mimeType || "audio/mpeg") +
-      '"></audio>');
+    /* #102: 同上 — audio/source も DOMPurify ホワイトリスト外。 */
+    const audio = document.createElement("audio");
+    audio.controls = true;
+    audio.autoplay = true;
+    audio.style.maxWidth = "90vw";
+    const source = document.createElement("source");
+    source.src = url;
+    source.type = mimeType || "audio/mpeg";
+    audio.appendChild(source);
+    inner.appendChild(audio);
   } else {
     const vid = document.createElement("video");
     vid.src = url;

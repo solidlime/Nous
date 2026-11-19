@@ -213,6 +213,11 @@
     var avatar = document.getElementById("chat-persona-avatar");
     if (!avatar || avatar._avatarBound) return;
     avatar._avatarBound = true;
+    /* #102: サーバ埋め込みの src=/api/... は img なので鍵を URL で受け取る。 */
+    var rawSrc = avatar.getAttribute("src");
+    if (rawSrc && avatar.src !== N.Core.auth.sign(rawSrc)) {
+      avatar.src = N.Core.auth.sign(rawSrc);
+    }
     avatar.addEventListener("load", function() { avatar.style.display = ""; });
     avatar.addEventListener("error", function() { avatar.style.display = "none"; });
     if (!avatar.getAttribute("src")) {
