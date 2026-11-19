@@ -2586,5 +2586,5 @@ input[type="range"].chat-field-input:focus {
   text-align: center;
 }
 .chat-preset-grid .chat-field-label {
-  color: var(--text-dim);
+  color: var(--text-muted);
 }

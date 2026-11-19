@@ -32,7 +32,7 @@ def _render_image_section() -> str:
                                         <textarea id="chat-image-gen-self-portrait-prompt" class="chat-field-input" placeholder="キャラ外見タグ（例: 1girl, solo, purple eyes, short white hair, witch hat, holding ornate key-shaped staff）" rows="3" style="width:100%;resize:vertical;font-size:0.78rem;"></textarea>
                                     </div>
                                     <div>
-                                        <div class="chat-field-label">ネガティブプロンプト <span style="font-weight:300;color:var(--text-dim);">(低画質・崩れ除外タグ)</span></div>
+                                        <div class="chat-field-label">ネガティブプロンプト <span style="font-weight:300;color:var(--text-muted);">(低画質・崩れ除外タグ)</span></div>
                                         <textarea id="chat-image-gen-negative-prompt" class="chat-field-input" style="min-height:48px;width:100%;" placeholder="lowres, bad anatomy, bad hands, text, error"></textarea>
                                     </div>
                                     <div>
@@ -54,21 +54,21 @@ def _render_image_section() -> str:
                                         </div>
                                     </div>
                                     <div>
-                                        <div class="chat-field-label">プリセット解像度 <span style="font-weight:300;color:var(--text-dim);">(LLMが選ぶ解像度プリセット)</span></div>
+                                        <div class="chat-field-label">プリセット解像度 <span style="font-weight:300;color:var(--text-muted);">(LLMが選ぶ解像度プリセット)</span></div>
                                         <div class="chat-preset-grid">
                                             <span></span>
-                                            <span style="text-align:center;color:var(--text-dim);">Large</span>
-                                            <span style="text-align:center;color:var(--text-dim);">Medium</span>
-                                            <span style="text-align:center;color:var(--text-dim);">Small</span>
-                                            <span style="color:var(--text-dim);">縦長</span>
+                                            <span style="text-align:center;color:var(--text-muted);">Large</span>
+                                            <span style="text-align:center;color:var(--text-muted);">Medium</span>
+                                            <span style="text-align:center;color:var(--text-muted);">Small</span>
+                                            <span style="color:var(--text-muted);">縦長</span>
                                             <input type="text" id="chat-image-gen-preset-portrait_large" class="chat-field-input" value="832x1216" style="width:100%;" />
                                             <input type="text" id="chat-image-gen-preset-portrait_medium" class="chat-field-input" value="768x1024" style="width:100%;" />
                                             <input type="text" id="chat-image-gen-preset-portrait_small" class="chat-field-input" value="576x768" style="width:100%;" />
-                                            <span style="color:var(--text-dim);">横長</span>
+                                            <span style="color:var(--text-muted);">横長</span>
                                             <input type="text" id="chat-image-gen-preset-landscape_large" class="chat-field-input" value="1216x832" style="width:100%;" />
                                             <input type="text" id="chat-image-gen-preset-landscape_medium" class="chat-field-input" value="1024x768" style="width:100%;" />
                                             <input type="text" id="chat-image-gen-preset-landscape_small" class="chat-field-input" value="768x576" style="width:100%;" />
-                                            <span style="color:var(--text-dim);">正方形</span>
+                                            <span style="color:var(--text-muted);">正方形</span>
                                             <input type="text" id="chat-image-gen-preset-square_large" class="chat-field-input" value="1024x1024" style="width:100%;" />
                                             <input type="text" id="chat-image-gen-preset-square_medium" class="chat-field-input" value="768x768" style="width:100%;" />
                                             <input type="text" id="chat-image-gen-preset-square_small" class="chat-field-input" value="512x512" style="width:100%;" />
