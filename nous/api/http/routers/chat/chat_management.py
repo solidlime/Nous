@@ -7,6 +7,7 @@ from starlette.responses import JSONResponse, Response
 
 from nous.api.http.deps import _PERSONA_PATTERN
 from nous.api.http.routers.chat.chat_stream import _resolve_request
+from nous.application.chat.tools.attachments import MAX_ATTACHMENT_BYTES
 from nous.config.settings import get_settings
 from nous.domain.config.chat_config import ChatConfig, ChatConfigFileRepository
 from nous.infrastructure.logging.structured import get_logger
@@ -630,8 +631,30 @@ async def attachment_upload(request: Request) -> JSONResponse:
         return JSONResponse({"error": "file field required"}, status_code=400)
 
     filename = upload.filename or "upload"
-    file_bytes = await upload.read()
+    file_bytes = await _read_limited(upload, MAX_ATTACHMENT_BYTES)
+    if file_bytes is None:
+        return JSONResponse(
+            {"error": f"file too large (max {MAX_ATTACHMENT_BYTES // (1024 * 1024)} MB)"}, status_code=413
+        )
     return JSONResponse(await _do_attachment_upload(persona, ctx, filename, file_bytes))
+
+
+async def _read_limited(upload, limit: int) -> bytes | None:
+    """上限を超えたら None を返す。
+
+    ``await upload.read()`` は全量を一度にヒープへ載せるので、数十 GB の
+    1 リクエストでプロセスが落ちる（kanban #76）。インライン上限を先に見て、
+    無い場合は 1MB ずつ読んで超過した時点で捨てる。
+    """
+    size = getattr(upload, "size", None)
+    if size is not None and size > limit:
+        return None
+    buf = bytearray()
+    while chunk := await upload.read(1024 * 1024):
+        buf.extend(chunk)
+        if len(buf) > limit:
+            return None
+    return bytes(buf)
 
 
 async def attachment_serve(request: Request) -> Response:
