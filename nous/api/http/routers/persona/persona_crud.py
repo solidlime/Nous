@@ -10,7 +10,7 @@ from starlette.responses import JSONResponse
 from nous.api.http.deps import _PERSONA_PATTERN, _resolve_persona_from_request, _safe_get_context
 from nous.application.chat.service import get_turn_hub
 from nous.application.use_cases import AppContextRegistry
-from nous.config.settings import Settings
+from nous.config.settings import get_settings
 from nous.domain.shared.errors import PersonaBusyError
 from nous.infrastructure.logging.structured import get_logger
 
@@ -22,7 +22,7 @@ logger = get_logger(__name__)
 
 async def _do_create_persona(persona_name: str) -> dict:
     """Create a new persona. Returns status dict or error dict (with ``status_code``)."""
-    settings = Settings()
+    settings = get_settings()
     persona_dir = Path(settings.persona_dir) / persona_name
     try:
         # 作成区間: 同名の create/delete と相互排他。後始末の rmtree が他人のディレクトリを消さない
@@ -79,7 +79,7 @@ async def create_persona(request: Request) -> JSONResponse:
 
 async def _do_delete_persona(persona: str) -> dict:
     """Delete a persona by name. Returns status dict or error dict."""
-    settings = Settings()
+    settings = get_settings()
     persona_dir = (Path(settings.persona_dir) / persona).resolve()
     root = Path(settings.persona_dir).resolve()
     # ponytail: strict-subdir check; is_relative_to alone would admit persona_dir == root

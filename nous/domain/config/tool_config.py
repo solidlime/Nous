@@ -18,6 +18,8 @@ class ToolConfig(BaseModel):
     enable_parallel_tools: bool = Field(default=True, description="複数のツールを並列実行します。")
     dynamic_tool_selection: bool = Field(default=True, description="ターンごとに必要なツールを動的に選択します。")
     enable_memory_tools: bool = Field(default=True, description="AIが記憶を操作するツールを使えるようにします。")
+    # schedule ツール: 何回失敗したら諦めるか（タグを外し agent.task.failed を残す）。
+    schedule_fail_limit: int = Field(default=3, ge=1, description="スケジュール実行の連続失敗で諦める回数。")
 
     # ワークスペース（シェル・ファイル操作）— workspace_root が空ならツール自体を公開しない
     workspace_root: str = Field(

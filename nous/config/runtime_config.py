@@ -62,6 +62,196 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
             "masked": True,
             "description": "HTTP Bearer credential (empty = dev pass-through, restart not required)",
         },
+        # 旧名 silence_hours（ChatConfig の session_notes 静寂閾値とは別物）。
+        # session_events.py がイベント処理時に動的 getattr で参照する。
+        "session_silence_hours": {
+            "hot_reload": True,
+            "description": "Hours of no interaction before a session is considered ended",
+        },
+        "approval_timeout_seconds": {
+            "hot_reload": True,
+            "description": "Seconds to wait for user approval (sudo / agent confirmation)",
+        },
+    },
+    # LLM provider API keys — Settings 直下フィールドは get_effective_api_key が直接
+    # 読む。ここは RCM (hot-reload overrides) 経由の仮想カテゴリ（Phase 0 ガード対象）。
+    "api_keys": {
+        "anthropic_api_key": {"hot_reload": True, "masked": True, "description": "Anthropic API key"},
+        "openai_api_key": {"hot_reload": True, "masked": True, "description": "OpenAI API key"},
+        "openrouter_api_key": {"hot_reload": True, "masked": True, "description": "OpenRouter API key"},
+        "google_api_key": {"hot_reload": True, "masked": True, "description": "Google API key"},
+        "opencode_go_api_key": {"hot_reload": True, "masked": True, "description": "opencode.go API key"},
+    },
+    # 補助 LLM 接続（表示名 "LLM (補助)"）。AppContext 構築時の _init_brain_llm が
+    # 焼き込むため再起動要。timeout/vision/extraction の4キーは呼び出し時参照。
+    "memory_enrichment": {
+        "enabled": {
+            "hot_reload": False,
+            "description": "Enable auxiliary LLM (memory extraction / brain). Restart to apply.",
+        },
+        "provider": {"hot_reload": False, "description": "LLM provider. Restart to apply."},
+        "model": {"hot_reload": False, "description": "Model name. Restart to apply."},
+        "base_url": {"hot_reload": False, "description": "Provider base URL. Restart to apply."},
+        "api_key": {"hot_reload": False, "masked": True, "description": "Provider API key. Restart to apply."},
+        "timeout_seconds": {"hot_reload": True, "description": "Request timeout for auxiliary LLM calls"},
+        "vision_models": {
+            "hot_reload": True,
+            "description": "Model name prefixes that accept image input (JSON list)",
+        },
+        "non_vision_models": {
+            "hot_reload": True,
+            "description": "Model name prefixes that never accept image input (JSON list)",
+        },
+        "extraction_max_tokens": {
+            "hot_reload": True,
+            "description": "max_tokens for memory extraction LLM (cost driver)",
+        },
+    },
+    "search": {
+        "injection_max_bm25": {
+            "hot_reload": True,
+            "description": 'FTS OR-fallback bar per token kind (JSON, e.g. {"bigram": 2.0, "word": 2.0})',
+        },
+        "rerank_enabled": {
+            "hot_reload": True,
+            "description": "Enable cross-encoder rerank stage (partial rerank can reorder, see notes)",
+        },
+        "recency_lambda": {
+            "hot_reload": True,
+            "description": "Exponential decay lambda for memory recency boost (0.5 = half-life 1 day)",
+        },
+    },
+    "wiki": {
+        "enabled": {"hot_reload": True, "description": "Enable wiki worker", "reload_time": "next cycle"},
+        "interval_seconds": {"hot_reload": True, "description": "Wiki compilation cycle (seconds)"},
+        "run_at_hour": {"hot_reload": True, "description": "Hour of day to run (-1 = interval only)"},
+        "run_at_tz": {"hot_reload": True, "description": "Timezone for run_at_hour"},
+        "topics_per_cycle": {"hot_reload": True, "description": "Topics compiled per cycle"},
+        "journal_enabled": {"hot_reload": True, "description": "Enable journal (diary) generation"},
+        "journal_max_sources": {"hot_reload": True, "description": "Max sources per journal page"},
+        "journal_activity_max_events": {"hot_reload": True, "description": "Max session events per type for activity material"},
+        "journal_activity_chars": {"hot_reload": True, "description": "Max total chars for activity material"},
+        "journal_apply_state": {"hot_reload": True, "description": "Reflect journal events to persona state"},
+        "journal_include_activity": {"hot_reload": True, "description": "Include persona activities in journal"},
+        "journal_tomorrow_tasks": {"hot_reload": True, "description": "Generate tomorrow's task list in journal"},
+        "journal_tomorrow_max": {"hot_reload": True, "description": "Max tomorrow tasks"},
+        "life_enabled": {"hot_reload": True, "description": "Enable persona life simulation (non-chat living)"},
+        "life_events_per_day": {"hot_reload": True, "description": "Life events generated per day"},
+        "conflict_check_enabled": {"hot_reload": True, "description": "Request conflicts/questions in compilation prompt"},
+        "max_open_questions": {"hot_reload": True, "description": "Max unresolved open questions"},
+        "research_enabled": {"hot_reload": True, "description": "Enable research during compilation"},
+        "max_research_per_cycle": {"hot_reload": True, "description": "Questions researched per cycle"},
+        "research_max_tool_calls": {"hot_reload": True, "description": "Max tool calls per research question"},
+        "max_memories_per_topic": {"hot_reload": True, "description": "Max memories pulled per topic"},
+        "max_sources_per_page": {"hot_reload": True, "description": "Max sources per wiki page (split if exceeded)"},
+        "stale_days": {"hot_reload": True, "description": "Days before a page is forced for revision"},
+        "max_page_bytes": {"hot_reload": True, "description": "Max page size in bytes"},
+        "min_topic_memories": {"hot_reload": True, "description": "Min memories for a topic to be compiled"},
+        "worker_retry_seconds": {"hot_reload": True, "description": "Wiki worker idle wait / retry (seconds)"},
+        "worker_error_retry_seconds": {"hot_reload": True, "description": "Wiki worker error retry (seconds)"},
+        "provider": {"hot_reload": True, "description": "Wiki compilation LLM provider"},
+        "api_key": {"hot_reload": True, "masked": True, "description": "Wiki compilation LLM API key"},
+        "model": {"hot_reload": True, "description": "Wiki compilation LLM model"},
+        "base_url": {"hot_reload": True, "description": "Wiki compilation LLM base URL"},
+    },
+    # CORS は起動時ミドルウェア構築で焼き込まれる（restart 要）。
+    # api_key 未設定時は read-only ガード（admin.py）。
+    "cors": {
+        "allowed_origins": {
+            "hot_reload": False,
+            "description": "Allowed CORS origins (comma-separated). Restart to apply.",
+        },
+        "allow_credentials": {
+            "hot_reload": False,
+            "description": "Allow credentials in CORS. Restart to apply.",
+        },
+        "allow_methods": {
+            "hot_reload": False,
+            "description": "Allowed HTTP methods (comma-separated). Restart to apply.",
+        },
+        "allow_headers": {
+            "hot_reload": False,
+            "description": "Allowed headers (comma-separated). Restart to apply.",
+        },
+    },
+    "plugin": {
+        "enabled": {"hot_reload": False, "description": "Enable plugin system. Restart to apply."},
+        "api_key": {
+            "hot_reload": False,
+            "masked": True,
+            "description": "Plugin API key (strong key required when enabled). Restart to apply.",
+        },
+    },
+    # irodori TTS: ルートハンドラがリクエスト毎に IrodoriConfig を再構築する。
+    # advanced は ChatConfig 側の同名設定と二重管理になるため出さない。
+    "irodori": {
+        "url": {"hot_reload": True, "description": "Irodori-TTS-Server base URL"},
+        "voice": {"hot_reload": True, "description": "Default voice name"},
+        "model": {"hot_reload": True, "description": "TTS model name"},
+        "timeout_seconds": {"hot_reload": True, "description": "Speech generation timeout (seconds)"},
+        "retry_count": {"hot_reload": True, "description": "Retries for failed speech generation"},
+        "health_timeout_seconds": {
+            "hot_reload": True,
+            "description": "Health check (GET /v1/models) timeout in seconds",
+        },
+    },
+    # 記憶ドメインのしきい値群。hooks 0.85 / write_service 0.75 を 0.85 に一本化。
+    "memory": {
+        "duplicate_threshold": {
+            "hot_reload": True,
+            "description": "Semantic threshold for write-duplicate detection (unified 0.85)",
+        },
+        "corroboration_min": {
+            "hot_reload": True,
+            "description": "Min similarity for corroboration (evolution service)",
+        },
+        "interference_min": {
+            "hot_reload": True,
+            "description": "Min similarity for interference (evolution service)",
+        },
+        "interference_max": {
+            "hot_reload": True,
+            "description": "Max similarity for interference (evolution service)",
+        },
+        "mot_confidence_threshold": {
+            "hot_reload": True,
+            "description": "Confidence threshold for mot (self-thought) creation",
+        },
+        "mot_top_k": {"hot_reload": True, "description": "Top-k memories for mot generation"},
+        "mot_corrosion_per_hour": {
+            "hot_reload": True,
+            "description": "Hourly corrosion rate for mot confidence",
+        },
+        "mot_min_effective_confidence": {
+            "hot_reload": True,
+            "description": "Min effective confidence for mot to survive",
+        },
+        "mot_ttl_hours": {"hot_reload": True, "description": "TTL of mot entries (hours)"},
+    },
+    "mcp_client": {
+        "request_timeout_seconds": {
+            "hot_reload": True,
+            "description": "MCP client request timeout (http / stdio)",
+        },
+    },
+    # 常駐 Worker 周期。各 worker がループ内で動的読みする。
+    "workers": {
+        "proactive_interval_seconds": {
+            "hot_reload": True,
+            "description": "Proactive self-turn interval (seconds)",
+        },
+        "activity_interval_seconds": {
+            "hot_reload": True,
+            "description": "Persona life activity interval (seconds)",
+        },
+        "prospective_interval_seconds": {
+            "hot_reload": True,
+            "description": "Cue deadline monitoring interval (seconds)",
+        },
+        "prospective_min_wait_seconds": {
+            "hot_reload": True,
+            "description": "Min wait after cue deadline before firing (seconds)",
+        },
     },
 }
 

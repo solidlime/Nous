@@ -5,7 +5,7 @@ from typing import TYPE_CHECKING
 
 from starlette.responses import JSONResponse
 
-from nous.config.settings import Settings
+from nous.config.settings import get_settings
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -18,7 +18,7 @@ async def _do_health() -> dict:
     """Return health check dict."""
     from nous import __version__  # noqa: PLC0415  — avoids circular import
 
-    settings = Settings()
+    settings = get_settings()
     try:
         from qdrant_client import QdrantClient
 
@@ -47,7 +47,7 @@ async def health(request: Request) -> JSONResponse:  # noqa: ARG001
 
 async def _do_list_personas() -> list:
     """Return sorted list of persona names (those with memory.sqlite)."""
-    settings = Settings()
+    settings = get_settings()
     data_path = Path(settings.persona_dir)
     if data_path.exists():
         return sorted([d.name for d in data_path.iterdir() if d.is_dir() and (d / "db" / "memory.sqlite").exists()])

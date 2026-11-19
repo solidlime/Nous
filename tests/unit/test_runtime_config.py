@@ -307,6 +307,42 @@ def test_get_effective_value_override_source(tmp_data_dir: Path):
 # ──────────────────────────────────────────────
 
 
+# ──────────────────────────────────────────────────────────────
+# SETTINGS_META ↔ Settings field lock-in (config-externalization Phase 1)
+# ──────────────────────────────────────────────────────────────
+
+
+def test_settings_meta_keys_exist_in_settings(tmp_data_dir: Path):
+    """SETTINGS_META の全キーは Settings 側 Field に存在する（api_keys 仮想除く）。
+
+    SETTINGS_META にキーを登録し忘れた Settings Field や、逆に Field 名を
+    typo した SETTINGS_META エントリがサイレントに効かなくなるのを防ぐ lock-in。
+    """
+    from nous.config.runtime_config import SETTINGS_META
+    from nous.config.settings import Settings
+
+    model = Settings()
+    for category, keys in SETTINGS_META.items():
+        if category == "api_keys":
+            # 仮想カテゴリ: get_effective_api_key の RCM フォールバック専用で
+            # Settings にはサブオブジェクトが無い（_coerce_value も no-op 許容）。
+            continue
+        if category == "general":
+            fields = Settings.model_fields
+            obj = model
+        else:
+            sub = getattr(model, category, None)
+            assert sub is not None, f"SETTINGS_META category '{category}' missing on Settings"
+            fields = type(sub).model_fields
+            obj = sub
+        for key in keys:
+            # general.persona_dir 等の派生 property は model_fields に載らないが、
+            # RCM の _get_settings_value は getattr で読むため実効がある → 許容。
+            assert key in fields or hasattr(obj, key), (
+                f"SETTINGS_META key '{category}.{key}' has no Settings field"
+            )
+
+
 def test_get_all_masked_values(tmp_data_dir: Path):
     """Masked settings should show '***' when value is truthy."""
     import nous.config.runtime_config as rc

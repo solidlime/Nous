@@ -127,6 +127,7 @@ _SECTION_EXACT: dict[str, str] = {
     "enable_parallel_tools": "tools",
     "dynamic_tool_selection": "tools",
     "enable_memory_tools": "tools",
+    "schedule_fail_limit": "tools",
     "workspace_root": "tools",
     "shell_timeout_seconds": "tools",
     "shell_approval_mode": "tools",

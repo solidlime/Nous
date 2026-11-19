@@ -14,7 +14,17 @@ const CATEGORY_ICONS = {
     embedding: '<i data-lucide="brain"></i>',
     reranker: '<i data-lucide="search"></i>',
     qdrant: '<i data-lucide="package"></i>',
-    general: '<i data-lucide="settings"></i>'
+    general: '<i data-lucide="settings"></i>',
+    workers: '<i data-lucide="clock"></i>',
+    memory: '<i data-lucide="layers"></i>',
+    search: '<i data-lucide="sliders-horizontal"></i>',
+    mcp_client: '<i data-lucide="plug"></i>',
+    wiki: '<i data-lucide="book-open"></i>',
+    irodori: '<i data-lucide="music"></i>',
+    memory_enrichment: '<i data-lucide="sparkles"></i>',
+    cors: '<i data-lucide="shield-check"></i>',
+    plugin: '<i data-lucide="puzzle"></i>',
+    api_keys: '<i data-lucide="key"></i>'
 };
 
 const CATEGORY_DESCRIPTIONS = {
@@ -23,12 +33,28 @@ const CATEGORY_DESCRIPTIONS = {
     embedding: 'Embedding model configuration for vector search. Reload takes 10-60s.',
     reranker: 'Cross-encoder reranker for search result quality. Reload takes 5-30s.',
     qdrant: 'Qdrant vector database connection settings.',
-    general: 'General settings: timezone, logging, thresholds, search engine.'
+    general: 'General settings: timezone, logging, thresholds, search engine.',
+    workers: 'Resident worker intervals: proactive turns, life activities, cue monitoring.',
+    memory: 'Memory thresholds: write-duplicate detection, corroboration/interference, mot thoughts.',
+    search: 'Search pipeline tuning: FTS fallback bar, rerank stage, recency decay.',
+    mcp_client: 'MCP client request timeout (http and stdio).',
+    wiki: 'Wiki and journal compilation: cycle, topics, sources, research.',
+    irodori: 'Irodori TTS server connection and generation limits.',
+    memory_enrichment: 'Auxiliary LLM (memory extraction / brain). Changes require a full server restart.',
+    cors: 'CORS middleware (baked at startup). Changes require a full server restart.',
+    plugin: 'Plugin system (baked at startup). Changes require a full server restart.',
+    api_keys: 'LLM provider API keys (hot-reload overrides).'
 };
 
 /* ── Category display order (consistent across renders) ── */
 const CATEGORY_ORDER = [
-    'general', 'server', 'mcp_security', 'embedding', 'reranker',
+    // ── Safe hot-reload groups (tuning, no restart) ──
+    'general', 'workers', 'memory', 'search', 'mcp_client',
+    'wiki', 'irodori',
+    // ── Restart-required operational groups ──
+    'memory_enrichment', 'cors', 'plugin', 'api_keys',
+    // ── Infra / dangerous groups (heavy reload or restart, keep last) ──
+    'server', 'mcp_security', 'embedding', 'reranker',
     'qdrant'
 ];
 

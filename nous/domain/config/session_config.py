@@ -30,6 +30,12 @@ class SessionConfig(BaseModel):
         default=False, description="チャットメッセージにタイムスタンプを表示します。"
     )  # チャットメッセージにタイムスタンプを表示
     session_summarize: bool = Field(default=True, description="セッション終了時に会話を要約して保存します。")
+    # 静寂補完（session_notes.fill_silence）: この時間以上ユーザーが沈黙していたら
+    # 「何をしていたか」を推定して記憶する。Settings の session_silence_hours
+    # （セッション終了判定）とは別物。
+    fill_silence_hours: float = Field(
+        default=6.0, gt=0.0, description="静寂補完を発動するユーザー不在時間（時間単位）。"
+    )
     episode_search_enabled: bool = Field(default=True, description="過去の会話エピソードも検索対象に含めます。")
 
     # Mental Model abstraction

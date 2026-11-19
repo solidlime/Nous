@@ -61,6 +61,10 @@ class SearchConfig(BaseModel):
     # 無効化しても reranker のロード経路（reranker.enabled）は壊さない。
     rerank_enabled: bool = False
 
+    # 記憶鮮度の指数減衰係数（time_utils.get_recency_boost の λ）。
+    # 0.5 = 既定の「日ごとに半減」相当。act/expert 向け。
+    recency_lambda: float = Field(default=0.5, gt=0.0, le=1.0)
+
 
 class QdrantConfig(BaseModel):
     """Qdrant vector store configuration."""
@@ -123,6 +127,15 @@ class LLMConfig(BaseModel):
     api_key: str | None = None
     model: str = "openai/gpt-4o-mini"
     base_url: str = "https://openrouter.ai/api/v1"
+    # openai_compat のリクエストタイムアウト。低速プロバイダで詰まる筆頭（D2-4）。
+    timeout_seconds: int = Field(default=60, gt=0)
+    # 画像入力可能判定のモデル名プレフィックス（openai_compat の _VISION_MODEL_PREFIXES）。
+    vision_models: list[str] = Field(
+        default_factory=lambda: ["gpt-4o", "gpt-4-turbo", "gpt-4-vision", "o1", "o3", "o4-mini"]
+    )
+    non_vision_models: list[str] = Field(default_factory=lambda: ["gpt-3.5"])
+    # 記憶抽出 LLM の max_tokens（コスト直結 — D2-15）。
+    extraction_max_tokens: int = Field(default=8192, gt=0)
 
     def get_effective_api_key(self, settings: Settings) -> str:
         """Return API key, falling back to global Settings keys."""
@@ -219,6 +232,12 @@ class IrodoriConfig(BaseModel):
 
     timeout_seconds: int = 30
     """Generation timeout in seconds."""
+
+    retry_count: int = 3
+    """音声生成失敗時のリトライ回数（voice/irodori.py の固定値 → 設定化）。"""
+
+    health_timeout_seconds: int = 5
+    """GET /v1/models 疎通確認の httpx タイムアウト（irodori.py:150 と tts.py:729 の重複統一）。"""
 
     advanced: IrodoriAdvancedParams = IrodoriAdvancedParams()
 
@@ -340,6 +359,11 @@ class WikiConfig(BaseModel):
     # この日数以上更新されていないページは編纂で必ず改訂させる（放置ページ対策）。
     stale_days: int = 7
     max_page_bytes: int = 8192
+    # topic 編纂に必要な記憶の最低件数（不足なら topic をスキップ）。
+    min_topic_memories: int = 3
+    # Worker ループの待機/エラー再試行周期。
+    worker_retry_seconds: int = 60
+    worker_error_retry_seconds: int = 1800
     provider: str = "openrouter"
     api_key: str | None = None
     model: str = "openai/gpt-4o-mini"
@@ -422,6 +446,43 @@ class ExplorerConfig(BaseModel):
         return clamp_max_tool_calls(v)
 
 
+class MemoryConfig(BaseModel):
+    """記憶ドメインのしきい値群（書き込み重複 / 相互相関 / mot 思考）。D4-1 統一済み。"""
+
+    # 書き込み重複判定の semantic しきい値。hooks 側 0.85 と write_service 側 0.75 の
+    # 不揃いを 0.85 に一本化（D2-1/D2-2）。上位互換: 0.75 で拾っていた 0.75-0.85 帯の
+    # 類似記憶は弾かれるようになる。
+    duplicate_threshold: float = Field(default=0.85, ge=0.0, le=1.0)
+    # evolution_service の相互相関判定しきい値（corroboration / interference）。
+    corroboration_min: float = Field(default=0.9, ge=0.0, le=1.0)
+    interference_min: float = Field(default=0.85, ge=0.0, le=1.0)
+    interference_max: float = Field(default=0.95, ge=0.0, le=1.0)
+    # mot（自己思考痕跡）の減衰パラメータ。
+    mot_confidence_threshold: float = Field(default=0.8, ge=0.0, le=1.0)
+    mot_top_k: int = Field(default=3, ge=1)
+    mot_corrosion_per_hour: float = Field(default=0.02, ge=0.0)
+    mot_min_effective_confidence: float = Field(default=0.5, ge=0.0, le=1.0)
+    mot_ttl_hours: int = Field(default=72, ge=1)
+
+
+class McpClientConfig(BaseModel):
+    """MCP クライアントのタイムアウト（http_client / stdio_client 共通）。"""
+
+    request_timeout_seconds: int = Field(default=30, gt=0)
+
+
+class WorkersConfig(BaseModel):
+    """常駐 Worker の周期。全 worker ループ内で動的読みする（hot_reload 対応）。"""
+
+    # proactive: 自発ターン（self-turn）の発生周期。
+    proactive_interval_seconds: int = Field(default=1800, gt=0)
+    # activity: ペルソナの暮らし営みの周期。
+    activity_interval_seconds: int = Field(default=3600, gt=0)
+    # prospective: cue の期限監視周期と、期限起点の最小待機秒。
+    prospective_interval_seconds: int = Field(default=3600, gt=0)
+    prospective_min_wait_seconds: float = Field(default=30.0, gt=0.0)
+
+
 class Settings(BaseSettings):
     """Application settings loaded from environment variables."""
 
@@ -462,6 +523,14 @@ class Settings(BaseSettings):
     explorer: ExplorerConfig = Field(default_factory=ExplorerConfig)
     cors: CorsConfig = CorsConfig()
     irodori: IrodoriConfig = Field(default_factory=IrodoriConfig)
+    # 記憶しきい値群（hooks/write_service 0.85 に一本化、evolution、mot）。
+    memory: MemoryConfig = Field(default_factory=MemoryConfig)
+    # MCP クライアントのタイムアウト（http_client / stdio_client 共通）。
+    mcp_client: McpClientConfig = Field(default_factory=McpClientConfig)
+    # 常駐 Worker の周期（proactive / activity / prospective）。
+    workers: WorkersConfig = Field(default_factory=WorkersConfig)
+    # ユーザーの agent 承認を待つ上限秒（sudo / 本体側承認フロー）。
+    approval_timeout_seconds: int = Field(default=120, gt=0)
     timezone: str = "Asia/Tokyo"
     # 旧名 NOUS_SILENCE_HOURS も env 互換として受理する（名称は ChatConfig 側の
     # session_notes 静寂閾値との誤認防止のため分離 — oracle #11）。

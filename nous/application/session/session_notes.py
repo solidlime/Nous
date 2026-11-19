@@ -52,7 +52,17 @@ async def fill_silence(ctx: AppContext, persona: str, hours: float | None = None
 
     戻り値は notes に足す行（失敗時のみ ``warning: ...``）。何もしない時は None。
     """
-    limit = DEFAULT_SILENCE_HOURS if hours is None else float(hours)
+    # 閾値の優先度: 呼び出し側の hours 引数（session_events.py が Settings の
+    # session_silence_hours を渡す）> ChatConfig の fill_silence_hours（persona 毎）
+    # > 最終下限。Settings 側はセッション begin の運用値、ChatConfig 側は補完の
+    # persona 既定で概念が違う（計画書 D2-12、命名で区別）。
+    cfg_hours = getattr(ctx.config, "fill_silence_hours", None) if ctx.config is not None else None
+    if hours is not None:
+        limit = float(hours)
+    elif cfg_hours is not None:
+        limit = float(cfg_hours)
+    else:
+        limit = DEFAULT_SILENCE_HOURS
     now = get_now()
     try:
         last = SessionEventRepository(ctx.connection).last_event_at(persona, "session.stopped")
