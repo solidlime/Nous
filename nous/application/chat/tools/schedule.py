@@ -21,6 +21,7 @@ from typing import TYPE_CHECKING
 
 from nous.domain.memory.cue import (
     CUE_TIME_PREFIX,
+    comparable,
     parse_deadline,
     parse_time_cues,
     time_cue_tag,
@@ -109,19 +110,12 @@ def due_agent_tasks(memories: Iterable[Memory], now: datetime | None = None) -> 
     ]
 
 
-def _comparable(dt: datetime, ref: datetime) -> datetime:
-    """cue タグは naive・``get_now()`` は aware なので、比較前に枠を揃える。"""
-    if (dt.tzinfo is None) == (ref.tzinfo is None):
-        return dt
-    return dt.replace(tzinfo=None) if ref.tzinfo is None else dt.astimezone(ref.tzinfo)
-
-
 def next_due(deadline: datetime, recur: str, now: datetime | None = None) -> datetime:
     """次回期限。停止中に溜まった分は1回で追いつく（何周も回さない）。"""
     step = timedelta(days=1 if recur == "daily" else 7)
     now = now or get_now()
     nxt = deadline + step
-    while _comparable(nxt, now) <= now:
+    while comparable(nxt, now) <= now:
         nxt += step
     return nxt
 
@@ -151,7 +145,8 @@ def done_tags(memory: Memory, recur: str | None, now: datetime | None = None) ->
     if not recur:
         return base
     now = now or get_now()
-    last = max(parse_time_cues(memory), default=now)
+    # max() も生の datetime では naive/aware 混在で TypeError になる
+    last = max(parse_time_cues(memory), key=lambda dt: comparable(dt, now), default=now)
     return [*base, AGENT_TASK_TAG, time_cue_tag(next_due(last, recur, now)), recur_tag(recur)]
 
 
@@ -212,7 +207,7 @@ def next_task_wait_seconds(memories: Iterable[Memory], now: datetime | None = No
         for m in memories
         if AGENT_TASK_TAG in (getattr(m, "tags", None) or [])
         for d in parse_time_cues(m)
-        if (delta := (_comparable(d, now) - now).total_seconds()) > 0
+        if (delta := (comparable(d, now) - now).total_seconds()) > 0
     ]
     return min(future) if future else None
 

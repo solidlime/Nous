@@ -135,3 +135,18 @@ class TestDueAndTags:
     def test_next_due_skips_missed_cycles(self) -> None:
         # 1週間止まっていた weekly は1回で追いつく（過去の分を何周も回さない）
         assert schedule.next_due(datetime(2026, 11, 1, 9, 0), "weekly", NOW) == datetime(2026, 11, 22, 9, 0)
+
+
+class TestMixedTimezone:
+    """cue タグは naive・get_now() は aware（#84）。"""
+
+    def test_done_tags_handles_naive_cue_with_aware_now(self) -> None:
+        task = _memory([schedule.AGENT_TASK_TAG, "cue:time:2026-11-18T09:00", "cue:recur:daily"])
+        aware_now = datetime(2026, 11, 18, 9, 0, tzinfo=UTC)
+        tags = schedule.done_tags(task, "daily", aware_now)
+        assert tags == [schedule.AGENT_TASK_TAG, "cue:time:2026-11-19T09:00", "cue:recur:daily"]
+
+    def test_next_due_handles_naive_deadline_with_aware_now(self) -> None:
+        aware_now = datetime(2026, 11, 18, 9, 0, tzinfo=UTC)
+        nxt = schedule.next_due(datetime(2026, 11, 17, 9, 0), "daily", aware_now)
+        assert nxt == datetime(2026, 11, 19, 9, 0)

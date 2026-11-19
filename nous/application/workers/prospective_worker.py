@@ -162,7 +162,11 @@ class ProspectiveWorker:
                 self._fail(ctx, persona, task, e)
                 continue
             self._speak(ctx, text)
-            self._finish(ctx, persona, task)
+            try:
+                self._finish(ctx, persona, task)
+            except Exception as e:  # 1件の後始末失敗でそのサイクルの残タスクを落とさない
+                logger.warning("ProspectiveWorker: finish failed persona=%s", persona, exc_info=True)
+                self._fail(ctx, persona, task, e)
 
     @staticmethod
     def _speak(ctx: AppContext, text: str) -> None:

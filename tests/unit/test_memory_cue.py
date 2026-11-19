@@ -9,6 +9,7 @@ depend on them agreeing.
 from __future__ import annotations
 
 from datetime import datetime, timedelta
+from zoneinfo import ZoneInfo
 
 from nous.domain.memory.cue import (
     CUE_EVENT_PREFIX,
@@ -133,3 +134,32 @@ class TestEventCues:
     def test_unrelated_text_no_match(self):
         mem = _mem("m1", tags=[event_cue_tag("健康診断")])
         assert event_cued_memories([mem], "今日はコードを書いた") == []
+
+
+class TestMixedTimezoneCues:
+    """naive タグと aware タグの混在（#84）。
+
+    cue:time は LLM 出力由来で naive になり得るが、get_now() は aware。
+    素の datetime を sort/max に渡すと TypeError で get_context ごと落ちる。
+    """
+
+    def test_due_cues_sorts_mixed_naive_and_aware(self):
+        now = datetime(2026, 9, 19, 12, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
+        late = _mem("late", tags=[f"{CUE_TIME_PREFIX}2026-09-19T18:00"])
+        early = _mem("early", tags=[f"{CUE_TIME_PREFIX}2026-09-19T13:00+09:00"])
+        due = due_cues([late, early], now, allow_overdue=False)
+        assert [m.key for m, _ in due] == ["early", "late"]
+
+    def test_naive_deadline_is_read_in_the_reference_frame(self):
+        # astimezone は system TZ（コンテナは UTC）で読むため 9 時間ずれる。
+        # 参照枠（now の tz）で読むのが正しいので「15:00 naive」は 3h 後。
+        now = datetime(2026, 9, 19, 12, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
+        mem = _mem("m1", tags=[f"{CUE_TIME_PREFIX}2026-09-19T15:00"])
+        due = due_cues([mem], now, allow_overdue=False)
+        assert [m.key for m, _ in due] == ["m1"]
+        assert due[0][1] == "in 3h"
+
+    def test_within_window_accepts_mixed_frames(self):
+        now = datetime(2026, 9, 19, 12, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
+        assert within_window(datetime(2026, 9, 19, 15, 0), now) is True
+        assert within_window(datetime(2026, 9, 20, 13, 0), now) is False

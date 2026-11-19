@@ -105,23 +105,27 @@ def event_cues(memory: Memory) -> list[str]:
     ]
 
 
-def _comparable(dt: datetime, now: datetime) -> datetime:
+def comparable(dt: datetime, now: datetime) -> datetime:
     """Make *dt* comparable with *now*.
 
     Deadline tags carry no timezone, while ``get_now()`` is tz-aware — mixing them
     raises ``TypeError`` on subtraction. Naive values are read in the caller's
     reference frame, which is what they were written in.
+
+    ``replace`` and not ``astimezone``: the latter reads a naive value in the
+    *system* zone (UTC in the container), which silently shifts every "9am"
+    deadline by 9 hours. Same convention as ``time_utils.format_iso``.
     """
     if (dt.tzinfo is None) == (now.tzinfo is None):
         return dt
     if now.tzinfo is None:
         return dt.replace(tzinfo=None)
-    return dt.astimezone(now.tzinfo)
+    return dt.replace(tzinfo=now.tzinfo)
 
 
 def due_label(deadline: datetime, now: datetime) -> str:
     """Short human label: ``in 3h`` / ``2h overdue``."""
-    hours = (_comparable(deadline, now) - now).total_seconds() / 3600.0
+    hours = (comparable(deadline, now) - now).total_seconds() / 3600.0
     if hours >= 0:
         return f"in {hours:.0f}h" if hours >= 1 else f"in {hours * 60:.0f}m"
     overdue = -hours
@@ -148,11 +152,12 @@ def due_cues(
     due: list[tuple[Memory, datetime]] = []
     for memory in memories:
         for deadline in parse_time_cues(memory):
-            offset_hours = (_comparable(deadline, now) - now).total_seconds() / 3600.0
+            offset_hours = (comparable(deadline, now) - now).total_seconds() / 3600.0
             if lower <= offset_hours <= window_hours:
                 due.append((memory, deadline))
                 break
-    due.sort(key=lambda pair: pair[1])
+    # naive と aware が混ざるので生の datetime では比較できない（TypeError）
+    due.sort(key=lambda pair: comparable(pair[1], now))
     return [(memory, due_label(deadline, now)) for memory, deadline in due]
 
 
@@ -170,7 +175,7 @@ def event_cued_memories(memories: Iterable[Memory], text: str) -> list[Memory]:
 
 def within_window(deadline: datetime, now: datetime, window_hours: float = DUE_WINDOW_HOURS) -> bool:
     """True when *deadline* is inside the due window (or overdue within grace)."""
-    offset_hours = (_comparable(deadline, now) - now).total_seconds() / 3600.0
+    offset_hours = (comparable(deadline, now) - now).total_seconds() / 3600.0
     return -OVERDUE_GRACE_HOURS <= offset_hours <= window_hours
 
 
@@ -179,6 +184,7 @@ __all__ = [
     "CUE_TIME_PREFIX",
     "DUE_WINDOW_HOURS",
     "OVERDUE_GRACE_HOURS",
+    "comparable",
     "cue_tags",
     "due_cues",
     "due_label",
