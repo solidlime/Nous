@@ -22,6 +22,10 @@ var C = window.Nous.Core;
 var safeSetHTML = C.safeSetHTML;
 
 /* Persona storage helpers — write to both keys for backward compatibility */
+function getStoredPersona() {
+  return localStorage.getItem("mmcp-persona");
+}
+
 function setStoredPersona(persona) {
   localStorage.setItem("mmcp-persona", persona);
   localStorage.setItem("selected_persona", persona);
@@ -162,7 +166,7 @@ async function init() {
       sel.appendChild(opt);
     });
     // Select persona: localStorage > first available
-    const savedPersona = localStorage.getItem("mmcp-persona");
+    const savedPersona = getStoredPersona();
     let _target = null;
     if (
       savedPersona &&
