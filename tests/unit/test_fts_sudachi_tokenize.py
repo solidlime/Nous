@@ -159,3 +159,49 @@ class TestMigrationV10Retokenize:
                 assert " " in row["content"], "row must be re-tokenized (space-separated)"
         finally:
             conn.close()
+
+
+class TestFTSNoGhostRows:
+    """INSERT OR REPLACE の暗黙 DELETE でも FTS が同期されること（kanban #74）。
+
+    REPLACE は接続既定（recursive_triggers=OFF）だと DELETE トリガを発火せず、
+    同じ key の古い FTS 行が残って検索が重複する。
+    """
+
+    def _count(self, repo) -> int:
+        row = repo._db.execute("SELECT COUNT(*) AS c FROM memories_fts").fetchone()
+        return int(row["c"])
+
+    def test_save_twice_leaves_one_index_row(self, repo):
+        repo.save(_mem("m1", "一度目の内容"))
+        repo.save(_mem("m1", "二度目の内容"))
+        assert self._count(repo) == 1
+
+    def test_resave_replaces_search_target(self, repo):
+        repo.save(_mem("m1", "古い内容についての記憶"))
+        repo.save(_mem("m1", "珊瑚礁の白化現象を調査した"))
+        new_hit = [m.key for m, _ in repo.search_fts("珊瑚礁 白化", top_k=5).value]
+        old_hit = [m.key for m, _ in repo.search_fts("古い内容", top_k=5).value]
+        assert new_hit == ["m1"]
+        assert old_hit == []
+
+    def test_meta_update_keeps_sudachi_tokens(self, repo):
+        # tags だけ更新しても au トリガが raw content を入れ直すので、
+        # 再トークン化しないと分割済みの索引が生テキストに戻ってしまう。
+        repo.save(_mem("m1", "量子テレポーテーションの実験に成功した"))
+        repo.update("m1", tags=["量子"])
+
+        row = repo._db.execute("SELECT content FROM memories_fts WHERE memories_key = 'm1'").fetchone()
+        assert row["content"] == _fake_tokenize("量子テレポーテーションの実験に成功した")
+        assert [m.key for m, _ in repo.search_fts("量子テレポーテーション実験", top_k=5).value] == ["m1"]
+
+    def test_migration_prunes_ghost_rows(self, repo):
+        # 旧バージョンが残した幽霊行を migration が掃除する。
+        repo.save(_mem("m1", "生きている記憶"))
+        repo._db.execute("INSERT INTO memories_fts(rowid, content, memories_key) VALUES (9999, 'ghost', 'm1')")
+        assert self._count(repo) == 2
+
+        from nous.infrastructure.sqlite.migrations import _migrate_fts_prune_ghosts_v14
+
+        _migrate_fts_prune_ghosts_v14(repo._db, PERSONA)
+        assert self._count(repo) == 1

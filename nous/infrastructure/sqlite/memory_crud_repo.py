@@ -276,6 +276,10 @@ class MemoryCrudMixin:
             self._db.commit()
             if "content" in updates:
                 self._fts_retokenize(key, str(updates["content"]))
+            else:
+                # memories_au トリガが raw の content を入れ直すので、メタ更新でも
+                # トークン化をやり直さないと Sudachi 分割が生テキストに戻る (kanban #74)。
+                self._fts_retokenize(key, str(updated_row["content"]))
             logger.info("Memory updated: %s", key)
             return Success(self._row_to_memory(updated_row))
         except Exception as e:
@@ -292,7 +296,7 @@ class MemoryCrudMixin:
         """
         try:
             self._db.execute(
-                "UPDATE memories_fts SET content = ? WHERE memories_key = ?",
+                "UPDATE memories_fts SET content = ? WHERE rowid = (SELECT rowid FROM memories WHERE key = ?)",
                 (fts_tokenize.tokenize_for_fts(content), key),
             )
             self._db.commit()

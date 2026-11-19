@@ -63,6 +63,9 @@ class SQLiteConnection:
             conn = sqlite3.connect(str(db_path), isolation_level=None)
             conn.execute("PRAGMA journal_mode=WAL")
             conn.execute("PRAGMA foreign_keys=ON")
+            # INSERT OR REPLACE の暗黙 DELETE でも FTS 同期トリガを発火させる。
+            # OFF だと memories_fts に幽霊行が溜まり、同じ記憶が検索で重複する (kanban #74)。
+            conn.execute("PRAGMA recursive_triggers=ON")
             conn.row_factory = sqlite3.Row
             conns[relative_path] = conn
             logger.info("SQLite connection opened: %s", db_path)

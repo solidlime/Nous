@@ -352,6 +352,23 @@ def _migrate_curation_runs_v12(
     logger.info("Created curation_runs table (migration v12)")
 
 
+def _migrate_fts_prune_ghosts_v14(
+    db_conn: sqlite3.Connection,
+    persona: str,  # noqa: ARG001
+) -> None:
+    """Drop FTS rows whose rowid no longer exists in ``memories`` (kanban #74).
+
+    ``INSERT OR REPLACE`` の暗黙 DELETE は ``recursive_triggers`` が OFF だと
+    トリガを発火しないため、同じ key の古い FTS 行が rowid 付きで残る。
+    参照側の rowid と突き合わせて消す。
+    """
+    cursor = db_conn.execute("DELETE FROM memories_fts WHERE rowid NOT IN (SELECT rowid FROM memories)")
+    deleted = cursor.rowcount
+    db_conn.commit()
+    if deleted:
+        logger.info("Pruned %d ghost rows from memories_fts", deleted)
+
+
 def _migrate_h5_stability_clamp_v13(
     db_conn: sqlite3.Connection,
     persona: str,  # noqa: ARG001
@@ -388,4 +405,5 @@ MIGRATIONS = [
     (11, "Add persona to memory_blocks and rebuild PK", _migrate_memory_blocks_persona_v11),
     (12, "Create curation_runs table", _migrate_curation_runs_v12),
     (13, "Clamp emotion-inflated stability once (H5)", _migrate_h5_stability_clamp_v13),
+    (14, "Prune ghost rows from FTS index", _migrate_fts_prune_ghosts_v14),
 ]
