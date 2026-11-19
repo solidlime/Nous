@@ -203,9 +203,12 @@ def _parse_step(text: str) -> dict:
     """LLM 応答 1 手分の JSON（コードフェンス・前後の説明文を許容）。"""
     stripped = text.strip()
     if stripped.startswith("```"):
-        stripped = stripped.strip("`")
+        # フェンスだけを外す（strip("`") は本文末尾のバッククォートまで剥ぐ、kanban #88）。
+        stripped = stripped[3:]
         if stripped.startswith("json"):
             stripped = stripped[4:]
+        if stripped.rstrip().endswith("```"):
+            stripped = stripped.rstrip()[:-3]
     start, end = stripped.find("{"), stripped.rfind("}")
     if start < 0 or end <= start:
         raise ValueError("no JSON object found in response")

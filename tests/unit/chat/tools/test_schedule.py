@@ -58,7 +58,7 @@ class TestScheduleTask:
         assert out["due"] == "2026-11-20T07:30"
         kwargs = ctx.memory_service.create_memory.await_args.kwargs
         assert kwargs["content"] == "日記を書く"
-        assert kwargs["tags"] == [schedule.AGENT_TASK_TAG, "cue:time:2026-11-20T07:30"]
+        assert kwargs["tags"] == [schedule.AGENT_TASK_TAG, "cue:time:2026-11-20T07:30:00"]
 
     async def test_relative_when_and_recur(self) -> None:
         ctx = _ctx()
@@ -67,7 +67,7 @@ class TestScheduleTask:
         assert out["due"] == "2026-11-18T11:00"
         assert ctx.memory_service.create_memory.await_args.kwargs["tags"] == [
             schedule.AGENT_TASK_TAG,
-            "cue:time:2026-11-18T11:00",
+            "cue:time:2026-11-18T11:00:00",
             "cue:recur:daily",
         ]
 
@@ -121,7 +121,7 @@ class TestDueAndTags:
     def test_done_tags_reinsert_next_cue_for_recur(self) -> None:
         task = _memory([schedule.AGENT_TASK_TAG, "cue:time:2026-11-18T09:00", "cue:recur:daily"])
         tags = schedule.done_tags(task, "daily", NOW)
-        assert tags == [schedule.AGENT_TASK_TAG, "cue:time:2026-11-19T09:00", "cue:recur:daily"]
+        assert tags == [schedule.AGENT_TASK_TAG, "cue:time:2026-11-19T09:00:00", "cue:recur:daily"]
 
     def test_retry_tags_keep_cue(self) -> None:
         task = _memory([schedule.AGENT_TASK_TAG, "cue:time:2026-11-18T09:00", "cue:recur:weekly"])
@@ -144,7 +144,7 @@ class TestMixedTimezone:
         task = _memory([schedule.AGENT_TASK_TAG, "cue:time:2026-11-18T09:00", "cue:recur:daily"])
         aware_now = datetime(2026, 11, 18, 9, 0, tzinfo=UTC)
         tags = schedule.done_tags(task, "daily", aware_now)
-        assert tags == [schedule.AGENT_TASK_TAG, "cue:time:2026-11-19T09:00", "cue:recur:daily"]
+        assert tags == [schedule.AGENT_TASK_TAG, "cue:time:2026-11-19T09:00:00", "cue:recur:daily"]
 
     def test_next_due_handles_naive_deadline_with_aware_now(self) -> None:
         aware_now = datetime(2026, 11, 18, 9, 0, tzinfo=UTC)

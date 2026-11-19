@@ -372,7 +372,7 @@ class WikiWorker(JournalMixin, ConflictsMixin):
             for target in targets:
                 body = body.replace(f"[[{target}]]", target)
             if body != page.body:
-                store.write_page(
+                written = store.write_page(
                     slug,
                     page.title,
                     body,
@@ -380,7 +380,11 @@ class WikiWorker(JournalMixin, ConflictsMixin):
                     sources=page.sources,
                     tags=page.tags,
                 )
-                repaired += 1
+                # 書けないものを直したと数えない（次のサイクルでまた試す）。
+                if isinstance(written, Success):
+                    repaired += 1
+                else:
+                    logger.warning("WikiWorker: link repair failed for %s: %s", slug, written.error)
         return repaired
 
     def _most_recent(self, memories: list[Memory]) -> list[Memory]:
@@ -760,7 +764,13 @@ class WikiWorker(JournalMixin, ConflictsMixin):
 
         for doomed in page.get("delete", []) or []:
             if isinstance(doomed, str) and doomed in existing_slugs and doomed.startswith(f"{topic}-"):
-                store.delete_page(doomed)
+                removed = store.delete_page(doomed)
+                if isinstance(removed, Failure):
+                    # 消えていないページを「削除済み」と記録すると、幻覚 slug ガードが
+                    # 次サイクルで同じページを作り直す（kanban #88 B6）。
+                    logger.warning("WikiWorker: delete failed for %s: %s", doomed, removed.error)
+                    self._record_event(ctx, persona, f"warning: delete failed {doomed}: {removed.error}", None)
+                    continue
                 if self.vector_enabled:
                     vector_index.drop_page(self._settings, persona, doomed)
                 # 削除も監査に残す（「いつ何が消えたか」を後から追えるように）。
@@ -852,6 +862,9 @@ class WikiWorker(JournalMixin, ConflictsMixin):
 
     def _ask_text(self, prompt: str, boost: int = 0) -> str | None:
         """プロンプト 1 本を LLM に渡す（テストフックはここで受ける）。"""
+        # 前の呼び出しの計器を引き継がない。topic A の成功値が topic B の失敗イベントに載ると、
+        # 監査ログから max_tokens 不足か stream error かを読み分けられない（kanban #88 B9）。
+        self._last_llm = None
         if self._ask_llm_raise is not None:
             raise self._ask_llm_raise
         if self._ask_llm_for_test is not None:

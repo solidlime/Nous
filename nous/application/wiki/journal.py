@@ -33,6 +33,8 @@ logger = get_logger(__name__)
 _JOURNAL_SLUG_PREFIX = "journal-"
 #: LLM に渡す記憶本文の切り詰め長。
 _CONTENT_PREVIEW_CHARS = 300
+#: 暮らしの 1 行の上限（プロンプトで「40 文字以内」と言っている値と揃える）。
+_LIFE_LINE_CHARS = 40
 #: 明日やること（日記由来）の印。実行後も ``agent:task`` は外れるがこのタグは残る。
 _TODO_TAG = "journal:todo"
 #: 既存予定としてプロンプトに列挙する上限（重複判定は全件で行う）。
@@ -205,7 +207,9 @@ class JournalMixin:
             body = _strip_code_fence(raw or "")
             if not body:
                 raise ValueError("llm returned no journal body")
-            written = store.write_page(slug, title, body, sources=sources, tags=("journal", tag))
+            written = store.write_page(
+                slug, title, body, sources=sources, tags=("journal", tag), max_bytes=self._cfg.max_page_bytes
+            )
             if isinstance(written, Failure):
                 raise RuntimeError(f"write_page failed: {written.error}")
             if self.vector_enabled:
@@ -246,6 +250,11 @@ class JournalMixin:
         if service is None:
             self._record_event(ctx, persona, "skipped: journal state (no persona_service)", {"slug": slug})
             return
+        if self._state_already_applied(ctx, persona, slug):
+            # バックデートが材料を補ったり並走が重なると、同じ日記に対して
+            # 感情・体調が二度更新される（kanban #88 B7）。
+            logger.info("WikiWorker: journal state already applied (%s) — skipped", slug)
+            return
         try:
             raw = self._ask_text(self._build_state_prompt(memories, body)) or ""
             try:
@@ -257,7 +266,12 @@ class JournalMixin:
             applied: dict[str, object] = {}
             emotion = state.get("emotion")
             intensity = state.get("emotion_intensity")
-            if isinstance(emotion, str) and emotion and isinstance(intensity, (int, float)):
+            if (
+                isinstance(emotion, str)
+                and emotion
+                and isinstance(intensity, (int, float))
+                and not isinstance(intensity, bool)
+            ):
                 result = service.update_emotion(persona, emotion, float(intensity), context=f"journal:{slug}")
                 if isinstance(result, Failure):
                     raise RuntimeError(f"update_emotion failed: {result.error}")
@@ -273,7 +287,11 @@ class JournalMixin:
                 states["physical_state"] = physical
             if isinstance(mental, str) and mental:
                 states["mental_state"] = mental
-            if isinstance(body_state, dict) and isinstance(body_state.get("fatigue"), (int, float)):
+            if (
+                isinstance(body_state, dict)
+                and isinstance(body_state.get("fatigue"), (int, float))
+                and not isinstance(body_state.get("fatigue"), bool)
+            ):
                 states["fatigue"] = float(body_state["fatigue"])
             if states:
                 result = service.update_physical_state(persona, **states)
@@ -295,6 +313,32 @@ class JournalMixin:
             # 日記本体は書けているので、状態反映の失敗は warning 扱いにする。
             logger.warning("WikiWorker: journal state %s failed: %s", slug, e)
             self._record_event(ctx, persona, f"warning: journal state {slug}: {e}", None)
+
+    def _state_already_applied(self, ctx, persona: str, slug: str) -> bool:
+        """この slug の状態反映が済んでいるか（監査イベントを冪等マーカーにする）。
+
+        照会できないときは False（従来どおり適用）に倒す。取りこぼすより二重適用を許す方が
+        日記の本文が痩せるよりマシだが、失敗しても例外は上げない。
+        """
+        try:
+            from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
+
+            events = SessionEventRepository(ctx.connection).get_by_persona(
+                persona, event_type="wiki.compiled", limit=200
+            )
+        except Exception:
+            logger.debug("WikiWorker: journal state marker lookup failed (%s)", slug, exc_info=True)
+            return False
+        for event in events:
+            if not str(event.summary or "").startswith("applied state"):
+                continue
+            try:
+                detail = json.loads(event.detail or "{}")
+            except ValueError:
+                continue
+            if isinstance(detail, dict) and detail.get("slug") == slug:
+                return True
+        return False
 
     def _build_state_prompt(self, memories: list[Memory], body: str) -> str:
         material = "\n".join(m.content[:_CONTENT_PREVIEW_CHARS] for m in memories)
@@ -335,6 +379,11 @@ class JournalMixin:
                 return
             recent = now - timedelta(days=2)
             existing |= {_normalize_task(m.content) for m in todo.value if _aware(m.created_at, now.tzinfo) >= recent}
+            # 窓の外の todo は以後使わないのでタグを外す。古いのが溜まっても発言は変わらないが、
+            # 毎晩の照会が線形に伸びる（kanban #88）。
+            for stale in todo.value:
+                if _aware(stale.created_at, now.tzinfo) < recent:
+                    service.update_memory(stale.key, tags=[t for t in stale.tags if t != _TODO_TAG])
             listing = "\n".join(f"- {c}" for c in sorted(existing)[:_EXISTING_LIST_LIMIT]) or "(なし)"
             raw = (
                 self._ask_text(
@@ -688,7 +737,7 @@ def _parse_life(text: str, limit: int) -> list[str]:
         hour, minute, body = int(m.group(1)), int(m.group(2)), " ".join(m.group(3).split())
         if hour > 23 or minute > 59 or not body:
             continue
-        rows.append((f"{hour:02d}:{minute:02d}", body[:60]))
+        rows.append((f"{hour:02d}:{minute:02d}", body[:_LIFE_LINE_CHARS]))
     rows.sort()
     out: list[str] = []
     seen: set[tuple[str, str]] = set()
@@ -720,9 +769,12 @@ def _parse_json_object(text: str) -> dict:
     """LLM 応答から最初の JSON オブジェクトを取り出す（コードフェンス・前後説明文を許容）。"""
     stripped = text.strip()
     if stripped.startswith("```"):
-        stripped = stripped.strip("`")
+        # フェンスだけを外す。strip("`") は本文末尾のバッククォートまで剥ぐ（kanban #88）。
+        stripped = stripped[3:]
         if stripped.startswith("json"):
             stripped = stripped[4:]
+        if stripped.rstrip().endswith("```"):
+            stripped = stripped.rstrip()[:-3]
     start, end = stripped.find("{"), stripped.rfind("}")
     if start < 0 or end <= start:
         raise ValueError("no JSON object found in response")

@@ -45,7 +45,8 @@ def _mem(key: str, content: str = "約束", tags: list[str] | None = None, **kwa
 class TestCueTags:
     def test_time_and_event_tags(self):
         tags = cue_tags("2026-09-20T09:00", "健康診断")
-        assert f"{CUE_TIME_PREFIX}2026-09-20T09:00" in tags
+        # 秒切り捨てると +30m の予定が最大 59 秒早く発火するので seconds 精度で持つ（kanban #88）。
+        assert f"{CUE_TIME_PREFIX}2026-09-20T09:00" in " ".join(tags) or f"{CUE_TIME_PREFIX}2026-09-20T09:00:00" in tags
         # Entities are lower-cased so matching is case-insensitive
         assert event_cue_tag("健康診断") == f"{CUE_EVENT_PREFIX}健康診断"
         assert event_cue_tag("Kyoto Trip") == f"{CUE_EVENT_PREFIX}kyoto trip"

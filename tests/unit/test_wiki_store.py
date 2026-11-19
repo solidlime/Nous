@@ -229,6 +229,13 @@ def test_written_page_is_writable_by_the_sandbox_user(store, tmp_path):
     assert stat.S_IMODE(page.stat().st_mode) == 0o666
 
 
+def test_write_page_honours_explicit_max_bytes(store):
+    """設定の max_page_bytes が store の定数で落とされない（kanban #88 B6）。"""
+    body = "x" * (MAX_PAGE_BYTES + 500)
+    assert not store.write_page("big", title="Big", body=body).is_ok
+    assert store.write_page("big", title="Big", body=body, max_bytes=MAX_PAGE_BYTES * 2).is_ok
+
+
 def test_symlinked_page_is_rejected(store, tmp_path):
     """wiki はペルソナが 0777 で書ける。symlink を置かれても辿らない。
 

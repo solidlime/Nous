@@ -309,10 +309,13 @@ class WikiStore:
         project: str | None = None,
         sources: tuple[str, ...] = (),
         tags: tuple[str, ...] = (),
+        max_bytes: int | None = None,
     ) -> Result[WikiPage, WikiStoreError]:
         """ページを原子的に書き込み、``index.md`` を更新する。
 
         ``index`` slug への書き込みは拒否する（rebuild_index 専用）。
+        ``max_bytes`` は呼び手の設定値を優先する（プロンプトの予算とここがずれると、
+        生成は通るのに書込みだけ落ちる、kanban #88 B6）。
         """
         if slug == INDEX_SLUG:
             return Failure(WikiStoreError("index page is generated; use rebuild_index()"))
@@ -332,8 +335,9 @@ class WikiStore:
         )
         rendered = render_page(page)
         size = len(rendered.encode("utf-8"))
-        if size > MAX_PAGE_BYTES:
-            return Failure(WikiStoreError(f"page too large: {size} bytes > {MAX_PAGE_BYTES}"))
+        limit = MAX_PAGE_BYTES if max_bytes is None else max_bytes
+        if size > limit:
+            return Failure(WikiStoreError(f"page too large: {size} bytes > {limit}"))
         # 上書き前の内容を履歴に退避する（失敗しても書込みは止めない）。
         created = False
         try:

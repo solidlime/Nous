@@ -17,6 +17,8 @@ from types import SimpleNamespace
 from unittest.mock import MagicMock, patch
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from nous.application.chat.tools.schedule import AGENT_TASK_TAG, done_tags, due_agent_tasks
 from nous.application.wiki.journal import _TODO_TAG
 from nous.application.workers.wiki_worker import MIN_TOPIC_MEMORIES, WikiWorker
@@ -1674,6 +1676,34 @@ _TOMORROW_JSON = json.dumps(
 )
 
 
+class TestJournalStateIdempotence:
+    """同じ slug の感情・体調反映を二度しない（kanban #88 B7）。"""
+
+    def test_previous_instrumentation_does_not_leak(self, tmp_path) -> None:
+        """前の呼び出しの計器が次の失敗イベントに載らない（kanban #88 B9）。"""
+        _conn, worker, _ctx = _journal_setup(tmp_path, [], None, raise_exc=RuntimeError("boom"))
+        worker._last_llm = {"finish_reason": "length"}
+        with pytest.raises(RuntimeError):
+            worker._ask_text("probe")
+        assert worker._last_llm is None
+
+    def test_marker_makes_the_second_application_skip(self, tmp_path) -> None:
+        conn, worker, ctx = _journal_setup(tmp_path, [], None)
+        try:
+            assert worker._state_already_applied(ctx, "test_ww", "journal-2026-11-09") is False
+            worker._record_event(
+                ctx,
+                "test_ww",
+                "applied state emotion=joy",
+                {"slug": "journal-2026-11-09"},
+            )
+            assert worker._state_already_applied(ctx, "test_ww", "journal-2026-11-09") is True
+            # 別の日記は通常通り適用される
+            assert worker._state_already_applied(ctx, "test_ww", "journal-2026-11-10") is False
+        finally:
+            conn.close()
+
+
 class TestJournalTomorrow:
     """日記 → 明日やること → 既存スケジューラ（agent:task + cue:time）への登録。"""
 
@@ -1700,8 +1730,8 @@ class TestJournalTomorrow:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             tasks = self._tasks(ctx)
             assert [m.content for m in tasks] == ["問いの答えを書く", "論文の下書きを読み返す"]
-            assert set(tasks[1].tags) >= {"agent:task", "cue:time:2026-11-10T09:30+09:00", "journal:todo"}
-            assert set(tasks[0].tags) >= {"agent:task", "cue:time:2026-11-10T21:00+09:00", "journal:todo"}
+            assert set(tasks[1].tags) >= {"agent:task", "cue:time:2026-11-10T09:30:00+09:00", "journal:todo"}
+            assert set(tasks[0].tags) >= {"agent:task", "cue:time:2026-11-10T21:00:00+09:00", "journal:todo"}
             events = [(t, d) for t, _s, d in _event_rows(conn) if t == "journal.tomorrow"]
             assert [d["tasks"][0]["when"] for _t, d in events] == ["2026-11-10T09:30+09:00"]
         finally:
@@ -1714,7 +1744,7 @@ class TestJournalTomorrow:
         )
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
-            assert set(self._tasks(ctx)[0].tags) >= {"cue:time:2026-11-11T01:00+09:00"}
+            assert set(self._tasks(ctx)[0].tags) >= {"cue:time:2026-11-11T01:00:00+09:00"}
         finally:
             conn.close()
 
@@ -1974,6 +2004,8 @@ def test_compile_is_serialized_per_persona() -> None:
     def _fake_unlocked(self, ctx, persona: str) -> None:
         calls.append(persona)
 
+    # del で消すと本物のメソッドまで失う（後続テストが落ちる）。元を取り置きして戻す。
+    original = wiki_worker.WikiWorker._compile_persona_unlocked
     wiki_worker.WikiWorker._compile_persona_unlocked = _fake_unlocked  # type: ignore[method-assign]
     try:
         worker = wiki_worker.WikiWorker(MagicMock())
@@ -1988,4 +2020,4 @@ def test_compile_is_serialized_per_persona() -> None:
         worker._compile_persona(MagicMock(), "herta")
         assert calls == ["herta"]
     finally:
-        del wiki_worker.WikiWorker._compile_persona_unlocked
+        wiki_worker.WikiWorker._compile_persona_unlocked = original

@@ -45,8 +45,12 @@ PROMISE_TAGS: tuple[str, ...] = ("goal", "active", "interpersonal", "promise")
 
 
 def time_cue_tag(deadline: datetime) -> str:
-    """Tag for an absolute deadline."""
-    return f"{CUE_TIME_PREFIX}{deadline.isoformat(timespec='minutes')}"
+    """Tag for an absolute deadline.
+
+    seconds まで残す。minutes に丸めると最大 59 秒早く発火する（kanban #88）。
+    読み手は ``parse_deadline`` なので、分精度の既存タグもそのまま読める。
+    """
+    return f"{CUE_TIME_PREFIX}{deadline.isoformat(timespec='seconds')}"
 
 
 def event_cue_tag(entity: str) -> str:
