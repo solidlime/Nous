@@ -10,7 +10,7 @@ from nous.application.session.handover import build_handover, read_handover
 from nous.domain.memory.cue import due_cues
 from nous.domain.memory.service import ONE_SHOT_STATE_TAGS
 from nous.domain.profile.tokens import DEFAULT_PROFILE_MAX_TOKENS, estimate_tokens
-from nous.domain.shared.result import Success
+from nous.domain.shared.result import Failure, Success
 from nous.domain.shared.time_utils import get_now, relative_time_str
 from nous.infrastructure.sqlite.block_repo import PROFILE_BLOCK_NAMES
 
@@ -41,7 +41,7 @@ async def _tool_get_context(
     実行するか。監査 M8（v4.0）により正規入口は session_begin で、get_context は
     v4.x 互換のためデフォルトで副作用を維持しつつ非推奨警告を出す。"""
     state_result = ctx.persona_service.get_context(persona)
-    if not state_result.is_ok:
+    if isinstance(state_result, Failure):
         await ctx.event_bus.publish(
             "tool.called",
             {
@@ -63,13 +63,13 @@ async def _tool_get_context(
 
     # Top memories for ESSENTIAL STORY (reduced from 15 to 8 for leaner context)
     top_result = ctx.memory_service.get_top_by_importance(8)
-    top_memories = top_result.value if top_result.is_ok else []
+    top_memories = top_result.value if isinstance(top_result, Success) else []
 
     # Emotion history for trajectory display
     emotion_history: list = []
     try:
         eh_result = ctx.persona_service.get_emotion_history(persona, limit=5)
-        if eh_result.is_ok:
+        if isinstance(eh_result, Success):
             emotion_history = eh_result.value
     except Exception:
         logger.warning(
@@ -80,14 +80,14 @@ async def _tool_get_context(
 
     # Lightweight: essentials for seamless persona + conversation restoration
     goals_result = ctx.memory_service.get_by_tags(["goal"])
-    goals = goals_result.value if goals_result.is_ok else []
+    goals = goals_result.value if isinstance(goals_result, Success) else []
     reflection_result = ctx.memory_service.get_by_tags(["reflection"])
-    reflections = reflection_result.value if reflection_result.is_ok else []
+    reflections = reflection_result.value if isinstance(reflection_result, Success) else []
     mm_result = ctx.memory_service.get_by_tags(["mental_model", "abstracted"])
-    mental_models = mm_result.value if mm_result.is_ok else []
+    mental_models = mm_result.value if isinstance(mm_result, Success) else []
     # Session summaries — conversation continuity
     ss_result = ctx.memory_service.get_by_tags(["session_summary"])
-    session_summaries = ss_result.value if ss_result.is_ok else []
+    session_summaries = ss_result.value if isinstance(ss_result, Success) else []
     # 最新のサマリを優先表示（並び順が保証されないため updated_at 降順でソート）
     session_summaries = sorted(
         session_summaries,
@@ -95,11 +95,11 @@ async def _tool_get_context(
         reverse=True,
     )
     equip_result = ctx.equipment_service.get_equipment()
-    equipment = equip_result.value if equip_result.is_ok else {}
+    equipment = equip_result.value if isinstance(equip_result, Success) else {}
     # Recent memories (last 5) for conversation continuity across sessions
     recent_result = ctx.memory_service.get_recent(5)
     recent = (
-        recent_result.value if recent_result.is_ok else []
+        recent_result.value if isinstance(recent_result, Success) else []
     )  # top_memories と重複する recent は除外（重要度表示側を優先）
     recent = [m for m in recent if not any(m.key == t.key for t in top_memories)]
 
