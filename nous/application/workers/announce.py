@@ -10,8 +10,7 @@ from __future__ import annotations
 from typing import TYPE_CHECKING
 
 from nous.application.chat.events import DoneSSE, TextDeltaSSE
-from nous.application.chat.service import get_turn_hub
-from nous.application.chat.session_manager import SessionManager
+from nous.application.chat.service import get_session_manager, get_turn_hub
 from nous.domain.memory.session_event import SessionEvent
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
@@ -33,7 +32,7 @@ def speak_to_main(
     event_type: str = SPOKE_EVENT,
 ) -> None:
     """main 履歴へ追記し、既存 chat() と同じ形の SSE で届ける。"""
-    SessionManager().get_or_create(
+    get_session_manager().get_or_create(
         ctx.persona,
         "main",
         max_messages=max_messages,

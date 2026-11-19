@@ -47,6 +47,16 @@ def get_turn_hub() -> TurnHub:
     return _turn_hub
 
 
+def get_session_manager() -> SessionManager:
+    """共有 SessionManager を返す（自発発言など別モジュールの書き手も同じ窓を使う）。
+
+    別インスタンスを作ると同一 ``(persona, session_id)`` に別の
+    ``TreeSessionWindow`` が生まれ、``INSERT OR REPLACE`` の last-write-wins で
+    片方の履歴が消える（kanban #66）。
+    """
+    return _session_manager
+
+
 class TurnBusyError(Exception):
     """同一 persona のターン実行中に新規ターン要求（router は 409 を返す）。"""
 
