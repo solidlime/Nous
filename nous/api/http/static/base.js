@@ -83,6 +83,7 @@ var TAB_LOADERS = {
   personas:  null,
   chat:      function() { return N.Chat.core.loadChat(); },
   settings:  function() { return N.Features.Settings.loadSettings(); },
+  projects: function() { return N.Features.Projects.loadProject(); },
   admin:     null,
   activity:  function() { return N.Features.Activity.loadActivity(true); },
 };

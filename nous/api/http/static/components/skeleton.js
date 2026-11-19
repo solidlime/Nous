@@ -52,6 +52,7 @@ var _selfManaged = new Set([
   "timeline",
   "activity",
   "wiki",
+  "projects",
 ]);
 
 /* ── Register a custom skeleton config for a tab ── */
