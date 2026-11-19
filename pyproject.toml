@@ -58,6 +58,9 @@ omit = ["tests/*", "*/migration/*"]
 
 [tool.mypy-baseline]
 baseline_path = "mypy-baseline.txt"
+# ベースラインより減った分（fixed）で落とさない。ゲートは「new == 0」だけ。
+# これを false のままだと、型エラーを直す PR がベースライン同期なしで赤になる。
+allow_unsynced = true
 
 [tool.coverage.report]
 show_missing = true
