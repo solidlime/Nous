@@ -106,6 +106,12 @@ class TestDueAndTags:
         overdue = _memory([schedule.AGENT_TASK_TAG, "cue:time:2026-11-17T09:00"])
         assert schedule.due_agent_tasks([due, overdue], NOW) == [due, overdue]
 
+    def test_overdue_beyond_72h_grace_is_dropped(self) -> None:
+        """docstring の主張（過期は OVERDUE_GRACE_HOURS=72h 内のみ）を固定する境界テスト（#68）。"""
+        edge = _memory([schedule.AGENT_TASK_TAG, "cue:time:2026-11-15T09:00"], content="ちょうど72h")
+        stale = _memory([schedule.AGENT_TASK_TAG, "cue:time:2026-11-15T08:00"], content="73h前")
+        assert schedule.due_agent_tasks([edge, stale], NOW) == [edge]
+
     def test_missing_agent_tag_is_ignored(self) -> None:
         assert schedule.due_agent_tasks([_memory(["cue:time:2026-11-18T09:00"])], NOW) == []
 

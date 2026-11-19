@@ -9,6 +9,15 @@
 例外は ``agent:task``（kanban #36）: 期限が来たら自分で1ターン走らせ、
 走らせた後にタグを外す（recur は次回を入れ直す）。
 
+発火の精度（kanban #64/#68）:
+
+- ``agent:task`` は ``_next_wait()`` が最短の未来期限まで眠るので、期限の
+  30 秒以降（``MIN_WAIT_SECONDS``）に走る。未来の期限が1つも無い時だけ
+  ``interval``（既定 1 時間・設定不可）で起きる。期限を過ぎたタスクは
+  ``OVERDUE_GRACE_HOURS``(=72h) 内なら次の巡回で拾い直す。
+- ``cue:time`` を持つ約束の照合（``prospective.due``）は毎時巡回なので、
+  表示は最大 1 時間古い。イベント駆動ではない。
+
 注意: 巡回対象は ``AppContextRegistry.personas()`` が持つ、すなわち
 **一度でも HTTP/チャットでアクセスされた persona だけ**（AppContext は遅延生成）。
 起動後に一度も触られない persona の期限はここでは拾わない。
@@ -188,12 +197,13 @@ class ProspectiveWorker:
         result = ctx.memory_service.update_memory(task.key, tags=tags)
         if result.is_ok:
             return True
+        # Success には error が無いので getattr 経由で拾う（実行時は常に Failure）
         logger.warning(
             "ProspectiveWorker: %s failed to rewrite tags persona=%s key=%s: %s",
             what,
             persona,
             task.key,
-            result.error,
+            getattr(result, "error", None),
         )
         return False
 

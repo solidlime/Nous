@@ -237,3 +237,30 @@ v037: `ALTER TABLE memories ADD COLUMN valid_from TEXT; ADD COLUMN valid_until T
 | `episode_search_enabled` | `True` | 2-tier fallback 検索の有効/無効 |
 
 全処理 best-effort: セグメンテーション・統合・検索のいずれかが失敗してもメインの会話フローは継続。
+
+---
+
+## Agent Scheduled Tasks（schedule_task / agent:task）
+
+エージェント（ペルソナ）が自分で決めた予定を登録し、指定時刻に自分で実行する機能（kanban #36/#64/#65）。builtin ツール `schedule_task` が `when`（ISO 日時か `+2h` 形式の相対表記、分精度）と `prompt` を、下記タグ付きの記憶として置く。`ProspectiveWorker`（`nous/application/workers/prospective_worker.py`）が期限に実行する。
+
+| タグ | 役割 |
+|---|---|
+| `agent:task` | 予定そのもの（実行し終えたら外す） |
+| `cue:time:<iso>` | 期限（分精度） |
+| `cue:recur:daily\|weekly` | 繰り返し（実行後に次回の期限を入れ直す） |
+| `agent:task:fail:<n>` | 失敗回数（`FAIL_LIMIT=3` で諦めて `agent.task.failed` を残す） |
+
+### 実行の流れ
+
+1. 期限になると worker が `run_self_turn` で `[自分で決めた予定] <prompt>` を 1 ターン走らせる（session_id=`self:<date>`）
+2. 結果の発言は `speak_to_main` でユーザーの main チャットへ届く
+3. 成功なら `agent:task` を外し、recur なら次回の `cue:time` を入れ直す。失敗なら失敗回数を足して次の巡回で再挑戦
+
+### 精度とグレース（kanban #68）
+
+- **定時実行**: worker は最短の未来期限まで眠るので、期限の 30 秒以降（`MIN_WAIT_SECONDS`）に走る。未来の期限が1つもない時だけ `interval`（既定 3600 秒・設定不可）で周期的に起きる
+- **譲り渡し**: 期限時に他のターン（ユーザーとの会話など）が走っていると実行を譲り、タグを外さず次の巡回（最大 1 時間後）で拾い直す
+- **過期グレース**: 期限を過ぎたタスクも `72h`（`OVERDUE_GRACE_HOURS`）以内なら対象。それより古いものは拾わない
+- **巡回対象**: 起動後に一度でも HTTP/チャットでアクセスされたペルソナだけ。触られていないペルソナの期限は拾われない
+- 約束の照合（`prospective.due` の session event、`cue:time` を持つコミットメントの通知）は毎時の巡回で行うため、表示は最大 1 時間古い
