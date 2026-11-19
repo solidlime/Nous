@@ -189,6 +189,43 @@ class TestSQLiteMemoryRepo:
         # memories_fts は memories_ad トリガに任せる（明示削除しない）
         assert memory_repo.search_keyword("ramen0").value == []
 
+    def test_delete_many_rolls_back_every_chunk_on_failure(
+        self, memory_repo: SQLiteMemoryRepository, sqlite_conn, monkeypatch
+    ):
+        """2 チャンク目で失敗したら 1 件も消えない（kanban #77）。
+
+        以前はチャンクごとに commit していたので、最大 _KEY_BATCH 件だけ
+        消えたまま Failure を返していた。
+        """
+        monkeypatch.setattr(SQLiteMemoryRepository, "_KEY_BATCH", 2)
+        raw_db = sqlite_conn.get_memory_db()
+        keys = [f"memory_2025010100000{i}" for i in range(3)]
+        for i, key in enumerate(keys):
+            memory_repo.save(self._make_memory(key, f"ramen{i}"))
+
+        class _BoomOnSecondChunk:
+            def __init__(self, conn):
+                self._conn = conn
+                self._deletes = 0
+
+            def execute(self, sql, *args, **kwargs):
+                if sql.startswith("DELETE FROM memory_strength"):
+                    self._deletes += 1
+                    if self._deletes == 2:
+                        raise RuntimeError("boom on chunk 2")
+                return self._conn.execute(sql, *args, **kwargs)
+
+            def __getattr__(self, name):
+                return getattr(self._conn, name)
+
+        boom = _BoomOnSecondChunk(raw_db)
+        monkeypatch.setattr(SQLiteMemoryRepository, "_db", property(lambda self: boom))
+        result = memory_repo.delete_many(keys)
+
+        assert not result.is_ok
+        rows = raw_db.execute("SELECT COUNT(*) AS n FROM memories").fetchone()
+        assert rows["n"] == 3
+
     def test_find_obsolete(self, memory_repo: SQLiteMemoryRepository):
         """archived / tombstoned / consolidated（旧 gist）を種別つきで返す。
 

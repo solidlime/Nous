@@ -328,10 +328,14 @@ class MemoryCrudMixin:
         unique = list(dict.fromkeys(keys))
         deleted = 0
         try:
+            # チャンク分割は SQLite のバインド変数上限を避けるためのもので、
+            # トランザクションは全チャンクで 1 つ（kanban #77）。途中で commit すると
+            # 2 チャンク目で失敗したとき半分だけ消えたまま Failure を返し、
+            # 呼び手は「 0 件削除」と誤解する。
+            self._db.execute("BEGIN IMMEDIATE")
             for start in range(0, len(unique), self._KEY_BATCH):
                 chunk = unique[start : start + self._KEY_BATCH]
                 marks = ",".join("?" for _ in chunk)
-                self._db.execute("BEGIN IMMEDIATE")
                 sql = f"DELETE FROM memory_strength WHERE memory_key IN ({marks})"  # nosec B608
                 self._db.execute(sql, chunk)
                 sql = f"DELETE FROM memory_entities WHERE memory_key IN ({marks})"  # nosec B608
@@ -343,7 +347,7 @@ class MemoryCrudMixin:
                 sql = f"DELETE FROM memories WHERE key IN ({marks})"  # nosec B608
                 cursor = self._db.execute(sql, chunk)
                 deleted += max(0, cursor.rowcount)
-                self._db.commit()
+            self._db.commit()
         except Exception as e:
             self._db.rollback()
             logger.error("Failed to delete %d memories: %s", len(unique), e)
