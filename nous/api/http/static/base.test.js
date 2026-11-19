@@ -4,12 +4,7 @@
    （既存の網はソース文字列の in 検査のみ）。
    ここでは base.js 全体を jsdom 上で実行し、文字列一致でなく
    ブート挙動（保存 persona 復元・catch/toast 不発・SSE 接続）で検証する。 */
-import { readFileSync } from 'fs';
-import { resolve, dirname } from 'path';
-import { fileURLToPath } from 'url';
-import { loadCore, loadStore } from './core/load-core.js';
-
-const __dirname = dirname(fileURLToPath(import.meta.url));
+import { loadCore, loadFile, loadStore } from './core/load-core.js';
 
 beforeAll(() => {
   loadCore();
@@ -20,7 +15,7 @@ beforeEach(() => {
   localStorage.clear();
   localStorage.setItem('mmcp-persona', 'herta');
   document.body.innerHTML =
-    '<div class="tab-bar"></div><div id="main-content"></div>' +
+    '<div class="tab-bar"></div><div class="header-controls"></div><div id="main-content"></div>' +
     '<div id="overview-content"></div>' +
     '<select id="persona-select"></select>' +
     '<button id="dark-toggle"></button>' +
@@ -28,23 +23,22 @@ beforeEach(() => {
     '<button id="create-persona-cancel"></button>' +
     '<form id="create-persona-form"></form>' +
     '<button id="delete-persona-btn"></button>' +
-    '<button id="hamburger-btn"></button>' +
-    '<button id="nav-drawer-close"></button>' +
     '<div id="mem-modal-overlay"></div>' +
     '<div id="shortcut-help-overlay"><button id="shortcut-help-close-btn"></button></div>';
 });
 
 it('boots without ReferenceError and restores the saved persona', async () => {
   const C = window.Nous.Core;
-  C.api = vi.fn(async () => ({ personas: ['herta', 'ruan'] }));
+  // personas[0]='ruan' ≠ saved 'herta': 復元経路だけが 'herta' を選び得る。
+  // (getStoredPersona() が壊れたら fallback 'ruan' になりアサーションが赤になる)
+  C.api = vi.fn(async () => ({ personas: ['ruan', 'herta'] }));
   C.applyTheme = vi.fn();
   C.connectSSE = vi.fn();
   C.toast = vi.fn();
   window.Nous.Components = { skeleton: { show: vi.fn(), hide: vi.fn() } };
   window.Nous.Features = { Overview: { loadOverview: vi.fn(async () => {}) } };
 
-  const code = readFileSync(resolve(__dirname, 'base.js'), 'utf-8');
-  new Function(code)(); // jsdom readyState is 'complete' → init() runs now
+  loadFile('../base.js'); // jsdom readyState is 'complete' → init() runs now
 
   await vi.waitFor(() => {
     expect(document.getElementById('persona-select').value).toBe('herta');

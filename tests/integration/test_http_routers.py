@@ -231,6 +231,16 @@ class TestDashboardEndpoints:
         ct = resp.headers.get("content-type", "")
         assert "html" in ct.lower()
 
+    async def test_dashboard_has_no_inline_scripts(self, client):
+        """#92 再発防止: JS は <script src> (defer) 列挙のみで配信し、
+        セクション HTML へのインライン埋め込みを禁止する。"""
+        import re
+
+        resp = await client.get(f"/dashboard/{PERSONA}")
+        assert resp.status_code == 200
+        inline = re.findall(r"<script(?![^>]*\bsrc=)", resp.text)
+        assert inline == [], f"inline <script> tags found: {len(inline)}"
+
     async def test_api_dashboard_returns_json(self, client):
         resp = await client.get(f"/api/dashboard/{PERSONA}")
         assert resp.status_code == 200
