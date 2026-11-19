@@ -55,10 +55,44 @@ TOKEN_HEADER = "X-Sandbox-Token"
 _FORBIDDEN_NETWORKS = frozenset({"host"})
 _DEFAULT_NETWORKS = frozenset({"none", "bridge"})
 _IMAGE_RE = re.compile(r"[A-Za-z0-9][A-Za-z0-9._/:@-]*")
+# IANA ゾーン名（Asia/Tokyo, UTC, Etc/GMT-9 など）。bash スクリプトに埋め込む前に通す。
+_TZ_RE = re.compile(r"[A-Za-z0-9_+-]+(?:/[A-Za-z0-9_+-]+)*")
 
 
 def _env(name: str, default: str) -> str:
     return os.environ.get(name) or default
+
+
+def _tz() -> str:
+    """sandbox に渡す TZ。個別上書き（SANDBOX_TZ）→ Nous 設定の timezone。
+
+    Nous 設定（``NOUS_TIMEZONE`` env / ``.env``、既定 Asia/Tokyo）がそのまま
+    sandbox に引き継がれる。settings の import は _tz() 内 — 循環回避と、
+    TZ が不要な経路（status / stop / exec）での起動コストのため。
+    SANDBOX_TZ は bash スクリプトに埋め込む前ここで形状検証する（settings 側は
+    available_timezones() 検証済み・SANDBOX_IMAGE は _IMAGE_RE 検証済みと対称に）。
+    値は bash スクリプトに埋め込むので、生成元に関係なく**出口で**も同じ検証を通す
+    — settings は RCM の setattr で field_validator を通らずに書き換わり得るため
+    （manager プロセスに現状 RCM は無いが、_tz() は汎用なので defense in depth）。
+    """
+    zone = _env("SANDBOX_TZ", "")
+    if zone and not _TZ_RE.fullmatch(zone):
+        # 不正値を渡すと /etc/timezone 未書き込み＋glibc が TZ を捨てて UTC に
+        # 落ちる — まさに潰したい「静かに壊れる」なので、警告して設定側に落とす。
+        logger.warning("SANDBOX_TZ %r はゾーン名の形ではない。Nous 設定側を使う", zone)
+        zone = ""
+    if not zone:
+        try:
+            from nous.config.settings import get_settings
+
+            zone = get_settings().timezone or "UTC"
+        except Exception:  # 設定不備で /exec を 500 にしない — 文字列エラー契約を守る
+            logger.warning("settings の読み込みに失敗。sandbox の TZ は UTC に落ちる", exc_info=True)
+            zone = "UTC"
+    if not isinstance(zone, str) or not _TZ_RE.fullmatch(zone):
+        logger.warning("sandbox TZ %r は不正な形。UTC に落とす", zone)
+        return "UTC"
+    return zone
 
 
 def _allowed_networks() -> frozenset[str]:
@@ -314,11 +348,35 @@ def _install_missing(container: str, packages: list[str]) -> list[str]:
     return missing
 
 
+def _apply_timezone(container: str) -> None:
+    """/etc/timezone と /etc/localtime を Nous 設定の TZ に揃える（新規作成時のみ）。
+
+    ``-e TZ=`` だけだと /etc/timezone を読む物が Etc/UTC 扱いになる
+    （requirements-herta §3 の「静かに壊れる」系）。zoneinfo が無ければ
+    silent skip — 失敗は警告で済み、run は殺さない（_install_missing と同じ方針）。
+    """
+    zone = _tz()
+    script = (
+        f'[ -f "/usr/share/zoneinfo/{zone}" ] '
+        rf'&& printf "%s\n" "{zone}" > /etc/timezone '
+        f'&& ln -sf "/usr/share/zoneinfo/{zone}" /etc/localtime'
+    )
+    proc, err = _call("exec", "-u", "0", container, "bash", "-lc", script, timeout=15.0)
+    if proc is None:
+        logger.warning("sandbox tz setup failed (%s): %s", container, err)
+        return
+    if proc.returncode != 0:
+        detail = (proc.stderr or "").strip()[:300]
+        logger.warning("sandbox tz setup failed (%s): %s", container, detail or f"exit {proc.returncode}")
+
+
 def _post_run(container: str) -> str | None:
-    """run 直後の面倒。戻り値に載るのは DNS の失敗だけ（apt は警告で済ませる）。"""
+    """run 直後の面倒。戻り値に載るのは DNS の失敗だけ（tz・apt は警告で済ませる）。"""
     # run 直後は必ず新規コンテナ。外部の docker rm で作り直された場合も
     # ここを通るので、root 以外の警告キャッシュはここで捨てる。
     _user_warned.discard(container)
+    # DNS 失敗でも tz は付けておく（新規作成はここを 1 回しか通らない）。
+    _apply_timezone(container)
     dns_err = _post_start_check(container)
     if dns_err:
         return dns_err
@@ -485,14 +543,15 @@ def _ensure_inner(
         "-e",
         f"HOME={home}",
         "-e",
-        f"TZ={os.environ.get('SANDBOX_TZ') or os.environ.get('TZ') or 'UTC'}",
+        f"TZ={_tz()}",
         # persona 側は UTF-8 前提。POSIX に落ちると Python が ASCII になる。
         "-e",
         "LANG=C.UTF-8",
         "-e",
         "LC_ALL=C.UTF-8",
     ]
-    # イメージの git config --system は persona / persona@nous.local。
+    # git identity の上書き（SANDBOX_GIT_USER_NAME / _EMAIL）。素 ubuntu には git 自体
+    # 無い — ペルソナが自分で入れた git が commit 時にこの GIT_AUTHOR_*/COMMITTER_* を拾う。
     # commit の author と committer を両方 env で上書きしないと片方だけ残る。
     for env_name, git_key in (("SANDBOX_GIT_USER_NAME", "NAME"), ("SANDBOX_GIT_USER_EMAIL", "EMAIL")):
         value = os.environ.get(env_name, "").strip()

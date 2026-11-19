@@ -17,6 +17,19 @@ from fastapi.testclient import TestClient
 
 from nous.services import sandbox_manager as sm
 
+
+@pytest.fixture(autouse=True)
+def _settings_cache():
+    """テストごとに get_settings の lru_cache を潰す — NOUS_TIMEZONE を触る
+    テストの Europe/Berlin が次のテストに残留しないように（テスト順非依存化）。
+    yield 前にも潰す — 先行テストファイルが cache を汚したままでもここから始める。"""
+    from nous.config.settings import get_settings
+
+    get_settings.cache_clear()
+    yield
+    get_settings.cache_clear()
+
+
 if TYPE_CHECKING:
     from collections.abc import Callable
     from pathlib import Path
@@ -249,10 +262,12 @@ def test_run_uses_cpu_shares_because_the_kernel_has_no_cfs(client, fake) -> None
     assert run[run.index("--cpu-shares") + 1] == "512"
 
 
-def test_run_inherits_the_parent_tz_and_forces_utf8(client, fake, monkeypatch) -> None:
-    """persona 側は Asia/Tokyo。UTC のままだとログが 9 時間ずれる。"""
-    monkeypatch.setenv("TZ", "Asia/Tokyo")
+def test_run_uses_the_nous_setting_for_tz_and_forces_utf8(client, fake, monkeypatch) -> None:
+    """sandbox の TZ は Nous 設定（Asia/Tokyo）から。親プロセスの TZ はもう継承しない。"""
+    monkeypatch.setenv("TZ", "UTC")
     monkeypatch.delenv("SANDBOX_TZ", raising=False)
+    # .env の NOUS_TIMEZONE は delenv で消えないので、明示して既定に頼らない
+    monkeypatch.setenv("NOUS_TIMEZONE", "Asia/Tokyo")
     fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
     fake.by_subcommand["run"] = (0, "abc123\n", "")
 
@@ -264,8 +279,22 @@ def test_run_inherits_the_parent_tz_and_forces_utf8(client, fake, monkeypatch) -
     assert "LC_ALL=C.UTF-8" in run
 
 
-def test_sandbox_tz_overrides_the_parent_tz(client, fake, monkeypatch) -> None:
-    monkeypatch.setenv("TZ", "Asia/Tokyo")
+def test_tz_follows_the_nous_timezone_env(client, fake, monkeypatch) -> None:
+    """NOUS_TIMEZONE を変えれば sandbox の TZ も付いてくる（設定が 1 本化）。"""
+    monkeypatch.setenv("NOUS_TIMEZONE", "Europe/Berlin")
+    monkeypatch.delenv("SANDBOX_TZ", raising=False)
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+
+    assert client.post("/exec", json={"persona": "alice", "command": "id"}).json()["status"] == "ok"
+
+    run = next(c for c in fake.calls if c[0] == "run")
+    assert "TZ=Europe/Berlin" in run
+
+
+def test_sandbox_tz_overrides_the_nous_setting(client, fake, monkeypatch) -> None:
+    """SANDBOX_TZ は Nous 設定より優先（1 台だけ変えたいとき用）。"""
+    monkeypatch.setenv("NOUS_TIMEZONE", "Europe/Berlin")
     monkeypatch.setenv("SANDBOX_TZ", "UTC")
     fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
     fake.by_subcommand["run"] = (0, "abc123\n", "")
@@ -274,6 +303,111 @@ def test_sandbox_tz_overrides_the_parent_tz(client, fake, monkeypatch) -> None:
 
     run = next(c for c in fake.calls if c[0] == "run")
     assert "TZ=UTC" in run
+
+
+def test_sandbox_tz_malformed_falls_back_to_the_nous_setting(client, fake, monkeypatch) -> None:
+    """SANDBOX_TZ がゾーン名の形でなければ警告のうえ Nous 設定に落とす（bash 埋め込み前の防衛）。"""
+    monkeypatch.setenv("NOUS_TIMEZONE", "Europe/Berlin")
+    monkeypatch.setenv("SANDBOX_TZ", "Asia/Tokyo; rm -rf /")
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+
+    assert client.post("/exec", json={"persona": "alice", "command": "id"}).json()["status"] == "ok"
+
+    run = next(c for c in fake.calls if c[0] == "run")
+    assert "TZ=Europe/Berlin" in run
+    # 不正値がどこかの argv 要素に紛れ込んでいないか（TZ=Europe/Berlin だけでは足りない）
+    assert not any("rm -rf" in a for a in run)
+
+
+def test_tz_falls_back_to_utc_when_settings_is_mutated_at_runtime(client, fake, monkeypatch) -> None:
+    """RCM の setattr が field_validator を通らず settings.timezone を汚染していても、
+    _tz() の出口検証が bash スクリプトへの注入を防ぐ（settings 由来も無条件に刈る）。"""
+    from nous.config.settings import get_settings
+
+    monkeypatch.setenv("NOUS_TIMEZONE", "Europe/Berlin")
+    settings = get_settings()
+    # RCM（admin API）と同じ setattr — validate_assignment が無いので素通りする
+    settings.timezone = 'Asia/Tokyo"; touch /tmp/pwned; "'
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+
+    assert client.post("/exec", json={"persona": "alice", "command": "id"}).json()["status"] == "ok"
+
+    run = next(c for c in fake.calls if c[0] == "run")
+    assert "TZ=UTC" in run
+    # sink の手前（run argv）だけではなく、全 docker 呼び出し（tz の exec スクリプト込み）に漏れがないこと
+    assert not any("pwned" in " ".join(c) for c in fake.calls)
+    # tz の exec が初期られた zone（UTC）で動いていること — 汚染値が /etc/timezone に書かれていない
+    assert any(c[0] == "exec" and "/usr/share/zoneinfo/UTC" in " ".join(c) for c in fake.calls)
+
+
+def test_apply_timezone_writes_etc_timezone_before_the_dns_check(client, fake, monkeypatch) -> None:
+    """新規作成直後に /etc/timezone と /etc/localtime を書く。DNS チェックより先。"""
+    monkeypatch.delenv("SANDBOX_TZ", raising=False)
+    # .env の NOUS_TIMEZONE は delenv で消えないので、明示して既定に頼らない
+    monkeypatch.setenv("NOUS_TIMEZONE", "Asia/Tokyo")
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+
+    assert client.post("/exec", json={"persona": "alice", "command": "id"}).json()["status"] == "ok"
+
+    execs = [c for c in fake.calls if c[0] == "exec"]
+    assert execs, "run 直後の後処理 exec が無い"
+    tz_call = next(c for c in execs if "/etc/timezone" in " ".join(c))
+    script = tz_call[tz_call.index("-lc") + 1]
+    assert 'printf "%s\\n" "Asia/Tokyo" > /etc/timezone' in script
+    assert 'ln -sf "/usr/share/zoneinfo/Asia/Tokyo" /etc/localtime' in script
+    # DNS チェック（getent）より先に書く — DNS 失敗コンテナにも tz が付く。
+    getent_index = next(i for i, c in enumerate(execs) if "getent" in " ".join(c))
+    assert execs.index(tz_call) < getent_index
+
+
+def test_apply_timezone_failure_does_not_kill_the_run(client, fake, monkeypatch) -> None:
+    """tz の exec が失敗しても警告だけ。run を殺さない（apt と同じ方針）。"""
+    monkeypatch.setenv("NOUS_TIMEZONE", "Europe/Berlin")
+    monkeypatch.delenv("SANDBOX_TZ", raising=False)
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+    # exec は tz スクリプトも DNS チェックもユーザーコマンドも同じ by_subcommand 応答を
+    # 共有する。tz だけ失敗させるため docker を wrapper クラスで置き換える。
+    real_docker = fake
+
+    class TZFailDocker:
+        def __init__(self, inner: FakeDocker) -> None:
+            self.inner = inner
+            self.calls = inner.calls
+            self.by_subcommand = inner.by_subcommand
+
+        def __call__(self, *args: str, timeout: float = 60.0) -> subprocess.CompletedProcess[str]:
+            if args and args[0] == "exec" and "/etc/timezone" in " ".join(args):
+                self.calls.append(args)
+                return subprocess.CompletedProcess(["docker", *args], 2, "", "zoneinfo missing")
+            return self.inner(*args, timeout=timeout)
+
+    monkeypatch.setattr(sm, "_docker", TZFailDocker(real_docker))
+
+    body = client.post("/exec", json={"persona": "alice", "command": "true"}).json()
+    assert body["status"] == "ok", body
+    assert any(
+        args[0] == "exec"
+        and "/etc/timezone" in " ".join(args)
+        and "/usr/share/zoneinfo/Europe/Berlin" in " ".join(args)
+        for args in fake.calls
+    )
+
+
+def test_apply_timezone_is_skipped_when_the_container_already_exists(client, fake, monkeypatch) -> None:
+    """既存コンテナの start 経路では書かない（エージェントが変えた /etc/timezone を尊重）。"""
+    monkeypatch.delenv("SANDBOX_TZ", raising=False)
+    fake.by_subcommand["inspect"] = (0, "false 1\n", "")
+    fake.by_subcommand["start"] = (0, "", "")
+    fake.by_subcommand["exec"] = (0, "ok\n", "")
+
+    body = client.post("/exec", json={"persona": "alice", "command": "id"}).json()
+    assert body["status"] == "ok", body
+    assert ("start", "alice-sandbox") in fake.calls
+    assert not any(c[0] == "exec" and "/etc/timezone" in " ".join(c) for c in fake.calls)
 
 
 def test_run_lets_env_override_the_git_identity(client, fake, monkeypatch) -> None:

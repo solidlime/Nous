@@ -83,8 +83,10 @@ com.nous.sandbox=1
 root なので bind mount 先の所有者・パーミッションを気にせず書ける。
 `--memory` / `--cpu-shares` / `--pids-limit` の上限は以前どおりかけたまま。
 
-イメージ側は root が既定。`/home/agent` と `/home/agent/.agents` は Dockerfile で
-`mkdir` しておく（`-v` の親を Docker に root 0755 で作らせるより明示が安全）。
+イメージは素の `ubuntu:24.04`（ツール類は入っていない）。`/home/agent` と
+`/home/agent/.agents` は `docker run -v` の親ディレクトリを Docker が root 0755 で
+自動生成する（ツールはペルソナが root で自由に `apt` / `pip` する思想。
+#96 以前の焼き込みイメージは 2026-11-20 に廃止）。
 
 **旧 uid 運用のコンテナが残っていると、`$HOME` に書けないまま古い挙動になる。**
 running / start の経路で `docker inspect` の `.Config.User` を見て、`{"", "0", "0:0"}`
@@ -193,10 +195,13 @@ env にしか無いので、ホストの shell で `$T` に代入しても空に
 ```bash
 # JSON は -e BODY で渡す。トークンはホストの ps にも出ない。
 docker exec -e BODY='{"persona":"herta"}' nous-sandbox-manager sh -c 'curl -sS -X POST http://127.0.0.1:8080/snapshot -H "X-Sandbox-Token: $NOUS_SANDBOX_MANAGER_TOKEN" -H "Content-Type: application/json" -d "$BODY"'
-# -> {"status":"ok","image":"ghcr.io/solidlime/nous-sandbox:herta-snap-20261119-042311-123456"}
+# -> {"status":"ok","image":"ubuntu:herta-snap-20261119-042311-123456"}
 ```
 
 戻り値の `image` を控える。これがその時点のマシン全体（apt 導入分・`/etc`・`/opt/venv` を含む）。
+タグは `SANDBOX_IMAGE` の repo 部分から導出される — 素の `ubuntu:24.04` のままだと
+snapshot は `ubuntu:herta-snap-...` に生える。公式イメージのタグと混ぜたくなければ
+`SANDBOX_IMAGE` に namespaced な値（例: `registry/nous-sandbox:base`）を渡して運用する。
 
 **snapshot はホストのローカルイメージでしかない。** ディスク逼迫・`docker image prune -a`・移設で消える。
 backup の代用ではない（タグの掃除は下の「保留」のとおり明示 `rm` のみ）。
@@ -207,9 +212,12 @@ backup の代用ではない（タグの掃除は下の「保留」のとおり�
 curl では自分を殺すだけになる。
 
 ```bash
-docker exec -e BODY='{"persona":"herta","image":"ghcr.io/solidlime/nous-sandbox:herta-snap-20261119-042311-123456"}' nous-sandbox-manager sh -c 'curl -sS -X POST http://127.0.0.1:8080/restore -H "X-Sandbox-Token: $NOUS_SANDBOX_MANAGER_TOKEN" -H "Content-Type: application/json" -d "$BODY"'
+docker exec -e BODY='{"persona":"herta","image":"ubuntu:herta-snap-20261119-042311-123456"}' nous-sandbox-manager sh -c 'curl -sS -X POST http://127.0.0.1:8080/restore -H "X-Sandbox-Token: $NOUS_SANDBOX_MANAGER_TOKEN" -H "Content-Type: application/json" -d "$BODY"'
 # -> {"status":"ok"}
 ```
+
+restore はコンテナを作り直すので `/etc/timezone` も Nous 設定（`NOUS_TIMEZONE` / `SANDBOX_TZ`）
+で上書きされる。コンテナ内で変えた TZ までも残したい場合は、restore 後に exec で設定し直す。
 
 コンテナは ID 指定で消してから作り直す（inspect と rm の間に同名で作り直されても他人を消さない）。
 bind mount は消さないので、workspace / wiki / uploads の中身は元のまま（コンテナ内の
@@ -217,12 +225,13 @@ bind mount は消さないので、workspace / wiki / uploads の中身は元の
 
 ### 3. イメージ更新（デプロイ）
 
-Dockerfile を変えたら、イメージを作り直してから**古いコンテナを消す**。
-古いコンテナは古い image のまま残るので、`docker run` は新しいイメージを使わない。
+既定イメージは素の `ubuntu:24.04`。イメージを変えたいときは独自にビルドして
+`SANDBOX_IMAGE` で渡す（compose の既定も `ubuntu:24.04` に揃えた）。
 
 ```bash
-# 新しいイメージをビルド（例）
-docker build -t ghcr.io/solidlime/nous-sandbox:latest docker/sandbox
+# カスタムイメージの例: 自前 Dockerfile をビルドして
+# docker-compose.yml の SANDBOX_IMAGE に渡す
+docker build -t my-sandbox:latest /path/to/ctx
 
 # ワンタイム掃除: sandbox を全部消す。次回 exec で新イメージから作り直される。
 # 0 件でも usage エラーにならないよう xargs -r。
@@ -230,6 +239,19 @@ docker ps -aq --filter label=com.nous.sandbox=1 | xargs -r docker rm -f
 ```
 
 **消す前に必ず snapshot を取る。** 消すと writable layer（apt で入れたもの・`/etc` の変更）は失われる。
+
+#### 既存稼働コンテナの tz 後付け（ワンタイム）
+
+2026-11-20 より前に作られたコンテナの `/etc/timezone` は空のまま
+（run 直後の tz 設定フックが無かった時代）。Nous 側を更新しても既存コンテナには
+自動で反映されないので、運用側が 1 回だけ実行する:
+
+```bash
+docker exec <persona>-sandbox bash -c '[ -f /usr/share/zoneinfo/Asia/Tokyo ] && printf "Asia/Tokyo\n" > /etc/timezone && ln -sf /usr/share/zoneinfo/Asia/Tokyo /etc/localtime'
+```
+
+（以降の新規作成コンテナは `_apply_timezone` が run 直後に Nous 設定の
+`timezone` を自動で書き込む。）
 bind mount の中身（workspace / wiki / uploads / media / skills）は消えない。
 
 ### 4. デプロイ後の実機チェックリスト
@@ -264,7 +286,7 @@ sandbox 既定になり（`workspace_root` は要らない）、別ツール `sa
 |---|---|---|
 | `sandbox_enabled` | `false` | sandbox を既定のシェルにするスイッチ |
 | `sandbox_manager_url` | `""` | manager の URL。空なら enabled でもローカル実行のまま |
-| `sandbox_image` | （空） | 生成するコンテナのイメージ。空なら manager の `SANDBOX_IMAGE`（コード既定 `ubuntu:24.04` / compose は `ghcr.io/solidlime/nous-sandbox:latest` = `docker/sandbox/Dockerfile`） |
+| `sandbox_image` | （空） | 生成するコンテナのイメージ。空なら manager の `SANDBOX_IMAGE`（コード既定・compose 既定とも `ubuntu:24.04`） |
 | `sandbox_network` | （空） | sandbox のネットワーク。空なら manager の `SANDBOX_NETWORK`（コード既定 `bridge` / compose は `nous-net`）。Docker 埋め込み DNS で `nous` を引くために user-defined network に載せている。manager の API にも届くので、トークン管理は前提 |
 | `sandbox_memory` | （空） | メモリ上限。空なら manager の `SANDBOX_MEMORY` |
 | `sandbox_idle_minutes` | `0` | 停止までのアイドル時間。0 なら manager の `SANDBOX_IDLE_MINUTES` |
@@ -281,13 +303,14 @@ manager に届かない・未設定のときは `status="error"` を返す。例
 | `NOUS_DATA_ROOT` | `/data` | manager コンテナ内のデータ根。ログに使う |
 | `SANDBOX_HOST_DATA_ROOT` | （inspect で自動） | bind mount の source。**ホスト絶対パス**で渡す。inspect の結果と違えば拒否する |
 | `SANDBOX_MANAGER_HOST` | `0.0.0.0` | uvicorn の bind。ホストで直接動かすなら `127.0.0.1` |
-| `SANDBOX_IMAGE` | `ubuntu:24.04` | 未知の image を要求されたときのフォールバック（コード既定）。compose は `${SANDBOX_IMAGE:-ghcr.io/solidlime/nous-sandbox:latest}` を渡す（`docker/sandbox/Dockerfile` のビルド）。ホスト直起動時は必ず設定する。`/snapshot` の repo 導出にも使う |
+| `SANDBOX_IMAGE` | `ubuntu:24.04` | 未知の image を要求されたときのフォールバック（コード既定）。compose も `${SANDBOX_IMAGE:-ubuntu:24.04}` を渡す。ホスト直起動時は必ず設定する。`/snapshot` の repo 導出にも使う |
 | `SANDBOX_NETWORK` | `bridge`（コード既定） | 上の `sandbox_network` の既定。compose は `nous-net` を渡す（Docker 埋め込み DNS で `nous` を引くため） |
 | `SANDBOX_ALLOWED_NETWORKS` | （空） | 許すネットワークの追加分（カンマ区切り）。既定で `none` と `bridge` だけ。compose は `nous-net` を足している |
-| `SANDBOX_TZ` | 親の `TZ`（無ければ `UTC`） | sandbox に渡す `TZ`。compose は `TZ: ${TZ:-Asia/Tokyo}` を manager 自体に渡している |
+| `SANDBOX_TZ` | Nous 設定の `timezone`（`NOUS_TIMEZONE`、既定 `Asia/Tokyo`） | sandbox に渡す `TZ`。未設定なら Nous 設定をそのまま引き継ぐ。`SANDBOX_TZ` で個別に上書きできる（ゾーン名の形でない値は警告のうえ無視）。run 直後には `/etc/timezone` と `/etc/localtime` も同じ値に書き換える |
+| `NOUS_TIMEZONE` | `Asia/Tokyo` | Nous 本体と同じ env。compose が manager に渡し、`SANDBOX_TZ` 未設定なら sandbox の TZ もこれで決まる（設定が 1 本化） |
 | `SANDBOX_DNS_CHECK` | `1` | `1` なら起動後に `getent hosts nous` を叩き、失敗したら `status="error"`。`0` で skip |
-| `SANDBOX_APT_EXTRA` | （空） | 起動時に差分インストールする apt パッケージ（カンマ区切り）。`dpkg -s` で不足分だけ `apt-get install`。失敗しても警告だけで run は通す |
-| `SANDBOX_GIT_USER_NAME` / `SANDBOX_GIT_USER_EMAIL` | （空） | 空ならイメージの `git config --system`（persona / <persona@nous.local>）。設定すると `GIT_AUTHOR_*` / `GIT_COMMITTER_*` で上書きする |
+| `SANDBOX_APT_EXTRA` | （空） | 起動時に差分インストールする apt パッケージ（カンマ区切り）。`dpkg -s` で不足分だけ `apt-get install`。失敗しても警告だけで run は通す。TZ 適用は apt より先に走るので、tzdata が無いイメージに `tzdata` を足しても初回の TZ 適用には間に合わない（その場合は exec で設定する） |
+| `SANDBOX_GIT_USER_NAME` / `SANDBOX_GIT_USER_EMAIL` | （空） | 空なら `GIT_AUTHOR_*` / `GIT_COMMITTER_*` に `<persona>` / `<persona@nous.local>` を渡す（素 ubuntu には git が入っていないので、ペルソナが入れた git がこの env を拾って commit identity になる）。設定するとその値で上書きする |
 | `SANDBOX_MEMORY` | `4g` | 上の `sandbox_memory` の既定 |
 | `SANDBOX_IDLE_MINUTES` | `30` | 上の `sandbox_idle_minutes` の既定 |
 

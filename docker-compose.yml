@@ -50,6 +50,7 @@ services:
       NOUS_SANDBOX_ENABLED: ${NOUS_SANDBOX_ENABLED:-true}
       NOUS_SANDBOX_MANAGER_URL: http://nous-sandbox-manager:8080
       NOUS_SANDBOX_MANAGER_TOKEN: ${NOUS_SANDBOX_MANAGER_TOKEN:?set NOUS_SANDBOX_MANAGER_TOKEN}
+      NOUS_TIMEZONE: ${NOUS_TIMEZONE:-Asia/Tokyo}
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:26262/health"]
       interval: 30s
@@ -100,13 +101,16 @@ services:
     environment:
       NOUS_DATA_ROOT: /data
       NOUS_SANDBOX_MANAGER_TOKEN: ${NOUS_SANDBOX_MANAGER_TOKEN:?set NOUS_SANDBOX_MANAGER_TOKEN}
-      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-ghcr.io/solidlime/nous-sandbox:latest}
+      SANDBOX_IMAGE: ${SANDBOX_IMAGE:-ubuntu:24.04}
       # sandbox を user-defined network に載せると Docker の埋め込み DNS で nous が引ける。
       # 既定 bridge では引けない（外部 egress は通るので「静かに壊れる」）。
       SANDBOX_NETWORK: ${SANDBOX_NETWORK:-nous-net}
       # 上の SANDBOX_NETWORK を許可リストに足す。_DEFAULT_NETWORKS は none / bridge だけ。
       SANDBOX_ALLOWED_NETWORKS: ${SANDBOX_ALLOWED_NETWORKS:-nous-net}
-      # sandbox の TZ。既定はこの値（SANDBOX_TZ で個別に上書きできる）。
+      # sandbox の TZ。Nous 設定（NOUS_TIMEZONE）を manager 経由で引き継ぐ。
+      # SANDBOX_TZ で個別上書きできる。
+      NOUS_TIMEZONE: ${NOUS_TIMEZONE:-Asia/Tokyo}
+      # manager 自身のプロセス TZ（logger 用）。sandbox への伝達は NOUS_TIMEZONE 側。
       TZ: ${TZ:-Asia/Tokyo}
       SANDBOX_MEMORY: ${SANDBOX_MEMORY:-4g}
       # 焼かずに起動時に dpkg -s で差分だけ apt install するパッケージ（カンマ区切り）
