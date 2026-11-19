@@ -22,7 +22,7 @@ def _client(**kwargs) -> TestClient:
 
 class TestSecurityHeaders:
     EXPECTED = {
-        "content-security-policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' https://cdn.tailwindcss.com https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdnjs.cloudflare.com; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' blob: data: https://fonts.googleapis.com https://fonts.gstatic.com; media-src 'self' data: blob:",
+        "content-security-policy": "default-src 'self'; base-uri 'self'; object-src 'none'; frame-ancestors 'none'; script-src 'self' https://cdn.jsdelivr.net https://unpkg.com https://cdnjs.cloudflare.com; style-src 'self' 'unsafe-inline' https://fonts.googleapis.com https://unpkg.com https://cdnjs.cloudflare.com; img-src 'self' data: blob:; font-src 'self' https://fonts.gstatic.com; connect-src 'self' blob: data: https://fonts.googleapis.com https://fonts.gstatic.com; media-src 'self' data: blob:",
         "x-content-type-options": "nosniff",
         "x-frame-options": "DENY",
         "referrer-policy": "strict-origin-when-cross-origin",
@@ -52,7 +52,7 @@ class TestSecurityHeaders:
         from nous.config.settings import Settings
 
         original_getter = main_mod.get_settings
-        main_mod.get_settings = lambda: Settings()  # type: ignore[method-assign]
+        main_mod.get_settings = lambda: Settings()
         try:
             app = MemoryFastMCP("test").streamable_http_app()
             middleware_types = [m.cls for m in app.user_middleware]

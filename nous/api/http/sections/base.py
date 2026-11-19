@@ -23,14 +23,13 @@ def render_head() -> str:
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
     <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.tailwindcss.com" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
     <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js" defer></script>
     <link href="https://unpkg.com/vis-timeline/styles/vis-timeline-graph2d.min.css" rel="stylesheet" />
     <script src="https://unpkg.com/vis-timeline/standalone/umd/vis-timeline-graph2d.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js" defer></script>
     <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js" defer></script>
-    <script src="https://unpkg.com/lucide@latest" defer></script>
+    <script src="/static/vendor/lucide.min.js" defer></script>
     <link rel="stylesheet" href="/static/styles/variables.css">
     <link rel="stylesheet" href="/static/styles/reset.css">
     <link rel="stylesheet" href="/static/styles/layout.css">
@@ -38,6 +37,7 @@ def render_head() -> str:
     <link rel="stylesheet" href="/static/styles/components.css">
     <link rel="stylesheet" href="/static/styles/chat.css">
     <link rel="stylesheet" href="/static/styles/chat-mobile.css">
+    <link rel="stylesheet" href="/static/styles/utilities.css">
     <!-- Nous Core Modules (Phase 1: Foundation) -->
     <script src="/static/core/namespace.js" defer></script>
     <script src="/static/core/constants.js" defer></script>

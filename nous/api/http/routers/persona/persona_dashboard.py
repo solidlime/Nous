@@ -292,8 +292,7 @@ def _render_setup_page() -> str:
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Nous — Setup</title>
 <link rel="icon" type="image/png" href="/static/icon.png">
-<script src="https://cdn.tailwindcss.com"></script>
-<script src="https://unpkg.com/lucide@latest"></script>
+<script src="/static/vendor/lucide.min.js"></script>
 <style>
   body {
     background: linear-gradient(135deg, #0f0a1a 0%, #1a1035 50%, #0f0a1a 100%);
