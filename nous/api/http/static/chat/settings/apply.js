@@ -84,21 +84,29 @@
     set("chat-api-key", cfg.api_key || "");
     set("chat-base-url", cfg.base_url || "");
 
-    set("chat-temperature", cfg.temperature == null ? 0.7 : cfg.temperature);
+    // 既定値の単一の正は defaults API（N.Chat.settings._defaultOf）。
+    // ここでのリテラルは API 未取得時の保険。
+    var _defaultOf = N.Chat.settings._defaultOf;
+    set("chat-temperature", cfg.temperature ?? (_defaultOf("temperature") ?? 0.7));
     setChecked("chat-dynamic-temperature", cfg.dynamic_temperature !== false);
     set(
       "chat-emotion-temperature-scale",
-      cfg.emotion_temperature_scale == null
-        ? 0.2
-        : cfg.emotion_temperature_scale,
+      cfg.emotion_temperature_scale ??
+        (_defaultOf("emotion_temperature_scale") ?? 0.2),
     );
-    set("chat-top-p", cfg.top_p == null ? 1 : cfg.top_p);
-    set("chat-max-tokens", cfg.max_tokens || 8192);
-    set("chat-max-tool-calls", cfg.max_tool_calls || 5);
+    set("chat-top-p", cfg.top_p ?? (_defaultOf("top_p") ?? 1));
+    set("chat-max-tokens", cfg.max_tokens || (_defaultOf("max_tokens") ?? 8192));
+    set(
+      "chat-max-tool-calls",
+      cfg.max_tool_calls || (_defaultOf("max_tool_calls") ?? 5),
+    );
     set("chat-system-prompt", cfg.system_prompt || "");
     setChecked("chat-auto-extract", cfg.auto_extract !== false);
     set("chat-extract-model", cfg.extract_model || "");
-    set("chat-extract-max-tokens", cfg.extract_max_tokens || 512);
+    set(
+      "chat-extract-max-tokens",
+      cfg.extract_max_tokens || (_defaultOf("extract_max_tokens") ?? 512),
+    );
     setChecked("chat-enable-memory-tools", cfg.enable_memory_tools !== false);
     // Temperature display sync
     const tempEl = document.getElementById("chat-temp-val");
@@ -179,13 +187,15 @@
     setChecked("chat-mental-model-enabled", cfg.mental_model_enabled !== false);
     set(
       "chat-mental-model-min-samples",
-      cfg.mental_model_min_samples == null ? 3 : cfg.mental_model_min_samples,
+      cfg.mental_model_min_samples ??
+        (_defaultOf("mental_model_min_samples") ?? 3),
     );
     // Character judge / repair settings
     setChecked("chat-character-judge-enabled", cfg.character_judge_enabled !== false);
     set(
       "chat-character-repair-max-attempts",
-      cfg.character_repair_max_attempts == null ? 2 : cfg.character_repair_max_attempts,
+      cfg.character_repair_max_attempts ??
+        (_defaultOf("character_repair_max_attempts") ?? 2),
     );
     // Retrieval weights
     const setSlider = (id, valId, v) => {
@@ -199,36 +209,53 @@
     setSlider(
       "chat-recency-weight",
       "chat-recency-weight-val",
-      cfg.retrieval_recency_weight == null ? 0.3 : cfg.retrieval_recency_weight,
+      cfg.retrieval_recency_weight ??
+        (_defaultOf("retrieval_recency_weight") ?? 0.3),
     );
     setSlider(
       "chat-importance-weight",
       "chat-importance-weight-val",
-      cfg.retrieval_importance_weight == null
-        ? 0.3
-        : cfg.retrieval_importance_weight,
+      cfg.retrieval_importance_weight ??
+        (_defaultOf("retrieval_importance_weight") ?? 0.3),
     );
     setSlider(
       "chat-relevance-weight",
       "chat-relevance-weight-val",
-      cfg.retrieval_relevance_weight == null
-        ? 0.4
-        : cfg.retrieval_relevance_weight,
+      cfg.retrieval_relevance_weight ??
+        (_defaultOf("retrieval_relevance_weight") ?? 0.4),
     );
     // Context compression settings
-    set("chat-stored-msgs", cfg.max_stored_messages ?? 200);
-    set("chat-context-max-tokens", cfg.context_max_tokens ?? "");
     set(
-      "chat-compression-threshold",
-      Math.round((cfg.context_compression_threshold ?? 0.8) * 100),
+      "chat-stored-msgs",
+      cfg.max_stored_messages ?? (_defaultOf("max_stored_messages") ?? 200),
     );
+    set("chat-context-max-tokens", cfg.context_max_tokens ?? "");
+    var _compressionPct = Math.round(
+      (cfg.context_compression_threshold ??
+        (_defaultOf("context_compression_threshold") ?? 0.8)) * 100,
+    );
+    set("chat-compression-threshold", _compressionPct);
     document.getElementById("threshold-display").textContent =
-      Math.round((cfg.context_compression_threshold ?? 0.8) * 100) + "%";
-    set("chat-compression-mode", cfg.context_compression_mode || "auto");
-    set("chat-keep-recent", cfg.context_keep_recent_turns ?? 2);
-    set("chat-memory-preload", cfg.memory_preload_count ?? 5);
-    set("chat-memory-digest", cfg.memory_digest_count ?? 5);
-    set("chat-language", cfg.language || "ja");
+      _compressionPct + "%";
+    set(
+      "chat-compression-mode",
+      cfg.context_compression_mode ||
+        (_defaultOf("context_compression_mode") ?? "auto"),
+    );
+    set(
+      "chat-keep-recent",
+      cfg.context_keep_recent_turns ??
+        (_defaultOf("context_keep_recent_turns") ?? 2),
+    );
+    set(
+      "chat-memory-preload",
+      cfg.memory_preload_count ?? (_defaultOf("memory_preload_count") ?? 5),
+    );
+    set(
+      "chat-memory-digest",
+      cfg.memory_digest_count ?? (_defaultOf("memory_digest_count") ?? 5),
+    );
+    set("chat-language", cfg.language || (_defaultOf("language") ?? "ja"));
     setChecked(
       "chat-dynamic-tool-selection",
       cfg.dynamic_tool_selection !== false,

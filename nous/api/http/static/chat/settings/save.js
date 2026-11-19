@@ -18,6 +18,13 @@
     fmtDate = C.fmtDate;
   var S = window.S;
 
+  // 空欄時のフォールバックはサーバ既定を正とする（defaults API 経由）。
+  // 第2引数は API 未取得時の保険。
+  function _defStr(key, fallback) {
+    var v = N.Chat.settings._defaultOf(key);
+    return String(v === undefined || v === null ? fallback : v);
+  }
+
   async function saveChatConfig() {
     if (!S.persona) {
       toast("ペルソナを選択してください", "error");
@@ -88,9 +95,12 @@
         document.getElementById("chat-memory-preload").value,
       ),
       memory_digest_count: parseInt(
-        document.getElementById("chat-memory-digest")?.value || "5",
+        document.getElementById("chat-memory-digest")?.value ||
+          _defStr("memory_digest_count", 5),
       ),
-      language: document.getElementById("chat-language")?.value || "ja",
+      language:
+        document.getElementById("chat-language")?.value ||
+        _defStr("language", "ja"),
       dynamic_tool_selection: getChecked("chat-dynamic-tool-selection"),
       // ツール実行の自動承認: ON = "auto" / OFF = "ask"（UI に出さない
       // allowlist は、トグルを触っていなければそのまま保つ）
@@ -106,19 +116,22 @@
       episode_search_enabled: getChecked("chat-episode-search"),
       show_message_timestamps: getChecked("chat-show-timestamps"),
       max_tool_calls: parseInt(
-        document.getElementById("chat-max-tool-calls")?.value || "5",
+        document.getElementById("chat-max-tool-calls")?.value ||
+          _defStr("max_tool_calls", 5),
       ),
       system_prompt: document.getElementById("chat-system-prompt").value.trim(),
       auto_extract: getChecked("chat-auto-extract"),
       extract_model:
         document.getElementById("chat-extract-model")?.value.trim() || "",
       extract_max_tokens: parseInt(
-        document.getElementById("chat-extract-max-tokens")?.value || "512",
+        document.getElementById("chat-extract-max-tokens")?.value ||
+          _defStr("extract_max_tokens", 512),
       ),
       enable_memory_tools: getChecked("chat-enable-memory-tools"),
       mcp_servers: N.Chat.settings.parseMcpJson(),
       tool_result_max_chars: parseInt(
-        document.getElementById("chat-tool-result-max")?.value || "4000",
+        document.getElementById("chat-tool-result-max")?.value ||
+          _defStr("tool_result_max_chars", 4000),
       ),
       enabled_skills: (N.Chat.settings.BUILTIN_SKILLS || ["search"]).concat(
         (N.Chat.state.enabledSkills || []).filter(
@@ -128,21 +141,26 @@
       disabled_tools: Array.from(N.Chat.state.disabledTools || []),
       session_summarize: getChecked("chat-session-summarize"),
       retrieval_recency_weight: parseFloat(
-        document.getElementById("chat-recency-weight")?.value || "0.3",
+        document.getElementById("chat-recency-weight")?.value ||
+          _defStr("retrieval_recency_weight", 0.3),
       ),
       retrieval_importance_weight: parseFloat(
-        document.getElementById("chat-importance-weight")?.value || "0.3",
+        document.getElementById("chat-importance-weight")?.value ||
+          _defStr("retrieval_importance_weight", 0.3),
       ),
       retrieval_relevance_weight: parseFloat(
-        document.getElementById("chat-relevance-weight")?.value || "0.4",
+        document.getElementById("chat-relevance-weight")?.value ||
+          _defStr("retrieval_relevance_weight", 0.4),
       ),
       mental_model_enabled: getChecked("chat-mental-model-enabled"),
       mental_model_min_samples: parseInt(
-        document.getElementById("chat-mental-model-min-samples")?.value || "3",
+        document.getElementById("chat-mental-model-min-samples")?.value ||
+          _defStr("mental_model_min_samples", 3),
       ),
       character_judge_enabled: getChecked("chat-character-judge-enabled"),
       character_repair_max_attempts: parseInt(
-        document.getElementById("chat-character-repair-max-attempts")?.value || "2",
+        document.getElementById("chat-character-repair-max-attempts")?.value ||
+          _defStr("character_repair_max_attempts", 2),
       ),
       debug_mode: getChecked("chat-debug-mode"),
 
@@ -150,7 +168,7 @@
       brain_reasoning_enabled: getChecked("chat-brain-reasoning"),
       brain_reasoning_effort: getChecked("chat-brain-reasoning")
         ? document.getElementById("chat-brain-reasoning-effort")?.value ||
-          "medium"
+          _defStr("brain_reasoning_effort", "medium")
         : undefined,
       // リフレクション降格・注入ゲート: 空なら送らない (merge API keeps the stored value)
       reflection_retrieval_penalty: (() => {
@@ -184,10 +202,11 @@
       ).trim(),
       brain_decision_threshold: parseFloat(
         document.getElementById("chat-brain-decision-threshold")?.value ||
-          "0.55",
+          _defStr("brain_decision_threshold", 0.55),
       ),
       brain_decision_max_hops: parseInt(
-        document.getElementById("chat-brain-decision-max-hops")?.value || "1",
+        document.getElementById("chat-brain-decision-max-hops")?.value ||
+          _defStr("brain_decision_max_hops", 1),
       ),
       // 0 より大きければ有効（値自体に意味は無い）。bool ではなく float で送る。
       brain_decision_time_weight: getChecked("chat-brain-decision-time-weight")
@@ -214,11 +233,11 @@
       })(),
       emotion_decay_threshold: parseFloat(
         document.getElementById("chat-emotion-decay-threshold")?.value ||
-          "0.005",
+          _defStr("emotion_decay_threshold", 0.005),
       ),
       emotion_neutral_threshold: parseFloat(
         document.getElementById("chat-emotion-neutral-threshold")?.value ||
-          "0.01",
+          _defStr("emotion_neutral_threshold", 0.01),
       ),
       // 画像生成設定 — ComfyUI
       image_gen_enabled: getChecked("chat-image-gen-enabled"),
@@ -226,16 +245,20 @@
         document.getElementById("chat-image-gen-comfyui-url")?.value || ""
       ).trim(),
       image_gen_comfyui_width: parseInt(
-        document.getElementById("chat-image-gen-width")?.value || "1024",
+        document.getElementById("chat-image-gen-width")?.value ||
+          _defStr("image_gen_comfyui_width", 1024),
       ),
       image_gen_comfyui_height: parseInt(
-        document.getElementById("chat-image-gen-height")?.value || "1024",
+        document.getElementById("chat-image-gen-height")?.value ||
+          _defStr("image_gen_comfyui_height", 1024),
       ),
       image_gen_max_width: parseInt(
-        document.getElementById("chat-image-gen-max-width")?.value || "1200",
+        document.getElementById("chat-image-gen-max-width")?.value ||
+          _defStr("image_gen_max_width", 1200),
       ),
       image_gen_max_height: parseInt(
-        document.getElementById("chat-image-gen-max-height")?.value || "1200",
+        document.getElementById("chat-image-gen-max-height")?.value ||
+          _defStr("image_gen_max_height", 1200),
       ),
       image_gen_self_portrait_prompt:
         document.getElementById("chat-image-gen-self-portrait-prompt")?.value ||
@@ -263,12 +286,12 @@
       })(),
       image_gen_default_preset:
         document.getElementById("chat-image-gen-default-preset")?.value ||
-        "square_medium",
+        _defStr("image_gen_default_preset", "square_medium"),
       image_gen_comfyui_workflow_template:
         document.getElementById("chat-image-gen-template")?.value || "",
       image_gen_comfyui_workflow_source:
         document.getElementById("chat-image-gen-workflow-source")?.value ||
-        "local",
+        _defStr("image_gen_comfyui_workflow_source", "local"),
       image_gen_comfyui_workflow_name:
         document.getElementById("chat-image-gen-workflow-name")?.value || "",
       // 構図プリフィックス
@@ -284,7 +307,7 @@
       image_caption_enabled: getChecked("chat-image-caption-enabled"),
       image_caption_provider:
         document.getElementById("chat-image-caption-provider")?.value ||
-        "openai_compat",
+        _defStr("image_caption_provider", "openai_compat"),
       image_caption_model:
         document.getElementById("chat-image-caption-model")?.value.trim() || "",
       image_caption_api_key:
@@ -298,27 +321,27 @@
       voice_streaming: getChecked("chat-voice-streaming"),
       voice_emotion_mode:
         document.querySelector('input[name="chat-voice-emotion-mode"]:checked')
-          ?.value || "anchor",
+          ?.value || _defStr("voice_emotion_mode", "anchor"),
       voice_emotion_link:
         (document.querySelector('input[name="chat-voice-emotion-mode"]:checked')
-          ?.value || "anchor") !== "off",
+          ?.value || _defStr("voice_emotion_mode", "anchor")) !== "off",
       voice_model: document.getElementById("chat-voice-model")?.value || "",
       // Irodori advanced params
       irodori_num_steps:
         parseInt(document.getElementById("chat-irodori-num-steps")?.value) ||
-        30,
+        (N.Chat.settings._defaultOf("irodori_num_steps") ?? 30),
       irodori_cfg_scale_text:
         parseFloat(
           document.getElementById("chat-irodori-cfg-scale-text")?.value,
-        ) || 3.2,
+        ) || (N.Chat.settings._defaultOf("irodori_cfg_scale_text") ?? 3.2),
       irodori_cfg_scale_speaker:
         parseFloat(
           document.getElementById("chat-irodori-cfg-scale-speaker")?.value,
-        ) || 5.0,
+        ) || (N.Chat.settings._defaultOf("irodori_cfg_scale_speaker") ?? 5.0),
       irodori_cfg_scale_caption:
         parseFloat(
           document.getElementById("chat-irodori-cfg-scale-caption")?.value,
-        ) || 4.2,
+        ) || (N.Chat.settings._defaultOf("irodori_cfg_scale_caption") ?? 4.2),
       irodori_chunk_min_chars:
         parseInt(
           document.getElementById("chat-irodori-chunk-min-chars")?.value,
@@ -336,9 +359,11 @@
         document.getElementById("chat-irodori-caption-llm-model")?.value || "",
       // Voice volume
       voice_volume:
-        parseFloat(document.getElementById("chat-voice-volume")?.value) ?? 1.0,
+        parseFloat(document.getElementById("chat-voice-volume")?.value) ??
+        (N.Chat.settings._defaultOf("voice_volume") ?? 1.0),
       voice_speed:
-        parseFloat(document.getElementById("chat-voice-speed")?.value) ?? 1.0,
+        parseFloat(document.getElementById("chat-voice-speed")?.value) ??
+        (N.Chat.settings._defaultOf("voice_speed") ?? 1.0),
       voice_enabled: getChecked("chat-voice-enabled"),
     };
     if (getChecked("chat-brain-llm-dedicated")) {

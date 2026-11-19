@@ -11,6 +11,8 @@ var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var showConfirm = C.showConfirm, showAlert = C.showAlert;
 "use strict";
 var S = window.S;
+// 既定値の単一の正は defaults API（reset.js）。ここのリテラルは API 未取得時の保険。
+var _defaultOf = N.Chat.settings._defaultOf;
 
 // ------------------------------------------------------------------
 // Voice / TTS + irodori + debug-mode field application
@@ -63,35 +65,38 @@ function applyVoiceSection(cfg, set, setChecked) {
     if (voiceModelInput) voiceModelInput.value = cfg.voice_model || "";
     // Irodori advanced params
     var irodoriNumSteps = document.getElementById("chat-irodori-num-steps");
-    if (irodoriNumSteps) irodoriNumSteps.value = cfg.irodori_num_steps ?? 30;
+    var numSteps = cfg.irodori_num_steps ?? (_defaultOf("irodori_num_steps") ?? 30);
+    if (irodoriNumSteps) irodoriNumSteps.value = numSteps;
     if (irodoriNumSteps)
       document.getElementById("chat-irodori-num-steps-val").textContent =
-        cfg.irodori_num_steps ?? 30;
+        numSteps;
     var irodoriCfgText = document.getElementById("chat-irodori-cfg-scale-text");
+    var cfgText =
+      cfg.irodori_cfg_scale_text ?? (_defaultOf("irodori_cfg_scale_text") ?? 3.2);
+    if (irodoriCfgText) irodoriCfgText.value = cfgText;
     if (irodoriCfgText)
-      irodoriCfgText.value = cfg.irodori_cfg_scale_text ?? 3.2;
-    if (irodoriCfgText)
-      document.getElementById("chat-irodori-cfg-text-val").textContent = (
-        cfg.irodori_cfg_scale_text ?? 3.2
-      ).toFixed(1);
+      document.getElementById("chat-irodori-cfg-text-val").textContent =
+        cfgText.toFixed(1);
     var irodoriCfgSpeaker = document.getElementById(
       "chat-irodori-cfg-scale-speaker",
     );
+    var cfgSpeaker =
+      cfg.irodori_cfg_scale_speaker ??
+      (_defaultOf("irodori_cfg_scale_speaker") ?? 5.0);
+    if (irodoriCfgSpeaker) irodoriCfgSpeaker.value = cfgSpeaker;
     if (irodoriCfgSpeaker)
-      irodoriCfgSpeaker.value = cfg.irodori_cfg_scale_speaker ?? 5.0;
-    if (irodoriCfgSpeaker)
-      document.getElementById("chat-irodori-cfg-speaker-val").textContent = (
-        cfg.irodori_cfg_scale_speaker ?? 5.0
-      ).toFixed(1);
+      document.getElementById("chat-irodori-cfg-speaker-val").textContent =
+        cfgSpeaker.toFixed(1);
     var irodoriCfgCaption = document.getElementById(
       "chat-irodori-cfg-scale-caption",
     );
+    var cfgCaption =
+      cfg.irodori_cfg_scale_caption ??
+      (_defaultOf("irodori_cfg_scale_caption") ?? 4.2);
+    if (irodoriCfgCaption) irodoriCfgCaption.value = cfgCaption;
     if (irodoriCfgCaption)
-      irodoriCfgCaption.value = cfg.irodori_cfg_scale_caption ?? 4.2;
-    if (irodoriCfgCaption)
-      document.getElementById("chat-irodori-cfg-caption-val").textContent = (
-        cfg.irodori_cfg_scale_caption ?? 4.2
-      ).toFixed(1);
+      document.getElementById("chat-irodori-cfg-caption-val").textContent =
+        cfgCaption.toFixed(1);
     var irodoriChunkMin = document.getElementById(
       "chat-irodori-chunk-min-chars",
     );
@@ -100,7 +105,7 @@ function applyVoiceSection(cfg, set, setChecked) {
       // （defaults API の fields.irodori_chunk_min_chars.default）。API 応答が
       // 無い場合のみ従来値 85 にフォールバックする。
       var chunkMinDefault =
-        N.Chat.settings._defaultOf("irodori_chunk_min_chars") ?? 85;
+        _defaultOf("irodori_chunk_min_chars") ?? 85;
       var chunkMin = cfg.irodori_chunk_min_chars ?? chunkMinDefault;
       irodoriChunkMin.value = chunkMin;
       var chunkMinVal = document.getElementById("chat-irodori-chunk-min-val");
@@ -115,16 +120,18 @@ function applyVoiceSection(cfg, set, setChecked) {
       irodoriCaptionLLMModel.value = cfg.irodori_caption_llm_model || "";
     // Voice volume
     var voiceVolume = document.getElementById("chat-voice-volume");
-    if (voiceVolume) voiceVolume.value = cfg.voice_volume ?? 1.0;
+    var volume = cfg.voice_volume ?? (_defaultOf("voice_volume") ?? 1.0);
+    if (voiceVolume) voiceVolume.value = volume;
     if (voiceVolume)
       document.getElementById("chat-voice-volume-val").textContent =
-        Math.round((cfg.voice_volume ?? 1.0) * 100) + "%";
+        Math.round(volume * 100) + "%";
     // Voice speed
     var voiceSpeed = document.getElementById("chat-voice-speed");
-    if (voiceSpeed) voiceSpeed.value = cfg.voice_speed ?? 1.0;
+    var speed = cfg.voice_speed ?? (_defaultOf("voice_speed") ?? 1.0);
+    if (voiceSpeed) voiceSpeed.value = speed;
     if (voiceSpeed)
       document.getElementById("chat-voice-speed-val").textContent =
-        (cfg.voice_speed ?? 1.0).toFixed(2) + "x";
+        speed.toFixed(2) + "x";
     // Check connection status
     N.Chat.tts.checkConnection();
     // Debug mode
@@ -237,23 +244,30 @@ function applyImageSection(cfg, set, setChecked) {
 function applyBrainForgettingSection(cfg, set, setChecked) {
     // === Brain simulation ===
     setChecked("chat-brain-reasoning", cfg.brain_reasoning_enabled === true);
-    set("chat-brain-reasoning-effort", cfg.brain_reasoning_effort || "medium");
+    set(
+      "chat-brain-reasoning-effort",
+      cfg.brain_reasoning_effort || (_defaultOf("brain_reasoning_effort") ?? "medium"),
+    );
     set("chat-brain-max-tokens", cfg.brain_max_tokens ?? 0);
     set(
       "chat-brain-separation-threshold",
-      cfg.brain_link_separation_threshold ?? 0.75,
+      cfg.brain_link_separation_threshold ??
+        (_defaultOf("brain_link_separation_threshold") ?? 0.75),
     );
     set(
       "chat-brain-reflection-retrieval-penalty",
-      cfg.reflection_retrieval_penalty ?? 0.5,
+      cfg.reflection_retrieval_penalty ??
+        (_defaultOf("reflection_retrieval_penalty") ?? 0.5),
     );
     set(
       "chat-brain-reflection-injection-min-similarity",
-      cfg.reflection_injection_min_similarity ?? 0.45,
+      cfg.reflection_injection_min_similarity ??
+        (_defaultOf("reflection_injection_min_similarity") ?? 0.45),
     );
     set(
       "chat-brain-reflection-injection-margin",
-      cfg.reflection_injection_margin ?? 0.08,
+      cfg.reflection_injection_margin ??
+        (_defaultOf("reflection_injection_margin") ?? 0.08),
     );
     setChecked(
       "chat-brain-graph-flash",
@@ -267,9 +281,14 @@ function applyBrainForgettingSection(cfg, set, setChecked) {
     set("chat-brain-decision-model", cfg.brain_decision_model || "");
     set(
       "chat-brain-decision-threshold",
-      cfg.brain_decision_threshold ?? 0.55,
+      cfg.brain_decision_threshold ??
+        (_defaultOf("brain_decision_threshold") ?? 0.55),
     );
-    set("chat-brain-decision-max-hops", cfg.brain_decision_max_hops ?? 1);
+    set(
+      "chat-brain-decision-max-hops",
+      cfg.brain_decision_max_hops ??
+        (_defaultOf("brain_decision_max_hops") ?? 1),
+    );
     // 値に意味は無い（0 より大きければ有効）。表示の真実はチェックボックス。
     setChecked(
       "chat-brain-decision-time-weight",
@@ -299,10 +318,15 @@ function applyBrainForgettingSection(cfg, set, setChecked) {
       "chat-emotion-decay-half-life-hours",
       cfg.emotion_decay_half_life_hours ?? "",
     );
-    set("chat-emotion-decay-threshold", cfg.emotion_decay_threshold ?? 0.005);
+    set(
+      "chat-emotion-decay-threshold",
+      cfg.emotion_decay_threshold ??
+        (_defaultOf("emotion_decay_threshold") ?? 0.005),
+    );
     set(
       "chat-emotion-neutral-threshold",
-      cfg.emotion_neutral_threshold ?? 0.01,
+      cfg.emotion_neutral_threshold ??
+        (_defaultOf("emotion_neutral_threshold") ?? 0.01),
     );
 }
 
