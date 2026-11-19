@@ -111,8 +111,12 @@ class TurnHub:
     def publish_event(self, persona: str, event_name: str, payload: dict) -> str:
         """名前付き SSE イベント（``event: <name>\\ndata: ...``）を発行する。
 
-        フロントの ``addEventListener(name, ...)``（例: connectChatEvents の
-        ``tool_called``）へ届けるには event 名が必要。戻り値は sse 文字列。
+        受信側が ``addEventListener(name, ...)`` で登録している場合のみ届く
+        （例: wiring-stream.js の ``wiring`` イベント）。EventSource 仕様上、
+        名前付きイベントは ``message`` ハンドラには配信されないため、
+        chat-events ストリーム（message 専用）で受けるイベントは
+        publish_synthetic + ``type`` フィールドを使うこと。
+        戻り値は sse 文字列。
         """
         sse = f"event: {event_name}\ndata: {json.dumps(payload, ensure_ascii=False, default=str)}\n\n"
         self.publish(persona, sse)
@@ -153,7 +157,7 @@ class TurnHub:
         with self._lock:
             self._approvals.setdefault(persona, {})[approval_id] = event
             self._approval_decisions.setdefault(persona, {})[approval_id] = "deny"
-        self.publish_event(persona, "approval_requested", {"approval_id": approval_id, **payload})
+        self.publish_synthetic(persona, {"approval_id": approval_id, **payload, "type": "approval_requested"})
         with contextlib.suppress(TimeoutError):
             await asyncio.wait_for(event.wait(), timeout)
         with self._lock:

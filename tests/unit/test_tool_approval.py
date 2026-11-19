@@ -97,8 +97,12 @@ class TestTurnHubApproval:
         )
         await task
         sse = "".join(s for _seq, s in hub.snapshot_after("p", 0))
-        assert "event: approval_requested" in sse
+        # chat-events ストリームは message ハンドラ専用なので、名前付きイベント
+        # (event: 行) ではなく data に type を持つ synthetic で流す。
+        assert '"type": "approval_requested"' in sse
+        assert '"approval_id": "a1"' in sse
         assert "ls -la" in sse
+        assert "event:" not in sse  # 名前付きイベント化すると message に届かない
 
     async def test_waiter_is_cleaned_up(self):
         hub = TurnHub()
