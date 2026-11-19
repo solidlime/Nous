@@ -21,6 +21,23 @@ def test_defaults_include_current_values():
     assert fields["voice_streaming"]["type"] == "bool"
 
 
+def test_sub_config_fields_are_delivered():
+    """サブ設定（SessionConfig / ToolConfig）に足した Field は _all_flat_fields 経由で
+    defaults と persona の config に自動で載る（登録漏れ検出）。"""
+    from nous.domain.config.chat_config import ChatConfig
+
+    fields = _do_get_config_defaults()["fields"]
+    assert fields["fill_silence_hours"]["default"] == 6.0
+    assert fields["fill_silence_hours"]["type"] == "float"
+    assert fields["schedule_fail_limit"]["default"] == 3
+    assert fields["schedule_fail_limit"]["type"] == "int"
+    assert fields["schedule_fail_limit"]["section"] == "tools"
+    # GET /api/chat/{persona}/config は to_safe_dict を返す
+    safe = ChatConfig(persona="p").to_safe_dict()
+    assert safe["fill_silence_hours"] == 6.0
+    assert safe["schedule_fail_limit"] == 3
+
+
 def test_undefined_and_meta_keys_excluded():
     fields = _do_get_config_defaults()["fields"]
     for missing in ("not_a_field", "persona", "updated_at"):
@@ -45,8 +62,8 @@ def test_every_field_has_contract_shape():
 
 def test_endpoint_returns_fields(monkeypatch):
     monkeypatch.setattr(chat_management, "_resolve_request", lambda req: ("p", object()))
-    resp = asyncio.run(get_config_defaults(object()))
-    body = json.loads(resp.body)
+    resp = asyncio.run(get_config_defaults(object()))  # type: ignore[arg-type]
+    body = json.loads(resp.body)  # type: ignore[arg-type]
     assert body["fields"]["brain_llm_dedicated"]["type"] == "bool"
     # enrichment / spontaneous / monologue / introspection ノブは廃止
     for gone in (
