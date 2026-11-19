@@ -32,13 +32,13 @@ def _make_env() -> SimpleNamespace:
     return SimpleNamespace(client=client, ctx=_mock_context("herta-test", settings), settings=settings)
 
 
-def _post_with_event(env: SimpleNamespace, event: dict) -> tuple[int, dict, SessionEvent | None]:
-    """POST 1 件の ingest を実行し、(status, json, insert 対象 SessionEvent) を返す。"""
+def _post_events(env: SimpleNamespace, events: list[dict]) -> tuple[int, dict, SessionEvent | None]:
+    """POST events バッチを ingest し、(status, json, 先頭 insert 対象 SessionEvent) を返す。"""
     import nous.main as main_mod
 
-    body = {"session_id": "sess_body", "persona": "herta-test", "events": [event]}
+    body = {"session_id": "sess_body", "persona": "herta-test", "events": events}
     original_getter = main_mod.get_settings
-    main_mod.get_settings = lambda: env.settings  # type: ignore[method-assign]
+    main_mod.get_settings = lambda: env.settings  # type: ignore[assignment]
     try:
         with (
             patch(
@@ -54,6 +54,11 @@ def _post_with_event(env: SimpleNamespace, event: dict) -> tuple[int, dict, Sess
     finally:
         main_mod.get_settings = original_getter
     return resp.status_code, resp.json(), inserted
+
+
+def _post_with_event(env: SimpleNamespace, event: dict) -> tuple[int, dict, SessionEvent | None]:
+    """POST 1 件の ingest を実行し、(status, json, insert 対象 SessionEvent) を返す。"""
+    return _post_events(env, [event])
 
 
 class TestIngestDetailBoundary:
@@ -91,3 +96,34 @@ class TestIngestDetailBoundary:
         assert ev is not None
         assert ev.detail is not None
         assert jsonlib.loads(ev.detail) == {"k": "値"}
+
+
+class TestIngestConversationTime:
+    """turn.completed は pi 経由の対話なので最終会話時刻を 1 回だけ記録する。"""
+
+    def test_turn_completed_records_conversation_time_once(self) -> None:
+        env = _make_env()
+        status, j, _ = _post_with_event(env, {"type": "turn.completed", "summary": "turn: smoke"})
+        assert status == 200, j
+        env.ctx.persona_service.record_conversation_time.assert_called_once_with("herta-test")
+
+    def test_other_events_do_not_record_conversation_time(self) -> None:
+        env = _make_env()
+        status, j, _ = _post_with_event(env, {"type": "session.started", "summary": "s"})
+        assert status == 200, j
+        env.ctx.persona_service.record_conversation_time.assert_not_called()
+
+    def test_batch_with_multiple_turn_completed_records_once(self) -> None:
+        """バッチ内に turn.completed が複数あっても record_conversation_time は 1 回だけ。"""
+        env = _make_env()
+        status, j, _ = _post_events(
+            env,
+            [
+                {"type": "turn.completed", "summary": "turn: a"},
+                {"type": "other.event", "summary": "x"},
+                {"type": "turn.completed", "summary": "turn: b"},
+            ],
+        )
+        assert status == 200, j
+        assert j.get("count") == 3
+        env.ctx.persona_service.record_conversation_time.assert_called_once_with("herta-test")

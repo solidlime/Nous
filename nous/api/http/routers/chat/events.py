@@ -300,6 +300,14 @@ def register_events_routes(mcp) -> None:
         except Exception:
             logger.exception("Failed to publish events.ingested event for persona '%s'", persona)
 
+        # 7.5 turn.completed は「対話」なので最終会話時刻を更新する（pi 経由の対話が
+        #     proactive の idle 判定に「放置」と誤認されないように）。
+        if any(isinstance(ev, dict) and ev.get("type") == "turn.completed" for ev in raw_events):
+            try:
+                ctx.persona_service.record_conversation_time(persona)
+            except Exception as e:
+                logger.warning("events_ingest: record_conversation_time failed: %s", e)
+
         # 8. Session stop hook（R1/R2）: session.stopped 受信時のみ
         #    fire-and-forget で終了サマリを生成（evict 未発生の短いセッション対策）
         if any(isinstance(ev, dict) and ev.get("type") == "session.stopped" for ev in raw_events):

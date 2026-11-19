@@ -208,3 +208,33 @@ class TestSessionEventRepository:
     def test_empty_db_returns_empty_list(self, repo: SessionEventRepository):
         assert repo.get_by_session("nonexistent") == []
         assert repo.get_by_persona("nonexistent") == []
+
+    def test_get_by_persona_paginated_tie_break_stable(self, repo: SessionEventRepository):
+        """同一 instant・別 offset 表現の行は id tie-break で決定的に並び、ページングが壊れない。
+
+        15:00+09:00 と 06:00+00:00 は同 instant。julianday 同値のため id で順序が決まる。
+        文字列比較 ORDER BY だと offset 表現の辞書順（15: > 06:）に乱され、ページ跨ぎで
+        重複・欠落が起きる。
+        """
+        repo.insert(
+            SessionEvent("s", "p", "chat_message", "old", timestamp=datetime.fromisoformat("2026-11-19T05:00:00+00:00"))
+        )
+        repo.insert(
+            SessionEvent(
+                "s", "p", "chat_message", "tie-a", timestamp=datetime.fromisoformat("2026-11-19T15:00:00+09:00")
+            )
+        )
+        repo.insert(
+            SessionEvent(
+                "s", "p", "chat_message", "tie-b", timestamp=datetime.fromisoformat("2026-11-19T06:00:00+00:00")
+            )
+        )
+
+        page1, total = repo.get_by_persona_paginated("p", limit=2, offset=0)
+        page2, _ = repo.get_by_persona_paginated("p", limit=2, offset=2)
+        assert total == 3
+        assert [e.summary for e in page1] == ["tie-b", "tie-a"]
+        assert [e.summary for e in page2] == ["old"]
+
+        asc_page, _ = repo.get_by_persona_paginated("p", limit=3, order="asc")
+        assert [e.summary for e in asc_page] == ["old", "tie-a", "tie-b"]

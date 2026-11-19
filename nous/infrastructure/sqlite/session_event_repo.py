@@ -6,6 +6,7 @@ from typing import TYPE_CHECKING, Any
 
 from nous.domain.memory.session_event import SessionEvent
 from nous.domain.memory.session_ids import INTERNAL_SESSION_PREFIXES
+from nous.domain.shared.time_utils import format_iso
 
 if TYPE_CHECKING:
     from nous.infrastructure.sqlite.connection import SQLiteConnection
@@ -13,7 +14,8 @@ if TYPE_CHECKING:
 
 # idle 判定の対象は「対話」のみ (spec A4)。tool.called / brain.* / session.* /
 # events.ingested は内省・ツール実行でも idle タイマーをリセットさせない。
-_IDLE_ACTIVITY_EVENT_TYPES = ("chat.message", "chat.llm_response")
+# turn.completed は pi 経由の対話ターン（Web チャットの chat.llm_response に相当）。
+_IDLE_ACTIVITY_EVENT_TYPES = ("chat.message", "chat.llm_response", "turn.completed")
 
 # ユーザー発話の判定（kanban #44 / #65）。worker が内部で回すターン（self: /
 # proactive: / activity:）も chat.message を発行するので、これらを数えると
@@ -47,13 +49,13 @@ class SessionEventRepository:
                 event.session_id,
                 event.persona,
                 event.event_type,
-                event.timestamp.isoformat(),
+                format_iso(event.timestamp),  # naive は Asia/Tokyo 補完（julianday の UTC 誤読対策）
                 event.summary,
                 event.detail,
                 json.dumps(event.metadata, ensure_ascii=False) if event.metadata else None,
             ),
         )
-        return self._db.execute("SELECT last_insert_rowid()").fetchone()[0]
+        return int(self._db.execute("SELECT last_insert_rowid()").fetchone()[0])
 
     # ------------------------------------------------------------------
     # Delete
@@ -70,7 +72,7 @@ class SessionEventRepository:
     def get_by_session(self, session_id: str, limit: int = 50) -> list[SessionEvent]:
         """Get events for a session, ordered by timestamp DESC."""
         rows = self._db.execute(
-            "SELECT * FROM session_events WHERE session_id = ? ORDER BY timestamp DESC LIMIT ?",
+            "SELECT * FROM session_events WHERE session_id = ? ORDER BY julianday(timestamp) DESC, id DESC LIMIT ?",
             (session_id, limit),
         ).fetchall()
         return [self._row_to_event(r) for r in rows]
@@ -102,7 +104,7 @@ class SessionEventRepository:
             params.append(until)
         where = " AND ".join(clauses)  # nosec B608: clause strings are literals
         rows = self._db.execute(
-            f"SELECT * FROM session_events WHERE {where} ORDER BY timestamp DESC LIMIT ?",  # nosec B608
+            f"SELECT * FROM session_events WHERE {where} ORDER BY julianday(timestamp) DESC, id DESC LIMIT ?",  # nosec B608
             (*params, limit),
         ).fetchall()
         return [self._row_to_event(r) for r in rows]
@@ -125,6 +127,7 @@ class SessionEventRepository:
         """
         direction = "ASC" if order == "asc" else "DESC"
 
+        params: tuple[str, ...]
         if event_type:
             where_clause = "WHERE persona = ? AND event_type = ?"
             params = (persona, event_type)
@@ -141,14 +144,26 @@ class SessionEventRepository:
 
         # Paginated rows
         rows = self._db.execute(
-            f"SELECT * FROM session_events {where_clause} ORDER BY timestamp {direction} LIMIT ? OFFSET ?",  # where_clause internally built; direction whitelisted; params bound  # nosec B608
+            f"SELECT * FROM session_events {where_clause}"
+            f" ORDER BY julianday(timestamp) {direction}, id {direction} LIMIT ? OFFSET ?",  # where_clause internally built; direction whitelisted; params bound  # nosec B608
             (*params, limit, offset),
         ).fetchall()
 
         return [self._row_to_event(r) for r in rows], total
 
     def _max_timestamp(self, where: str, params: tuple[Any, ...]) -> datetime | None:
-        row = self._db.execute(f"SELECT MAX(timestamp) FROM session_events WHERE {where}", params).fetchone()  # nosec B608: where は呼び出し側の定数、値はバインド
+        """条件に合う行のうち最新の timestamp を返す（None なら記録なし）。
+
+        timestamp は文字列（naive / +09:00 / +00:00 が混在）なので MAX() の文字列比較は
+        誤る。julianday() で UTC 換算した順序から最新行を選ぶ。
+
+        shortcut: legacy の naive 行は julianday が UTC と読むため最大9時間の残誤差を伴う
+        （old rows のみ。insert の Asia/Tokyo 補完以降は発生しない）。
+        """
+        row = self._db.execute(
+            f"SELECT timestamp FROM session_events WHERE {where} ORDER BY julianday(timestamp) DESC LIMIT 1",  # nosec B608: where は呼び出し側の定数、値はバインド
+            params,
+        ).fetchone()
         if row is None or row[0] is None:
             return None
         return datetime.fromisoformat(row[0])
@@ -158,10 +173,13 @@ class SessionEventRepository:
         return self._max_timestamp("persona = ? AND event_type = ?", (persona, event_type))
 
     def last_user_message_at(self, persona: str) -> datetime | None:
-        """ユーザー自身の発言（``chat.message``）の最終時刻。"""
+        """ユーザー自身の発言の最終時刻（``chat.message`` または ``turn.completed``）。
+
+        ``turn.completed`` は pi 由来で内部接頭辞を持たないため除外不要。
+        """
         prefixes = " AND ".join("session_id NOT LIKE ?" for _ in _INTERNAL_SESSION_PREFIXES)
         return self._max_timestamp(
-            f"persona = ? AND event_type = 'chat.message' AND {prefixes}",
+            f"persona = ? AND ((event_type = 'chat.message' AND {prefixes}) OR event_type = 'turn.completed')",
             (persona, *(f"{p}%" for p in _INTERNAL_SESSION_PREFIXES)),
         )
 

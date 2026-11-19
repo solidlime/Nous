@@ -8,8 +8,8 @@
 
 1. ``session_config.proactive_enabled``
 2. ``last_user_message_at`` から ``proactive_idle_minutes`` 以上経過
-   （``chat.message`` のみ。``chat.llm_response`` を数えると自分の発言で
-   idle がリセットされる自己ループになる）
+   （``chat.message`` / ``turn.completed``。``chat.llm_response`` を数えると
+   自分の発言で idle がリセットされる自己ループになる）
 3. ``proactive.spoke`` から ``proactive_cooldown_minutes`` 以上経過
 
 判断用のターンは ``proactive:<date>`` セッションで走らせ、main の文脈を汚さない
@@ -48,8 +48,9 @@ SILENT_MARK = "<silent>"
 def idle_minutes(ctx: AppContext, now: datetime, threshold_minutes: int) -> float | None:
     """最後のユーザー発話からの経過分数。``threshold_minutes`` 未満なら None。
 
-    ``chat.message`` 系のイベントだけを数える（自分の発言で idle がリセットされる
-    自己ループを避ける）。一度も話していない persona は None（相手が居ない）。
+    ``chat.message`` / ``turn.completed`` を数える（``chat.llm_response`` は自分の
+    発言で idle がリセットされる自己ループになるため数えない）。一度も話して
+    いない persona は None（相手が居ない）。
     """
     repo = SessionEventRepository(ctx.connection)
     last_user = repo.last_user_message_at(ctx.persona)
