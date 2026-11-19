@@ -15,8 +15,8 @@ def render_project_tab() -> str:
             </div>
             <div class="glass p-4 mb-4" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
                 <label for="project-slug-input" style="font-size:0.8rem; color:var(--text-muted);">project slug</label>
-                <input id="project-slug-input" class="input" type="text" placeholder="nous" autocomplete="off" style="max-width:240px;">
-                <button id="project-load-btn" class="btn btn-primary" type="button">Load</button>
+                <input id="project-slug-input" class="glass-input" type="text" placeholder="nous" autocomplete="off" style="max-width:240px;">
+                <button id="project-load-btn" class="glass-btn" type="button">Load</button>
                 <span id="project-status" style="font-size:0.78rem; color:var(--text-muted);"></span>
             </div>
             <div id="project-content"><div class="glass p-6"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text" style="width:70%"></div><div class="skeleton skeleton-text" style="width:55%"></div></div></div>
