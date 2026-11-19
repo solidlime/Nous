@@ -260,7 +260,7 @@ class SearchEngine:
         entity_service=None,
         embedding_provider: Callable[[], ContentEncoder | None] | None = None,
         vector_retriever: Callable[[list[str]], Awaitable[dict[str, np.ndarray]]] | None = None,
-        rerank_enabled: bool = False,
+        rerank_enabled: bool | None = None,
         injection_max_bm25: dict[str, float] | None = None,
         decision_judge: DecisionJudge | None = None,
     ) -> None:
@@ -275,15 +275,14 @@ class SearchEngine:
         # Qdrant から key 指定で stored vector を取る口（候选 re-encode の排除用）。
         # None のとき cosine を持たない候補は relevance 0.0 で fail-open（re-encode しない）。
         self._vector_retriever = vector_retriever
-        # 既定 False: cross-encoder rerank 段は明示的に有効化されたときのみ走る
-        # （値は Settings.search.rerank_enabled / NOUS_SEARCH__RERANK_ENABLED から配線）。
+        # None（既定）= 呼び出し時に Settings.search.rerank_enabled /
+        # .injection_max_bm25 を読む（hot_reload 対応）。明示値はテスト・検証用の
+        # 上書きとして優先する。
         self._rerank_enabled = rerank_enabled
         self._reranker_unloaded_warned = False
         # item 5: FTS OR-fallback 候補の bm25 バー（dominantTokenKind 別、正の大きさ）。
-        # 配線元: Settings.search.injection_max_bm25 / NOUS_SEARCH__INJECTION_MAX_BM25。
-        self._injection_max_bm25 = dict(
-            DEFAULT_INJECTION_MAX_BM25 if injection_max_bm25 is None else injection_max_bm25
-        )
+        # None のときは呼び出し時に Settings.search.injection_max_bm25 を読む。
+        self._injection_max_bm25 = None if injection_max_bm25 is None else dict(injection_max_bm25)
         # Jev 型判定ゲート用の judge（None のとき decision gate は完全 no-op）。
         self._decision_judge = decision_judge
         # decision_bypass の warn は chat 経路で gate を on にすると、1 ターンに
@@ -1106,14 +1105,37 @@ class SearchEngine:
         # truncation しない: 件数は _finalize（post-filter → top_k）で決まる
         return Success(deduped)
 
+    def _resolved_rerank_enabled(self) -> bool:
+        """rerank 段の有効/無効（構築時上書き優先、既定は Settings の呼び出し時読み）。"""
+        if self._rerank_enabled is not None:
+            return self._rerank_enabled
+        try:
+            from nous.config.settings import get_settings  # noqa: PLC0415 — domain→config の遅延 import
+
+            return get_settings().search.rerank_enabled
+        except Exception:
+            return False
+
+    def _resolved_injection_max_bm25(self) -> dict[str, float]:
+        """bm25 バー（構築時上書き優先、既定は Settings の呼び出し時読み）。"""
+        if self._injection_max_bm25 is not None:
+            return self._injection_max_bm25
+        try:
+            from nous.config.settings import get_settings  # noqa: PLC0415 — domain→config の遅延 import
+
+            return get_settings().search.injection_max_bm25
+        except Exception:
+            return DEFAULT_INJECTION_MAX_BM25
+
     def _or_fallback_bm25_bar(self, query_text: str) -> float | None:
         """OR-fallback に適用する bm25 バー（正の大きさ）。mixed/未設定は None。"""
-        if not self._injection_max_bm25:
+        bars = self._resolved_injection_max_bm25()
+        if not bars:
             return None
         from nous.infrastructure.sqlite import fts_tokenize  # noqa: PLC0415 — Sudachi は lazy
 
         tokens = [t for t in fts_tokenize.tokenize_for_fts(query_text).split() if t]
-        return bar_for_tokens(tokens, self._injection_max_bm25)
+        return bar_for_tokens(tokens, bars)
 
     def _entity_linked_memory_keys(self, query: SearchQuery) -> set[str]:
         """query text の entity に紐づく memory key 集合（entity boost の共有部品）。
@@ -1209,13 +1231,13 @@ class SearchEngine:
     def _apply_reranker(self, query: SearchQuery, deduped: list[SearchResult]) -> None:
         """Cross-encoder rerank refinement.
 
-        既定（``rerank_enabled=False``）では no-op —— rerank を一切呼ばない。
-        ``SearchEngine(rerank_enabled=True)``（配線元: ``Settings.search.rerank_enabled`` /
+        既定（unset = ``Settings.search.rerank_enabled`` の呼び出し時読み、既定 False）では
+        no-op —— rerank を一切呼ばない。明示有効化（構築時 ``rerank_enabled=True`` /
         ``NOUS_SEARCH__RERANK_ENABLED=true``）のときのみ、上位 ``_RERANK_CANDIDATES``
         件を rerank する（部分 rerank の順位破壊はクラス定数のコメント参照）。
         reranker 未注入 / ``reranker.enabled=False`` も no-op。
         """
-        if not self._rerank_enabled:
+        if not self._resolved_rerank_enabled():
             return
         if self._reranker is None or not self._reranker.enabled:
             return

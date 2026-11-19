@@ -227,10 +227,9 @@ class VectorStackMixin:
                 # embedding_model property は呼ばない（cold load 防止）:
                 # rank_policy 段が要求した時点で lazy に解決する。
                 embedding_provider=lambda: getattr(self, "_embedding", None),
-                # cross-encoder rerank 段は既定無効（NOUS_SEARCH__RERANK_ENABLED=true で復帰）。
-                rerank_enabled=self.settings.search.rerank_enabled,
-                # item 5: OR-fallback に渡す bm25 バー（NOUS_SEARCH__INJECTION_MAX_BM25）。
-                injection_max_bm25=self.settings.search.injection_max_bm25,
+                # cross-encoder rerank 段（NOUS_SEARCH__RERANK_ENABLED）と item 5 の
+                # bm25 バー（NOUS_SEARCH__INJECTION_MAX_BM25）は engine 側で
+                # 呼び出し時に Settings を読む（hot_reload）。ここで焼き込まない。
                 vector_retriever=_retrieve_candidate_vectors,
                 decision_judge=_resolve_decision_judge(),
             )

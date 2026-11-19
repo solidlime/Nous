@@ -8,28 +8,45 @@ from zoneinfo import ZoneInfo
 
 _DEFAULT_TZ = "Asia/Tokyo"
 
-# Recency decay の減衰率（exp(-λ * days)、半減期 ≈ 1.4 日）。
+# Recency decay の減衰率のフォールバック（exp(-λ * days)、半減期 ≈ 1.4 日）。
+# 実効値は Settings.search.recency_lambda（既定 0.5 / NOUS_SEARCH__RECENCY_LAMBDA）。
 # 旧所在地: nous/application/chat/pipeline/emotion_decay.py（re-export に置換）。
 RECENCY_LAMBDA = 0.5
 
 
-def compute_recency_decay(created_at: datetime | None) -> float:
-    """Compute recency decay: exp(-λ * days_elapsed) with λ=0.5.
+def _configured_recency_lambda() -> float:
+    """Settings.search.recency_lambda を呼び出し時読みする（hot_reload 対応）。
 
-    ``None`` は安全側の 0.5 を返す。naive datetime は UTC とみなして補完する。
+    Settings を引けない文脈（domain 単体テスト等）では RECENCY_LAMBDA へ落とす。
+    """
+    try:
+        from nous.config.settings import get_settings  # noqa: PLC0415 — domain→config の遅延 import
+
+        return get_settings().search.recency_lambda
+    except Exception:
+        return RECENCY_LAMBDA
+
+
+def compute_recency_decay(created_at: datetime | None, lambda_: float | None = None) -> float:
+    """Compute recency decay: exp(-λ * days_elapsed).
+
+    λ は既定で ``Settings.search.recency_lambda``（既定 0.5）。``lambda_`` を渡すと
+    そちらを優先する（テスト・明示指定用）。``None`` は安全側の 0.5 を返す。
+    naive datetime は UTC とみなして補完する。
     """
     if created_at is None:
         return 0.5
+    lam = _configured_recency_lambda() if lambda_ is None else lambda_
     now = datetime.now(tz=UTC)
     # Ensure tz-aware comparison
     if created_at.tzinfo is None:
         created_at = created_at.replace(tzinfo=UTC)
     days_elapsed = max(0.0, (now - created_at).total_seconds() / 86400.0)
-    return math.exp(-RECENCY_LAMBDA * days_elapsed)
+    return math.exp(-lam * days_elapsed)
 
 
 # 判定ゲート後の順位付け専用の緩やかな減衰率（exp(-λ*days)、λ≈0.019/day = 19日で 0.70）。
-# RECENCY_LAMBDA（λ=0.5/day = 19日で 0.00007）とは曲線が別物なので、
+# RECENCY_LAMBDA（既定 0.5/day = 19日で 0.00007）とは曲線が別物なので、
 # compute_recency_decay を流用してはならない（19日で 0.70 対 0.00007。UI に出す実効値は
 # floor で 0.5 に張り付くが、並べ替えの分解能が失われる）。
 DECISION_TIME_LAMBDA = 0.019
