@@ -10,7 +10,7 @@ export default defineConfig({
     },
     globals: true,
     setupFiles: ['./vitest.setup.js'],
-    include: ['core/**/*.test.js', 'chat/**/*.test.js', 'features/**/*.test.js', 'components/**/*.test.js'],
+    include: ['base.test.js', 'core/**/*.test.js', 'chat/**/*.test.js', 'features/**/*.test.js', 'components/**/*.test.js'],
     coverage: {
       provider: 'v8',
       include: ['core/**/*.js', 'chat/**/*.js', 'features/**/*.js', 'components/**/*.js'],
