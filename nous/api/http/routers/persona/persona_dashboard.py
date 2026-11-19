@@ -10,7 +10,7 @@ from starlette.responses import HTMLResponse, JSONResponse
 
 from nous.api.http.deps import _memory_to_dict, _resolve_persona_from_request
 from nous.api.http.routers.persona.persona_helpers import _resolve_request
-from nous.config.settings import Settings, get_settings
+from nous.config.settings import get_settings
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.persona_layout import persona_media_dir
 
@@ -55,7 +55,7 @@ def _place_since(ctx, persona: str, environment: str | None) -> str | None:
 async def _do_dashboard_page(persona: str | None = None) -> str:
     """Return rendered dashboard HTML for persona, or setup page if no personas exist."""
     if persona is None:
-        settings = Settings()
+        settings = get_settings()
         data_path = Path(settings.persona_dir)
         persona_count = 0
         if data_path.exists():

@@ -6,11 +6,14 @@ import asyncio
 import json
 import os
 import threading
+import typing
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from collections.abc import Callable
+
+from pydantic import TypeAdapter, ValidationError
 
 from nous.config.settings import Settings, get_settings
 from nous.infrastructure.logging.structured import get_logger
@@ -50,7 +53,8 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
     },
     "general": {
         "timezone": {"hot_reload": True, "description": "Timezone"},
-        "log_level": {"hot_reload": True, "description": "Log level"},
+        # setup_logging は起動時に1回だけ読む（oracle PLAN 審査 #5）— 再起動要。
+        "log_level": {"hot_reload": False, "description": "Log level. Restart to apply."},
         "persona_dir": {"hot_reload": False, "description": "Persona data directory"},
         "default_persona": {"hot_reload": True, "description": "Default persona"},
         "api_key": {
@@ -58,7 +62,6 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
             "masked": True,
             "description": "HTTP Bearer credential (empty = dev pass-through, restart not required)",
         },
-        "contradiction_threshold": {"hot_reload": True, "description": "Contradiction detection threshold"},
     },
 }
 
@@ -111,14 +114,22 @@ class RuntimeConfigManager:
     def __init__(self) -> None:
         if self._initialized:
             return
-        self._initialized = True
-        self._settings = get_settings()
-        self._default_settings = Settings()
-        self._overrides: dict[str, Any] = {}
-        self._callbacks: dict[str, list[Callable]] = {}
-        self._reload_status = ReloadStatus()
-        self._overrides_path = Path(self._settings.config_dir) / "config_overrides.json"
-        self._load_overrides()
+        # __new__ と同じロックで二重初期化を防ぐ（provider_config/use_cases の
+        # api_keys 解決が worker スレッドから RCM() を呼ぶため、create_app と
+        # 交錯して部分初期化オブジェクトを返す競合があった）。
+        # _initialized は完了後に立てる: 途中で例外が出ても次の呼び出しが
+        # 初期化をやり直し、部分初期化を返し続けなくなる。
+        with type(self)._lock:
+            if self._initialized:
+                return
+            self._settings = get_settings()
+            self._default_settings = Settings()
+            self._overrides: dict[str, Any] = {}
+            self._callbacks: dict[str, list[Callable]] = {}
+            self._reload_status = ReloadStatus()
+            self._overrides_path = Path(self._settings.config_dir) / "config_overrides.json"
+            self._load_overrides()
+            self._initialized = True
 
     def _load_overrides(self) -> None:
         """Load overrides from JSON file."""
@@ -133,11 +144,16 @@ class RuntimeConfigManager:
 
     def _save_overrides(self) -> None:
         """Persist overrides to JSON file (atomic tmp+replace)."""
-        self._overrides_path.parent.mkdir(parents=True, exist_ok=True)
-        tmp_path = self._overrides_path.with_name(self._overrides_path.name + ".tmp")
-        with open(tmp_path, "w", encoding="utf-8") as f:
-            json.dump(self._overrides, f, indent=2, ensure_ascii=False)
-        os.replace(tmp_path, self._overrides_path)
+        try:
+            self._overrides_path.parent.mkdir(parents=True, exist_ok=True)
+            tmp_path = self._overrides_path.with_name(self._overrides_path.name + ".tmp")
+            with open(tmp_path, "w", encoding="utf-8") as f:
+                json.dump(self._overrides, f, indent=2, ensure_ascii=False)
+            os.replace(tmp_path, self._overrides_path)
+        except OSError:
+            # 送出して呼び出し元 (_persist_override) にメモリ巻き戻しさせる。
+            logger.exception("Failed to write config overrides to %s", self._overrides_path)
+            raise
         logger.info("Saved config overrides to %s", self._overrides_path)
 
     def get_effective_value(self, category: str, key: str) -> tuple[Any, str]:
@@ -203,19 +219,42 @@ class RuntimeConfigManager:
             "reload_status": self._reload_status.get_all(),
         }
 
+    def _persist_override(self, category: str, key: str, coerced: Any) -> dict | None:
+        """override をメモリ+ディスクへ保存。失敗時はメモリを巻き戻し、エラー dict を返す。"""
+        if category not in self._overrides:
+            self._overrides[category] = {}
+        previous = self._overrides[category].get(key)
+        self._overrides[category][key] = coerced
+        try:
+            self._save_overrides()
+        except OSError:
+            # 永続化に失敗したらメモリも巻き戻す（メモリだけ更新されて
+            # 再起動で設定が消える不一致を防ぐ）。
+            if previous is None:
+                self._overrides[category].pop(key, None)
+            else:
+                self._overrides[category][key] = previous
+            return {"success": False, "error": f"Failed to save {category}.{key} to disk"}
+        return None
+
     def update(self, category: str, key: str, value: Any) -> dict:
-        """Update a setting. Returns status dict."""
+        """Update a setting. Returns status dict.
+
+        UI は type=text 入力で全て文字列を送ってくるため、保存前に Settings 側の
+        フィールド型へ coerce する（不正型は ValidationError → admin が 400 へ）。
+        """
         # Validate category/key
         if category not in SETTINGS_META or key not in SETTINGS_META[category]:
             return {"success": False, "error": f"Unknown setting: {category}.{key}"}
 
         meta = SETTINGS_META[category][key]
+        coerced = self._coerce_value(category, key, value)
+
         if not meta.get("hot_reload", False):
             # Save override to disk even if restart is needed
-            if category not in self._overrides:
-                self._overrides[category] = {}
-            self._overrides[category][key] = value
-            self._save_overrides()
+            error = self._persist_override(category, key, coerced)
+            if error is not None:
+                return error
             return {
                 "success": True,
                 "restart_required": True,
@@ -223,28 +262,71 @@ class RuntimeConfigManager:
             }
 
         # Save override
-        if category not in self._overrides:
-            self._overrides[category] = {}
-        self._overrides[category][key] = value
-        self._save_overrides()
+        error = self._persist_override(category, key, coerced)
+        if error is not None:
+            return error
 
         # Apply to in-memory settings
-        self._apply_setting(category, key, value)
+        self._apply_setting(category, key, coerced)
 
         # Fire callbacks
-        self._fire_callbacks(category, key, value)
+        self._fire_callbacks(category, key, coerced)
 
-        logger.info("Updated setting %s.%s = %s", category, key, "***" if meta.get("masked") else value)
-        return {"success": True, "category": category, "key": key, "value": value}
+        logger.info("Updated setting %s.%s = %s", category, key, "***" if meta.get("masked") else coerced)
+        return {"success": True, "category": category, "key": key, "value": coerced}
+
+    def _coerce_value(self, category: str, key: str, value: Any) -> Any:
+        """SETTINGS_META のキーを Settings 側フィールド型へ検証・変換する（oracle 審査 #2）。
+
+        Settings 側に Field が無いキー（api_keys 仮想カテゴリ等）は既存の no-op
+        挙動を維持し、値をそのまま返す。不正型は ValidationError を送出する。
+        """
+        if category == "general":
+            fields = Settings.model_fields
+        else:
+            sub = getattr(self._settings, category, None)
+            fields = type(sub).model_fields if sub is not None else {}
+        field = fields.get(key)
+        if field is None:
+            return value
+        annotation = field.annotation
+        # UI（settings-form.js）は list[str] フィールドを「comma-separated」の
+        # 単一テキストボックスで編集するため、文字列はカンマ分割して検証する。
+        if typing.get_origin(annotation) is list and isinstance(value, str):
+            return [v.strip() for v in value.split(",") if v.strip()]
+        return TypeAdapter(annotation).validate_python(value)
 
     def _apply_setting(self, category: str, key: str, value: Any) -> None:
-        """Apply setting change to the in-memory Settings object."""
+        """Apply setting change to the in-memory Settings object (value must be coerced)."""
         if category == "general":
             setattr(self._settings, key, value)
         else:
             sub = getattr(self._settings, category, None)
             if sub is not None:
                 setattr(sub, key, value)
+
+    def apply_overrides_to_settings(self) -> tuple[int, int]:
+        """起動時に overrides ファイルの全値を Settings へ適用する（oracle 審査 #1/#2）。
+
+        再起動後も非 hot キーの変更が Settings に反映される保証。型が合わない
+        古い override は警告してスキップし、起動は落とさない。
+        Returns: (applied, skipped)
+        """
+        applied = skipped = 0
+        for category, keys in self._overrides.items():
+            for key, value in keys.items():
+                try:
+                    coerced = self._coerce_value(category, key, value)
+                    self._apply_setting(category, key, coerced)
+                    applied += 1
+                except ValidationError as exc:
+                    skipped += 1
+                    logger.warning(
+                        "Skipped invalid config override %s.%s=%r: %s", category, key, value, exc
+                    )
+        if applied or skipped:
+            logger.info("Applied %d config override(s) to Settings (%d skipped)", applied, skipped)
+        return applied, skipped
 
     def register_callback(self, category: str, callback: Callable[[str, Any], None]) -> None:
         """Register a callback for when a setting in the given category changes.

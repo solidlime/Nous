@@ -8,6 +8,7 @@ from pathlib import Path
 from typing import Self
 
 from pydantic import (
+    AliasChoices,
     BaseModel,
     Field,
     computed_field,
@@ -430,6 +431,7 @@ class Settings(BaseSettings):
         env_file=".env",
         env_file_encoding="utf-8",
         extra="ignore",
+        populate_by_name=True,
     )
 
     server: ServerConfig = ServerConfig()
@@ -461,7 +463,19 @@ class Settings(BaseSettings):
     cors: CorsConfig = CorsConfig()
     irodori: IrodoriConfig = Field(default_factory=IrodoriConfig)
     timezone: str = "Asia/Tokyo"
-    silence_hours: float = 6.0
+    # 旧名 NOUS_SILENCE_HOURS も env 互換として受理する（名称は ChatConfig 側の
+    # session_notes 静寂閾値との誤認防止のため分離 — oracle #11）。
+    # pydantic-settings は validation_alias に env_prefix を付与しないため、
+    # env 名はフルで列挙する。
+    session_silence_hours: float = Field(
+        default=6.0,
+        validation_alias=AliasChoices(
+            "session_silence_hours",
+            "silence_hours",
+            "NOUS_SESSION_SILENCE_HOURS",
+            "NOUS_SILENCE_HOURS",
+        ),
+    )
     """``session_begin`` が「沈黙の間」の記憶を作る閾値（時間・kanban #37）。"""
     data_root: str = "./data"
     log_level: str = "INFO"

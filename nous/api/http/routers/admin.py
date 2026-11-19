@@ -3,6 +3,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
+from pydantic import ValidationError
 from starlette.responses import JSONResponse
 
 from nous.infrastructure.logging.structured import get_logger
@@ -19,6 +20,11 @@ _API_KEY_MIN_LENGTH = 16
 #: ``qdrant.*`` は埋め込み先の差し替え＝データの持ち出し/破棄、``server.*`` は
 #: バインド先、``mcp_security.*`` は Host/Origin 検証の無効化。
 _DANGEROUS_CATEGORIES = frozenset({"server", "mcp_security", "qdrant"})
+#: ``general.api_key`` 未設定（開発既定）のときは書き込み自体を拒否するカテゴリ
+#: （oracle PLAN 審査 #8 — api_key 素通し状態で CORS * やプラグ鍵を書けると
+#: 同一 LAN の任意ページから API を叩ける攻撃面になる。api_keys は Phase 1 で
+#: SETTINGS_META に登録されるカテゴリだが、先に入れておく）。
+_STRICT_CATEGORIES = frozenset({"cors", "plugin", "api_keys"})
 _DANGEROUS_KEYS = frozenset(
     {
         ("general", "persona_dir"),
@@ -110,6 +116,22 @@ def register_admin_routes(mcp) -> None:
             gate = _api_key_gate(request, value)
             if gate is not None:
                 return gate
+        elif category in _STRICT_CATEGORIES:
+            # 審査 #8: strict カテゴリは api_key 未設定だと read-only。設定済みなら
+            # 危険カテゴリと同じ Bearer 要求を重ねる。
+            from nous.config.runtime_config import RuntimeConfigManager
+
+            current, _ = RuntimeConfigManager().get_effective_value("general", "api_key")
+            current = current if isinstance(current, str) else ""
+            if not current.strip():
+                return JSONResponse(
+                    {"error": "Set general.api_key before editing this category (read-only while unset)"},
+                    status_code=403,
+                )
+            gate = _require_admin(request)
+            if gate is not None:
+                logger.warning("update_settings: unauthenticated attempt on %s.%s", category, key)
+                return gate
         elif _is_dangerous(category, key):
             # 設定済みの API キーを Bearer で出せないなら危険なキーは触らせない。
             gate = _require_admin(request)
@@ -125,6 +147,14 @@ def register_admin_routes(mcp) -> None:
                 return JSONResponse(content=result, status_code=200)
             status_code = 200 if result.get("success") else 400
             return JSONResponse(result, status_code=status_code)
+        except ValidationError as exc:
+            # UI は type=text で全て文字列を送る → RCM 側でフィールド型に coerce
+            # できなければ検証エラーとして 400（oracle 審査 #2 — 従来は 500 落ち）。
+            logger.warning("update_settings: invalid value for %s.%s: %s", category, key, exc)
+            return JSONResponse(
+                {"success": False, "error": f"Invalid value for {category}.{key}: {exc.title}"},
+                status_code=400,
+            )
         # 最終防衛線
         except Exception as exc:
             logger.exception("Unexpected error: %s", exc)

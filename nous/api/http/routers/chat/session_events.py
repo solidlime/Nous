@@ -31,7 +31,7 @@ async def _begin_notes(ctx, persona: str) -> list[str]:
 
     notes: list[str] = []
     try:
-        warning = await fill_silence(ctx, persona, getattr(ctx.settings, "silence_hours", None))
+        warning = await fill_silence(ctx, persona, getattr(ctx.settings, "session_silence_hours", None))
         if warning:
             notes.append(warning)
         note = promise_note(ctx)

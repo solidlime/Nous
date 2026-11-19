@@ -120,7 +120,10 @@ def test_update_non_hot_reloadable(tmp_data_dir: Path):
 
 
 def test_mcp_security_update_requires_restart(tmp_data_dir: Path):
-    """mcp_security allowlists save as overrides with restart_required flag."""
+    """mcp_security allowlists save as overrides with restart_required flag.
+
+    UI は comma-separated 文字列で送るため、list[str] フィールドへ coerce される。
+    """
     mgr = RuntimeConfigManager()
 
     result = mgr.update("mcp_security", "allowed_hosts", "custom:*")
@@ -128,7 +131,7 @@ def test_mcp_security_update_requires_restart(tmp_data_dir: Path):
     assert result.get("restart_required") is True
 
     value, source = mgr.get_effective_value("mcp_security", "allowed_hosts")
-    assert value == "custom:*"
+    assert value == ["custom:*"]
     assert source == "override"
 
 

@@ -18,7 +18,7 @@ from nous.api.http.routes import register_http_routes
 from nous.api.mcp.middleware import PersonaMiddleware
 from nous.api.mcp.tools import register_tools
 from nous.application.use_cases import AppContextRegistry
-from nous.config.settings import Settings, get_settings
+from nous.config.settings import get_settings
 from nous.infrastructure.logging.structured import get_logger, setup_logging
 
 # Set HF_HOME early, before any module triggers huggingface_hub import
@@ -184,9 +184,18 @@ def _mount_static_files(mcp: MemoryFastMCP) -> None:
 
 def create_app() -> MemoryFastMCP:
     """Create and configure the MCPServer application."""
-    settings = Settings()
+    # get_settings()（シングルトン）を使う: RuntimeConfigManager の setattr が
+    # AppContextRegistry 配下の全 ctx.settings に届く同一インスタンスを保証する
+    # （oracle PLAN 審査 #1 — 従来は Settings() の別インスタンスを ctx に渡しており
+    # ホットリロードが RCM 内部で完結して ctx に届いていなかった）。
+    from nous.config.runtime_config import RuntimeConfigManager
+
+    settings = get_settings()
     setup_logging(settings.log_level)
     logger = get_logger("main")
+
+    # 起動時に overrides を Settings へ適用する（再起動後も非 hot 変更が効く保証 — 審査 #1）。
+    RuntimeConfigManager().apply_overrides_to_settings()
 
     logger.info("Starting Nous v%s on %s:%s", __version__, settings.server.host, settings.server.port)
 

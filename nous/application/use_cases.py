@@ -409,9 +409,9 @@ class AppContextRegistry:
                 return ctx
 
             if cls._settings is None:
-                from nous.config.settings import Settings
+                from nous.config.settings import get_settings
 
-                cls._settings = Settings()
+                cls._settings = get_settings()
 
             # パス分離子・親参照を含む persona はディレクトリ存在確認をすり抜けるため拒否
             if not persona or "/" in persona or "\\" in persona or persona in (".", ".."):
@@ -428,10 +428,9 @@ class AppContextRegistry:
                 try:
                     import os
 
-                    from nous.config.settings import get_settings
                     from nous.domain.config.chat_config import ChatConfigFileRepository
 
-                    data_root = str(get_settings().data_root)
+                    data_root = str(cls._settings.data_root)
                     if os.path.exists(os.path.join(data_root, "persona", persona, "config.json")):
                         config = ChatConfigFileRepository(data_root).get(persona)
                 except Exception:

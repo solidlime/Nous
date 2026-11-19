@@ -44,7 +44,7 @@ class TestSQLiteKeywordSearch:
 
         adapter = SQLiteKeywordSearch(repo)
         result = adapter.search("test")
-        assert result.is_ok
+        assert isinstance(result, Success)
         assert len(result.value) == 1
 
     def test_search_failure(self):
@@ -53,7 +53,7 @@ class TestSQLiteKeywordSearch:
 
         adapter = SQLiteKeywordSearch(repo)
         result = adapter.search("test")
-        assert not result.is_ok
+        assert isinstance(result, Failure)
 
     def test_search_passes_limit(self):
         repo = MagicMock()
@@ -81,7 +81,7 @@ class TestQdrantSemanticSearch:
 
         adapter = QdrantSemanticSearch(vs, repo)
         result = await adapter.search("query")
-        assert not result.is_ok
+        assert isinstance(result, Failure)
 
     @pytest.mark.asyncio
     async def test_search_success_with_memory(self):
@@ -95,7 +95,7 @@ class TestQdrantSemanticSearch:
         adapter = QdrantSemanticSearch(vs, repo)
         adapter.persona = "test"
         result = await adapter.search("query")
-        assert result.is_ok
+        assert isinstance(result, Success)
         assert len(result.value) == 1
         assert result.value[0][0] is memory
         assert result.value[0][1] == pytest.approx(0.9)
@@ -110,7 +110,7 @@ class TestQdrantSemanticSearch:
 
         adapter = QdrantSemanticSearch(vs, repo)
         result = await adapter.search("query")
-        assert result.is_ok
+        assert isinstance(result, Success)
         assert result.value == []
 
     @pytest.mark.asyncio
@@ -137,7 +137,7 @@ class TestQdrantSemanticSearch:
 
         adapter = QdrantSemanticSearch(vs, repo)
         result = await adapter.search("query")
-        assert result.is_ok
+        assert isinstance(result, Success)
         assert result.value == []
 
     @pytest.mark.asyncio
@@ -152,7 +152,7 @@ class TestQdrantSemanticSearch:
 
         adapter = QdrantSemanticSearch(vs, repo)
         result = await adapter.search("query", limit=3)
-        assert result.is_ok
+        assert isinstance(result, Success)
         assert [m.key for m, _ in result.value] == ["mem_a", "mem_b", "mem_c"]
         repo.find_by_keys.assert_called_once_with(["mem_a", "mem_b", "mem_c"])
         repo.find_by_key.assert_not_called()
@@ -195,7 +195,7 @@ class TestQdrantSemanticSearchDateFiltering:
 
         date_from = datetime.now(UTC) - timedelta(days=5)
         result = await adapter.search("query", date_from=date_from)
-        assert result.is_ok
+        assert isinstance(result, Success)
         assert len(result.value) == 1
         assert result.value[0][0].key == "mem_new"
 
@@ -221,7 +221,7 @@ class TestQdrantSemanticSearchDateFiltering:
 
         date_to = datetime.now(UTC) - timedelta(days=5)
         result = await adapter.search("query", date_to=date_to)
-        assert result.is_ok
+        assert isinstance(result, Success)
         assert len(result.value) == 1
         assert result.value[0][0].key == "mem_old"
 
@@ -250,7 +250,7 @@ class TestQdrantSemanticSearchDateFiltering:
         date_from = datetime.now(UTC) - timedelta(days=15)
         date_to = datetime.now(UTC) - timedelta(days=5)
         result = await adapter.search("query", date_from=date_from, date_to=date_to)
-        assert result.is_ok
+        assert isinstance(result, Success)
         assert len(result.value) == 1
         assert result.value[0][0].key == "mem_mid"
 
@@ -303,7 +303,7 @@ class TestQdrantSemanticSearchDateFiltering:
         adapter.persona = "test"
         date_from = datetime.now(UTC) - timedelta(days=30)
         result = await adapter.search("query", limit=2, date_from=date_from)
-        assert result.is_ok
+        assert isinstance(result, Success)
         assert len(result.value) == 2  # Should break at limit=2
 
 
@@ -391,7 +391,7 @@ class TestAppContextRegistry:
 
         with (
             patch.object(AppContextRegistry, "_settings", None),
-            patch("nous.config.settings.Settings") as mock_settings,
+            patch("nous.config.settings.get_settings") as mock_get_settings,
             patch("nous.application.use_cases.AppContext") as mock_app_context,
         ):
             mock_settings_inst = MagicMock()
@@ -400,13 +400,13 @@ class TestAppContextRegistry:
             persona_root = tmp_path / "persona"
             (persona_root / "test_persona").mkdir(parents=True)
             mock_settings_inst.persona_dir = str(persona_root)
-            mock_settings.return_value = mock_settings_inst
+            mock_get_settings.return_value = mock_settings_inst
 
             mock_ctx = MagicMock()
             mock_app_context.return_value = mock_ctx
 
             ctx = AppContextRegistry.get("test_persona")
-            mock_settings.assert_called_once()
+            mock_get_settings.assert_called_once()
             assert ctx is mock_ctx
 
         # Clean up
@@ -575,7 +575,7 @@ class TestAppContextVectorStore:
             )
             se._keyword.search = MagicMock(return_value=Success([(mem, 1.0)]))
             result = await se.search(SearchQuery(text="test", top_k=5, mode="hybrid"))
-            assert result.is_ok
+            assert isinstance(result, Success)
 
         ctx.close()
 
@@ -621,6 +621,6 @@ class TestAppContextVectorStore:
             )
             se._keyword.search = MagicMock(return_value=Success([(mem, 1.0)]))
             result = await se.search(SearchQuery(text="test", top_k=5, mode="hybrid"))
-            assert result.is_ok
+            assert isinstance(result, Success)
 
         ctx.close()
