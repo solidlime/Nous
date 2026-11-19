@@ -317,7 +317,7 @@ def _body_delta_state(ctx: AppContext, persona: str, ctx_update: dict, *, skip_b
     current: dict[str, float] = {}
     state_result = ctx.persona_service.get_context(persona)
     if isinstance(state_result, Success):
-        state = state_result.value  # type: ignore[union-attr]
+        state = state_result.value
         for key in ("fatigue", "warmth", "arousal"):
             raw = getattr(state, key, None)
             try:

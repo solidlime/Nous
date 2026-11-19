@@ -193,6 +193,8 @@ async def _tool_goal_manage(
                     },
                 )
                 return {"ok": False, "error": f"No active goal matching '{content}' found."}
+        # 上の 2 つの None 分岐で必ず return するが、narrowing はこの深さまで届かない
+        assert match is not None
         new_importance = max(match.importance, 0.9)
         new_tags = ["goal", new_status, "archived"]
         update_result = ctx.memory_service.update_memory(match.key, importance=new_importance, tags=new_tags)
