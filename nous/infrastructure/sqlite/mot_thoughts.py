@@ -15,16 +15,11 @@ import sqlite3
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 
+from nous.config.settings import get_settings
 from nous.domain.shared.time_utils import format_iso, get_now
 from nous.infrastructure.logging.structured import get_logger
 
 logger = get_logger(__name__)
-
-MOT_CONFIDENCE_THRESHOLD = 0.8
-MOT_TOP_K = 3
-MOT_CORROSION_PER_HOUR = 0.02
-MOT_MIN_EFFECTIVE_CONFIDENCE = 0.5
-MOT_TTL_HOURS = 72
 
 MOT_THOUGHTS_DDL = """
 CREATE TABLE IF NOT EXISTS mot_thoughts (
@@ -67,7 +62,7 @@ def effective_confidence(stored: float, created_at: str, now: datetime | None = 
         age_hours = max(0.0, (ref - created).total_seconds() / 3600.0)
     except (ValueError, TypeError):
         age_hours = 0.0
-    return max(0.0, stored - MOT_CORROSION_PER_HOUR * age_hours)
+    return max(0.0, stored - get_settings().memory.mot_corrosion_per_hour * age_hours)
 
 
 def save_thought(
@@ -83,7 +78,7 @@ def save_thought(
         conf = float(confidence)
     except (TypeError, ValueError):
         return False
-    if conf < MOT_CONFIDENCE_THRESHOLD:
+    if conf < get_settings().memory.mot_confidence_threshold:
         return False
     ensure_thoughts_table(db_conn)
     prune_expired(db_conn)
@@ -99,7 +94,7 @@ def prune_expired(db_conn: sqlite3.Connection, now: datetime | None = None) -> i
     """Delete TTL-expired rows. Returns pruned count."""
     ensure_thoughts_table(db_conn)
     ref = now or get_now()
-    cutoff = (ref - timedelta(hours=MOT_TTL_HOURS)).isoformat()
+    cutoff = (ref - timedelta(hours=get_settings().memory.mot_ttl_hours)).isoformat()
     cursor = db_conn.execute("DELETE FROM mot_thoughts WHERE created_at < ?", (cutoff,))
     db_conn.commit()
     return cursor.rowcount
@@ -108,7 +103,7 @@ def prune_expired(db_conn: sqlite3.Connection, now: datetime | None = None) -> i
 def fetch_thoughts(
     db_conn: sqlite3.Connection,
     query_text: str,
-    limit: int = MOT_TOP_K,
+    limit: int | None = None,
     now: datetime | None = None,
 ) -> list[MotThought]:
     """Top-k thoughts by query-token overlap, corrosion-filtered.
@@ -118,6 +113,7 @@ def fetch_thoughts(
     """
     ensure_thoughts_table(db_conn)
     prune_expired(db_conn, now)
+    mot = get_settings().memory
     tokens = [t for t in re.split(r"\W+", (query_text or "").casefold()) if len(t) >= 2]
     if not tokens:
         return []
@@ -136,7 +132,7 @@ def fetch_thoughts(
         if hits <= 0:
             continue
         eff = effective_confidence(float(row["confidence"]), row["created_at"], ref)
-        if eff < MOT_MIN_EFFECTIVE_CONFIDENCE:
+        if eff < mot.mot_min_effective_confidence:
             continue
         scored.append(
             (
@@ -153,4 +149,4 @@ def fetch_thoughts(
             )
         )
     scored.sort(key=lambda s: (-s[0], -s[1], s[2]))
-    return [s[3] for s in scored[:limit]]
+    return [s[3] for s in scored[: limit or mot.mot_top_k]]

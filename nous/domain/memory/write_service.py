@@ -14,12 +14,6 @@ from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import generate_memory_key, get_now
 from nous.domain.value_objects import PROJECT_SLUG_RE, normalize_emotion, normalize_importance
 
-# 重複検知の閾値（意味的類似）。意図して定数：
-# - 設定ノブにはしない（v4.0 で未配線の Settings.duplicate_threshold を削除した）。
-# - 0.75 は意味的類似の実測（fixture で明確な空白がある）に基づく値で、上げ下げは
-#   `docs/archive/superpowers/plans/2026-09-19-v4-release.md` の検証手順を伴う。
-_SEMANTIC_DUPLICATE_THRESHOLD = 0.75
-
 
 class MemoryWriteService:
     """Handles duplicate detection, validation, and memory entity construction."""
@@ -49,6 +43,9 @@ class MemoryWriteService:
         """
         # 1. Semantic similarity check (async)
         if self._search_engine is not None:
+            from nous.config.settings import get_settings
+
+            threshold = get_settings().memory.duplicate_threshold
             try:
                 from nous.domain.search.engine import SearchQuery
 
@@ -61,9 +58,9 @@ class MemoryWriteService:
                             "score": item.score,
                         }
                         for item in search_result.value
-                        # この 0.75 が重複検知の唯一の実効閾値（設定ノブは持たない。
-                        # v4.0 で未配線の Settings.duplicate_threshold を削除した）。
-                        if item.score >= _SEMANTIC_DUPLICATE_THRESHOLD
+                        # settings.memory.duplicate_threshold が重複検知の唯一の実効
+                        # 閾値（hooks 側 0.85 と統一済み）。
+                        if item.score >= threshold
                     ]
                     if duplicates:
                         return DuplicateMemoryError(

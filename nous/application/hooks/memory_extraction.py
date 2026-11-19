@@ -43,16 +43,6 @@ logger = get_logger(__name__)
 #: hook pipeline が拾う event 型（session.stopped は _summarize_session_end 専用）。
 HOOK_EXTRACTION_EVENT_TYPES = frozenset({"turn.completed"})
 
-#: facts の重複判定しきい値（chat pipeline の run_memory_llm と同一規約）。
-DUPLICATE_SCORE_THRESHOLD = 0.85
-
-#: 抽出 LLM の max_tokens。
-#: reasoning を前提としない旧 ChatConfig 既定値（512)では、reasoning LLM が
-#: reasoning token を max_tokens に含めて消費するため content が空になる
-#: reasoning 系モデルは reasoning tokens も max_tokens に含むため余裕を取る。
-#: hook 抽出は短文なので 8192 で十分。
-HOOK_EXTRACT_MAX_TOKENS = 8192
-
 FAILED_EVENT_TYPE = "hook_extraction.failed"
 
 
@@ -66,7 +56,9 @@ class _HookLLMConfig:
     base_url: str
     language: str = FALLBACK_LANGUAGE
     extract_model: str = ""
-    extract_max_tokens: int = HOOK_EXTRACT_MAX_TOKENS
+    # reasoning LLM は reasoning token も max_tokens に含むため、既定 512 では
+    # content が空になる。hook 抽出は短文なので settings 既定の 8192 で十分。
+    extract_max_tokens: int = 8192
 
     def get_effective_model(self) -> str:
         return self.model
@@ -88,6 +80,7 @@ def _llm_config(settings: Settings, user_text: str) -> _HookLLMConfig:
         api_key=enrich.get_effective_api_key(settings),
         base_url=enrich.base_url,
         language=detected if detected in SUPPORTED_LANGUAGES else FALLBACK_LANGUAGE,
+        extract_max_tokens=settings.memory_enrichment.extraction_max_tokens,
     )
 
 
@@ -263,7 +256,7 @@ async def _create(
     emotion: str = "neutral",
     valid_until: datetime | None = None,
 ) -> bool:
-    """重複（類似 ≥0.85）を skip して記憶を 1 件保存する。"""
+    """重複（類似 ≥ settings.memory.duplicate_threshold）を skip して記憶を 1 件保存する。"""
     if await _is_duplicate(ctx, content):
         logger.debug("hook_extraction: skipping duplicate persona=%s: %s", persona, content[:60])
         return False
@@ -286,7 +279,7 @@ async def _is_duplicate(ctx: AppContext, content: str) -> bool:
     res = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
     if not isinstance(res, Success) or not res.value:
         return False
-    return getattr(res.value[0], "score", 0.0) > DUPLICATE_SCORE_THRESHOLD
+    return getattr(res.value[0], "score", 0.0) > ctx.settings.memory.duplicate_threshold
 
 
 async def _upsert_vector(ctx: AppContext, persona: str, memory: Any) -> None:

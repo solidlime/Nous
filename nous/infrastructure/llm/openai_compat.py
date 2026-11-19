@@ -6,6 +6,7 @@ import re
 import uuid
 from typing import TYPE_CHECKING
 
+from nous.config.settings import get_settings
 from nous.domain.config.provider_config import REASONING_BUDGETS
 
 from .base import (
@@ -40,17 +41,6 @@ _PROCESS_GO_SESSION = uuid.uuid4().hex
 _EFFORT_BUDGET_MAP = REASONING_BUDGETS
 
 
-_VISION_MODEL_PREFIXES = (
-    "gpt-4o",
-    "gpt-4-turbo",
-    "gpt-4-vision",
-    "o1",
-    "o3",
-    "o4-mini",
-)
-
-_NON_VISION_MODEL_PREFIXES = ("gpt-3.5",)
-
 _MAX_ERROR_MESSAGE_LEN = 300
 
 
@@ -82,9 +72,10 @@ def _is_vision_model(model: str) -> bool:
     All other models default to True (safe side — API errors are visible).
     """
     lowered = model.lower()
-    if model.startswith(_NON_VISION_MODEL_PREFIXES):
+    enrich = get_settings().memory_enrichment
+    if model.startswith(tuple(enrich.non_vision_models)):
         return False
-    if model.startswith(_VISION_MODEL_PREFIXES):
+    if model.startswith(tuple(enrich.vision_models)):
         return True
     if lowered.startswith("deepseek"):
         return "vision" in lowered
@@ -122,7 +113,9 @@ class OpenAICompatProvider(LLMProvider):
             self._client = AsyncOpenAI(
                 api_key=api_key,
                 base_url=self.base_url,
-                http_client=httpx.AsyncClient(timeout=httpx.Timeout(60.0)),
+                http_client=httpx.AsyncClient(
+                    timeout=httpx.Timeout(float(get_settings().memory_enrichment.timeout_seconds))
+                ),
                 default_headers=headers,
             )
         except ImportError as e:

@@ -9,12 +9,12 @@ from __future__ import annotations
 
 import pytest
 
+from nous.config.settings import get_settings
 from nous.domain.memory.contradiction import ContradictionResult, ContradictionType
 from nous.domain.memory.entities import MODALITY_BY_SOURCE_TYPE, VALID_MODALITIES, Memory
 from nous.domain.memory.evolution_service import (
     CONTRADICTED_CONFIDENCE_FACTOR,
     CORROBORATION_CONFIDENCE_DELTA,
-    CORROBORATION_SIMILARITY_MIN,
     MemoryEvolutionService,
 )
 from nous.domain.search.engine import SearchResult
@@ -22,6 +22,8 @@ from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.memory_repo import SQLiteMemoryRepository
+
+CORROBORATION_SIMILARITY_MIN = get_settings().memory.corroboration_min
 
 PERSONA = "test_confidence"
 

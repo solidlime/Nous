@@ -9,6 +9,7 @@ if TYPE_CHECKING:
     from nous.domain.memory.repository import MemoryRepository
     from nous.domain.search.engine import SearchEngine
 
+from nous.config.settings import get_settings
 from nous.domain.memory.contradiction import ContradictionType
 from nous.domain.shared.time_utils import get_now
 from nous.domain.value_objects import normalize_importance
@@ -19,14 +20,10 @@ logger = logging.getLogger(__name__)
 # so that contradicted facts and re-confirmed (corroborated) facts can be told
 # apart later. Nothing in the search path reads it.
 CONTRADICTED_CONFIDENCE_FACTOR = 0.5
-CORROBORATION_SIMILARITY_MIN = 0.9
 CORROBORATION_CONFIDENCE_DELTA = 0.1
 
-# audit M1 — interference band。下限 0.85 は _save_extracted_facts の重複スキップ境界
-# （memory_extractor は >0.85 の厳密比較、こちらは >=0.85 の包含）。
-# 上限 0.95 以上は同じ記憶の書き直しとみなす。
-INTERFERENCE_SIMILARITY_MIN = 0.85
-INTERFERENCE_SIMILARITY_MAX = 0.95
+# audit M1 — interference band は settings.memory.interference_min/max
+# （下限は _save_extracted_facts の重複スキップ境界 = duplicate_threshold と同値）。
 
 
 class MemoryEvolutionService:
@@ -166,7 +163,7 @@ class MemoryEvolutionService:
                                 self._repo.update(result.existing_memory_key, **updates)
                             # audit C4 — corroboration: the same fact is stated
                             # again at high similarity → raise confidence (cap 1.0).
-                            if matched_similarity >= CORROBORATION_SIMILARITY_MIN:
+                            if matched_similarity >= get_settings().memory.corroboration_min:
                                 self._adjust_confidence(
                                     result.existing_memory_key,
                                     delta=CORROBORATION_CONFIDENCE_DELTA,
@@ -218,7 +215,7 @@ class MemoryEvolutionService:
         """Best-effort interference counting (audit M1).
 
         Reuses the evolution search results: each existing memory in the
-        0.85–0.95 band gets ``interference_count += 1``. The repository
+        settings の interference band gets ``interference_count += 1``. The repository
         queues a merge review once the count hits its threshold.
         """
         note = getattr(self._repo, "note_interference", None)
@@ -228,7 +225,8 @@ class MemoryEvolutionService:
             if result.memory.key == new_memory_key:
                 continue
             score = float(result.score)
-            if not (INTERFERENCE_SIMILARITY_MIN <= score < INTERFERENCE_SIMILARITY_MAX):
+            band = get_settings().memory
+            if not (band.interference_min <= score < band.interference_max):
                 continue
             try:
                 note(result.memory.key, new_memory_key, score, persona)

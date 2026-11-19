@@ -4,10 +4,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from nous.application.chat.pipeline.summarizer import (
-    SUMMARIZE_PROMPT,  # noqa: F401
-    SummarizerMixin,
-)
+from nous.application.chat.pipeline.summarizer import SummarizerMixin
 from nous.application.chat.pipeline.trimmer import TrimmerMixin
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.llm.token_counter import TokenCounter

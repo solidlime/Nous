@@ -256,3 +256,46 @@ class TestCosineRelevance:
         assert debug["results"][0]["score"] == pytest.approx(1.4, abs=1e-3)
         assert debug["results"][0]["cosine"] == pytest.approx(1.0, abs=1e-3)
         assert mems[0] is mem
+
+
+class TestPerRequestConfigWins:
+    """per-request ChatConfig が ctx（Registry キャッシュ）の config より優先されること。
+
+    ``AppContext._config`` は persona の AppContext 生成時に 1 回だけ読まれる。UI で
+    ``reflection_injection_*`` を変えても、チャットが毎リクエスト読む ChatConfig を
+    読み手に渡さない限り再起動まで反映されなかった（初期化時の焼き込み）。
+    """
+
+    def test_threshold_helpers_prefer_argument(self):
+        from nous.application.chat.pipeline.context_loader import (
+            _reflection_injection_margin,
+            _reflection_similarity_threshold,
+        )
+
+        ctx = SimpleNamespace(_config=ChatConfig())  # 既定 0.45 / 0.08
+        cfg = ChatConfig(reflection_injection_min_similarity=0.7, reflection_injection_margin=0.2)
+        assert _reflection_similarity_threshold(ctx, cfg) == 0.7
+        assert _reflection_injection_margin(ctx, cfg) == 0.2
+        # 後方互換: 引数省略時は従来どおり ctx の config
+        assert _reflection_similarity_threshold(ctx) == 0.45
+        assert _reflection_injection_margin(ctx) == 0.08
+
+    @pytest.mark.asyncio
+    async def test_section_honours_argument_config(self):
+        from nous.application.chat.pipeline.context_loader import _build_context_section
+
+        refs = [_mem("r1", "related"), _mem("r2", "unrelated")]
+        vecs = {
+            "ユーザーの発言": np.array([1.0, 0.0]),
+            "related": np.array([1.0, 0.0]),
+            "unrelated": np.array([0.0, 1.0]),
+        }
+        # ctx 側は 0.9（無関係側は落ちる設定）、引数側は 0.0（フィルタ無効 = embed せず先頭3件）
+        ctx = _ctx_with_reflections(refs, vecs, ChatConfig(reflection_injection_min_similarity=0.9))
+        turn_ctx = SimpleNamespace(user_message="ユーザーの発言")
+        section = await _build_context_section(
+            ctx, _state(), turn_ctx, config=ChatConfig(reflection_injection_min_similarity=0.0)
+        )
+        assert "related" in section
+        assert "unrelated" in section
+        assert not ctx._embedding.encode.called

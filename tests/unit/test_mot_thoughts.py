@@ -11,17 +11,16 @@ from datetime import timedelta
 
 import pytest
 
+from nous.config.settings import get_settings
 from nous.domain.memory.entities import Memory
 from nous.domain.search.engine import SearchEngine, SearchQuery
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import format_iso, get_now
 from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.memory_repo import SQLiteMemoryRepository
-from nous.infrastructure.sqlite.mot_thoughts import (
-    MOT_CONFIDENCE_THRESHOLD,
-    fetch_thoughts,
-    save_thought,
-)
+from nous.infrastructure.sqlite.mot_thoughts import fetch_thoughts, save_thought
+
+MOT_CONFIDENCE_THRESHOLD = get_settings().memory.mot_confidence_threshold
 
 
 def _setup(tmp_path):
