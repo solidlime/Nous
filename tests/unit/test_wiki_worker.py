@@ -1,7 +1,7 @@
 """WikiWorker tests — ドリーミング（wiki 編纂）の topic 選択・ページ適用・監査記録。
 
 計画書 ``docs/archive/superpowers/plans/2026-11-07-wiki-dreaming.md`` §4.2:
-- SELECT: active のみ、project:* タグでクラスタ化、無タグは persona、MIN_TOPIC_MEMORIES 未満は除外
+- SELECT: active のみ、project:* タグでクラスタ化、無タグは persona、min_topic_memories 未満は除外
 - 適用: slug は topic 配下のみ、sources は候補 key 以外を捨て、空なら拒否、body 上限で拒否
 - LLM 失敗・不正 JSON → 例外が外に漏れずファイル無変化、session_events に error 行
 - ページ適用毎に session_events へ 1 行（type=wiki.compiled, detail に page_hash）
@@ -21,7 +21,7 @@ import pytest
 
 from nous.application.chat.tools.schedule import AGENT_TASK_TAG, done_tags, due_agent_tasks
 from nous.application.wiki.journal import _TODO_TAG
-from nous.application.workers.wiki_worker import MIN_TOPIC_MEMORIES, WikiWorker
+from nous.application.workers.wiki_worker import WikiWorker
 from nous.domain.memory.entities import Memory
 from nous.domain.memory.service import MemoryService
 from nous.domain.shared.result import Failure, Success
@@ -123,8 +123,8 @@ class TestSelectTopics:
             conn.close()
 
     def test_excludes_small_and_non_active_topics(self, tmp_path) -> None:
-        """MIN_TOPIC_MEMORIES 未満の topic と非 active 記憶は対象外。"""
-        memories = [_mem(f"a{i}", tags=["project:nous"]) for i in range(MIN_TOPIC_MEMORIES - 1)]
+        """min_topic_memories 未満の topic と非 active 記憶は対象外。"""
+        memories = [_mem(f"a{i}", tags=["project:nous"]) for i in range(2)]
         memories += [_mem("arch", tags=["project:dotfiles"], lifecycle="archived") for _ in range(3)]
         conn, worker = _setup(tmp_path, memories, llm=None)
         try:
@@ -725,7 +725,7 @@ class TestNoPersonaContext:
         monkeypatch.setattr(AppContextRegistry, "personas", classmethod(lambda cls: []))
         worker = WikiWorker(_settings(tmp_path))
         worker._empty_retries = 0
-        worker._error_retry_seconds = 0.01
+        worker._settings.wiki.worker_error_retry_seconds = 0
         planned: list[float] = []
 
         def fake_next_delay() -> float:
@@ -1177,7 +1177,7 @@ class TestRetryScheduling:
         """失敗があったら翌日まで待たず、短い再挑戦間隔で回し直す（例外で日を捨てない）。"""
         worker = WikiWorker(_settings(tmp_path))
         worker._cfg = worker._cfg.model_copy(update={"run_at_hour": 3})
-        worker._error_retry_seconds = 0.01
+        worker._settings.wiki.worker_error_retry_seconds = 0
         worker._empty_retries = 0
         planned: list[float] = []
 

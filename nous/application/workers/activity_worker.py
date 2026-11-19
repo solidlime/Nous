@@ -31,6 +31,7 @@ from typing import TYPE_CHECKING, Any
 
 from nous.application.chat.service import ChatService, get_turn_hub
 from nous.application.workers.proactive_worker import idle_minutes
+from nous.config.settings import get_settings
 from nous.domain.memory.session_event import SessionEvent
 from nous.domain.memory.session_ids import ACTIVITY_SESSION_PREFIX
 from nous.domain.shared.result import Success
@@ -46,7 +47,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-DEFAULT_INTERVAL_SECONDS = 3600
 ACTED_EVENT = "activity.acted"
 #: LLM が選べる行動。増やす時は :meth:`ActivityWorker._act` の分岐も足す。
 CHOICES = ("move", "research", "write_file", "memory_update", "nothing")
@@ -55,8 +55,7 @@ CHOICES = ("move", "research", "write_file", "memory_update", "nothing")
 class ActivityWorker:
     """idle な persona に、1 tick 1 アクションだけ実行させる。"""
 
-    def __init__(self, interval_seconds: int = DEFAULT_INTERVAL_SECONDS) -> None:
-        self.interval = interval_seconds
+    def __init__(self) -> None:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         #: persona → 直前に判断した時刻。
@@ -65,13 +64,17 @@ class ActivityWorker:
         #: (persona, YYYY-MM-DD) → 当日の実行数（イベントを書けなかった分の代替、kanban #82 B3）。
         self._acted_fallback: dict[tuple[str, str], int] = {}
 
+    def _interval(self) -> float:
+        """1 tick の間隔（秒）。設定を毎サイクル読み直す（hot reload を次サイクルに効かせる）。"""
+        return float(get_settings().workers.activity_interval_seconds)
+
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
             return
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, daemon=True, name="activity-worker")
         self._thread.start()
-        logger.info("ActivityWorker started (interval=%ss)", self.interval)
+        logger.info("ActivityWorker started (interval=%ss)", self._interval())
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop_event.set()
@@ -80,7 +83,7 @@ class ActivityWorker:
         logger.info("ActivityWorker stopped")
 
     def _run(self) -> None:
-        while not self._stop_event.wait(self.interval):
+        while not self._stop_event.wait(self._interval()):
             try:
                 self.run_cycle()
             except Exception:
@@ -116,7 +119,7 @@ class ActivityWorker:
         if last_check is not None:
             if last_check.tzinfo is None:
                 last_check = last_check.replace(tzinfo=now.tzinfo)
-            if (now - last_check).total_seconds() < self.interval:
+            if (now - last_check).total_seconds() < self._interval():
                 return None
 
         idle = idle_minutes(ctx, now, session_config.activity_idle_minutes)

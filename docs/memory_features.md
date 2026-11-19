@@ -249,7 +249,7 @@ v037: `ALTER TABLE memories ADD COLUMN valid_from TEXT; ADD COLUMN valid_until T
 | `agent:task` | 予定そのもの（実行し終えたら外す） |
 | `cue:time:<iso>` | 期限（分精度） |
 | `cue:recur:daily\|weekly` | 繰り返し（実行後に次回の期限を入れ直す） |
-| `agent:task:fail:<n>` | 失敗回数（`FAIL_LIMIT=3` で諦めて `agent.task.failed` を残す） |
+| `agent:task:fail:<n>` | 失敗回数（Chat 設定 `tools.schedule_fail_limit`（既定3）で諦めて `agent.task.failed` を残す） |
 
 ### 実行の流れ
 
@@ -259,7 +259,7 @@ v037: `ALTER TABLE memories ADD COLUMN valid_from TEXT; ADD COLUMN valid_until T
 
 ### 精度とグレース（kanban #68）
 
-- **定時実行**: worker は最短の未来期限まで眠るので、期限の 30 秒以降（`MIN_WAIT_SECONDS`）に走る。未来の期限が1つもない時だけ `interval`（既定 3600 秒・設定不可）で周期的に起きる
+- **定時実行**: worker は最短の未来期限まで眠るので、期限の `workers.prospective_min_wait_seconds`（既定 30 秒）以降に走る。未来の期限が1つもない時だけ `workers.prospective_interval_seconds`（既定 3600 秒）で周期的に起きる（どちらもループ毎に設定を読み直す）
 - **譲り渡し**: 期限時に他のターン（ユーザーとの会話など）が走っていると実行を譲り、タグを外さず次の巡回（最大 1 時間後）で拾い直す
 - **過期グレース**: 期限を過ぎたタスクも `72h`（`OVERDUE_GRACE_HOURS`）以内なら対象。それより古いものは拾わない
 - **巡回対象**: 起動後に一度でも HTTP/チャットでアクセスされたペルソナだけ。触られていないペルソナの期限は拾われない

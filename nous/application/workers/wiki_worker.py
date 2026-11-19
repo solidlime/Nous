@@ -60,9 +60,6 @@ def _compile_lock(persona: str) -> threading.Lock:
         return _COMPILE_LOCKS.setdefault(persona, threading.Lock())
 
 
-#: 編纂対象クラスタの最小記憶数（これ未満の topic はページ化しない）。
-MIN_TOPIC_MEMORIES = 3
-
 _GIST_DUMP_SUBDIR = "_purged"  # 旧 gist を消す前の退避先（<persona>/wiki/_purged/）
 _EVENT_KEY_SAMPLE = 50  # 監査イベントに載せるキーの見本数（全件は DB を膨らませる）
 
@@ -128,9 +125,9 @@ class WikiWorker(JournalMixin, ConflictsMixin):
         self._running = False
         self._thread: threading.Thread | None = None
         self._stop_event = threading.Event()
-        #: 定刻に persona コンテキストが空だった時の再試行回数と間隔（1 日を空振りで捨てない）。
+        #: 定刻に persona コンテキストが空だった時の再試行回数（1 日を空振りで捨てない）。
+        #: 間隔は ``_retry_seconds`` = ``wiki.worker_retry_seconds``。
         self._empty_retries = 30
-        self._retry_seconds = 60.0
         #: サイクル内で error イベントが出た件数。0 より大きければ定刻を待たず短くリトライする。
         self._cycle_errors = 0
         #: 直近の LLM 呼び出しの計器（attempt/max_tokens/text_len/stream_error）。監査イベントに載せる。
@@ -148,8 +145,19 @@ class WikiWorker(JournalMixin, ConflictsMixin):
     _llm_attempts = 2
     #: 1 回目の max_tokens。reasoning モデルでも本文を書き切れる余裕を取る。
     _max_tokens = 16000
-    #: サイクルが失敗したときの再試行間隔（秒）。1 回の一時障害で 24h 空くのを防ぐ。
-    _error_retry_seconds = 1800.0
+
+    @property
+    def _retry_seconds(self) -> float:
+        """空コンテキスト時の再試行間隔（秒）。設定を毎サイクル読み直す。"""
+        return float(self._settings.wiki.worker_retry_seconds)
+
+    @property
+    def _error_retry_seconds(self) -> float:
+        """サイクルが失敗したときの再試行間隔（秒）。1 回の一時障害で 24h 空くのを防ぐ。
+
+        設定を毎サイクル読み直す（hot reload を次サイクルに効かせる）。
+        """
+        return float(self._settings.wiki.worker_error_retry_seconds)
 
     def start(self) -> None:
         if self._running:
@@ -299,11 +307,12 @@ class WikiWorker(JournalMixin, ConflictsMixin):
 
         last_compiled = self._last_compiled(store)
         # 既にページのある topic は新着 1 件でも巡回対象にする。編纂で源を物理削除すると
-        # active が減り、MIN_TOPIC_MEMORIES の下限でその topic が永久に選ばれなくなるため。
+        # active が減り、min_topic_memories の下限でその topic が永久に選ばれなくなるため。
+        min_memories = self._settings.wiki.min_topic_memories
         topics = [
             (slug, mems)
             for slug, mems in buckets.items()
-            if len(mems) >= (1 if slug in last_compiled else MIN_TOPIC_MEMORIES)
+            if len(mems) >= (1 if slug in last_compiled else min_memories)
         ]
         # 並び順: 最後に編纂された時刻が古い順（未編纂は "" で最優先）
         # → 同順位は記憶数降順。これで小クラスタにも巡回が回る。

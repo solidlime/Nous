@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 
 from nous.application.chat.service import ChatService, get_turn_hub
 from nous.application.workers.announce import SPOKE_EVENT, speak_to_main
+from nous.config.settings import get_settings
 from nous.domain.memory.session_ids import PROACTIVE_SESSION_PREFIX
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
@@ -41,7 +42,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-DEFAULT_INTERVAL_SECONDS = 1800
 SILENT_MARK = "<silent>"
 
 
@@ -65,8 +65,7 @@ def idle_minutes(ctx: AppContext, now: datetime, threshold_minutes: int) -> floa
 class ProactiveWorker:
     """Idle な persona に、話すことがある時だけ 1〜2 文を push する。"""
 
-    def __init__(self, interval_seconds: int = DEFAULT_INTERVAL_SECONDS) -> None:
-        self.interval = interval_seconds
+    def __init__(self) -> None:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         #: persona → 直前に判断した時刻（``proactive_interval_minutes`` の間隔を空ける）。
@@ -81,7 +80,7 @@ class ProactiveWorker:
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, daemon=True, name="proactive-worker")
         self._thread.start()
-        logger.info("ProactiveWorker started (interval=%ss)", self.interval)
+        logger.info("ProactiveWorker started (interval=%ss)", self._interval())
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop_event.set()
@@ -89,8 +88,12 @@ class ProactiveWorker:
             self._thread.join(timeout=timeout)
         logger.info("ProactiveWorker stopped")
 
+    def _interval(self) -> float:
+        """1 tick の間隔（秒）。設定を毎サイクル読み直す（hot reload を次サイクルに効かせる）。"""
+        return float(get_settings().workers.proactive_interval_seconds)
+
     def _run(self) -> None:
-        while not self._stop_event.wait(self.interval):
+        while not self._stop_event.wait(self._interval()):
             try:
                 self.run_cycle()
             except Exception:

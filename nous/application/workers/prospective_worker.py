@@ -12,9 +12,9 @@
 発火の精度（kanban #64/#68）:
 
 - ``agent:task`` は ``_next_wait()`` が最短の未来期限まで眠るので、期限の
-  30 秒以降（``MIN_WAIT_SECONDS``）に走る。未来の期限が1つも無い時だけ
-  ``interval``（既定 1 時間・設定不可）で起きる。期限を過ぎたタスクは
-  ``OVERDUE_GRACE_HOURS``(=72h) 内なら次の巡回で拾い直す。
+  ``prospective_min_wait_seconds``（既定 30 秒）以降に走る。未来の期限が
+  1つも無い時だけ ``prospective_interval_seconds``（既定 1 時間）で起きる。
+  期限を過ぎたタスクは ``OVERDUE_GRACE_HOURS``(=72h) 内なら次の巡回で拾い直す。
 - ``cue:time`` を持つ約束の照合（``prospective.due``）は毎時巡回なので、
   表示は最大 1 時間古い。イベント駆動ではない。
 
@@ -31,16 +31,17 @@ from typing import TYPE_CHECKING
 
 from nous.application.chat.tools.schedule import (
     AGENT_TASK_TAG,
-    FAIL_LIMIT,
     done_tags,
     due_agent_tasks,
     fail_count,
+    fail_limit,
     next_task_wait_seconds,
     recur_of,
     retry_tags,
     run_self_turn,
 )
 from nous.application.workers.announce import speak_to_main
+from nous.config.settings import get_settings
 from nous.domain.memory.cue import due_cues
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
@@ -51,10 +52,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-# shortcut: fixed interval, move to Settings if a tuning knob is needed.
-DEFAULT_INTERVAL_SECONDS = 3600
-#: 期限ぴったりに起きるための下限（負荷と精度のトレードオフ）。
-MIN_WAIT_SECONDS = 30.0
 EVENT_TYPE = "prospective.due"
 TASK_DONE_EVENT = "agent.task.ran"
 TASK_FAILED_EVENT = "agent.task.failed"
@@ -65,8 +62,7 @@ SELF_TURN_PREFIX = "[自分で決めた予定] "
 class ProspectiveWorker:
     """Hourly sweep over active goals/promises with a time cue."""
 
-    def __init__(self, interval_seconds: int = DEFAULT_INTERVAL_SECONDS) -> None:
-        self.interval = interval_seconds
+    def __init__(self) -> None:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
         #: persona → 直前に通知した約束キー（同じ約束を毎時積み直さない）。
@@ -78,7 +74,7 @@ class ProspectiveWorker:
         self._stop_event.clear()
         self._thread = threading.Thread(target=self._run, daemon=True, name="prospective-worker")
         self._thread.start()
-        logger.info("ProspectiveWorker started (interval=%ss)", self.interval)
+        logger.info("ProspectiveWorker started (interval=%ss)", self._interval())
 
     def stop(self, timeout: float = 5.0) -> None:
         self._stop_event.set()
@@ -118,8 +114,18 @@ class ProspectiveWorker:
             if wait is not None:
                 waits.append(wait)
         if not waits:
-            return float(self.interval)
-        return min(float(self.interval), max(MIN_WAIT_SECONDS, min(waits)))
+            return self._interval()
+        return min(self._interval(), max(self._min_wait(), min(waits)))
+
+    @staticmethod
+    def _interval() -> float:
+        """期限が無い時の巡回間隔（秒）。設定を毎サイクル読み直す。"""
+        return float(get_settings().workers.prospective_interval_seconds)
+
+    @staticmethod
+    def _min_wait() -> float:
+        """期限ぴったりに起きるための下限（秒）。設定を毎サイクル読み直す。"""
+        return float(get_settings().workers.prospective_min_wait_seconds)
 
     def run_cycle(self) -> None:
         """1 サイクル（手動運転・検証用に public）。"""
@@ -217,11 +223,12 @@ class ProspectiveWorker:
 
     def _fail(self, ctx: AppContext, persona: str, task: Memory, error: Exception) -> None:
         fails = fail_count(task) + 1
-        give_up = fails >= FAIL_LIMIT
+        limit = fail_limit(ctx.config)
+        give_up = fails >= limit
         tags = done_tags(task, None) if give_up else retry_tags(task, fails)
-        # 失敗カウンタが書けないと FAIL_LIMIT に永久に届かないので、少なくとも警告は残す。
-        self._rewrite_tags(ctx, persona, task, tags, f"fail ({fails}/{FAIL_LIMIT})")
-        summary = f"task={task.key} {task.content[:60]} ({fails}/{FAIL_LIMIT}) {type(error).__name__}: {error}"
+        # 失敗カウンタが書けないと上限に永久に届かないので、少なくとも警告は残す。
+        self._rewrite_tags(ctx, persona, task, tags, f"fail ({fails}/{limit})")
+        summary = f"task={task.key} {task.content[:60]} ({fails}/{limit}) {type(error).__name__}: {error}"
         self._event(ctx, persona, TASK_FAILED_EVENT, summary)
         logger.warning("ProspectiveWorker: task failed persona=%s %s", persona, summary)
 

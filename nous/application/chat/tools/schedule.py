@@ -9,7 +9,7 @@
     agent:task                 予定そのもの（実行し終わったら外す）
     cue:time:<iso>             期限（cue.py と同形式・分精度）
     cue:recur:daily|weekly     繰り返し（実行後に期限を次回へ入れ直す）
-    agent:task:fail:<n>        失敗回数（``FAIL_LIMIT`` で諦める）
+    agent:task:fail:<n>        失敗回数（``fail_limit(config)`` で諦める）
 
 実行側は ``nous/application/workers/prospective_worker.py``。
 """
@@ -19,6 +19,7 @@ from __future__ import annotations
 from datetime import datetime, timedelta
 from typing import TYPE_CHECKING
 
+from nous.domain.config.tool_config import ToolConfig
 from nous.domain.memory.cue import (
     CUE_TIME_PREFIX,
     comparable,
@@ -44,8 +45,15 @@ AGENT_TASK_TAG = "agent:task"
 FAIL_TAG_PREFIX = "agent:task:fail:"
 RECUR_TAG_PREFIX = "cue:recur:"
 RECURS = ("daily", "weekly")
-#: 何回失敗したら諦めるか（タグを外し ``agent.task.failed`` を残す）。
-FAIL_LIMIT = 3
+
+
+def fail_limit(config: ChatConfig | None) -> int:
+    """何回失敗したら諦めるか（``config.tool_config.schedule_fail_limit``）。
+
+    config が無い（AppContext.config is None）時は Field の既定値に従う。
+    """
+    return config.tool_config.schedule_fail_limit if config is not None else ToolConfig().schedule_fail_limit
+
 
 _WHEN_UNITS = {"m": 60.0, "h": 3600.0, "d": 86400.0}
 

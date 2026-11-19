@@ -9,6 +9,7 @@ import pytest
 
 from nous.application.chat.tools import schedule
 from nous.application.workers import prospective_worker
+from nous.domain.config.chat_config import ChatConfig
 from nous.domain.memory.cue import time_cue_tag
 from nous.domain.memory.entities import Memory
 from nous.domain.shared.result import Failure, Success
@@ -28,6 +29,7 @@ def ctx(sqlite_conn):
     ctx = MagicMock()
     ctx.persona = PERSONA
     ctx.connection = sqlite_conn
+    ctx.config = ChatConfig()
     ctx.memory_service.update_memory = MagicMock(return_value=Success(_memory([])))
     return ctx
 
@@ -217,11 +219,10 @@ class TestNextWait:
 
     def test_worker_wait_is_clamped_to_interval_and_minimum(self, worker, ctx, monkeypatch) -> None:
         w, _turn = worker
-        w.interval = 3600.0
         ctx.memory_service.get_by_tags.return_value = Success([_memory([schedule.AGENT_TASK_TAG])])
 
         monkeypatch.setattr(prospective_worker, "next_task_wait_seconds", lambda *_a: 5.0)
-        assert w._next_wait() == prospective_worker.MIN_WAIT_SECONDS
+        assert w._next_wait() == w._min_wait()
 
         monkeypatch.setattr(prospective_worker, "next_task_wait_seconds", lambda *_a: 7200.0)
         assert w._next_wait() == 3600.0
@@ -231,7 +232,6 @@ class TestNextWait:
 
     def test_worker_wakes_before_the_hour_for_near_deadline(self, worker, ctx) -> None:
         w, _turn = worker
-        w.interval = 3600.0
         soon = _memory([schedule.AGENT_TASK_TAG, time_cue_tag(get_now() + timedelta(minutes=5))])
         ctx.memory_service.get_by_tags.return_value = Success([soon])
 

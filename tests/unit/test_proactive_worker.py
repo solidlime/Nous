@@ -8,6 +8,7 @@ from __future__ import annotations
 
 import json
 from datetime import timedelta
+from types import SimpleNamespace
 from unittest.mock import MagicMock
 
 import pytest
@@ -236,3 +237,32 @@ class TestFailureDoesNotFreeze:
         spoken = len(published)
         worker.run_cycle()
         assert len(published) == spoken
+
+
+class TestIntervalFromSettings:
+    def test_interval_is_reread_every_cycle(self, monkeypatch) -> None:
+        """設定は起動時コピーではなく毎サイクル読む（変更が次サイクルに反映される）。"""
+        workers_cfg = SimpleNamespace(proactive_interval_seconds=1800)
+        monkeypatch.setattr(
+            proactive_worker, "get_settings", lambda: SimpleNamespace(workers=workers_cfg)
+        )
+
+        worker = proactive_worker.ProactiveWorker()
+        waits: list[float] = []
+
+        def fake_wait(timeout: float | None = None) -> bool:
+            if not worker._stop_event.is_set():
+                waits.append(timeout)  # type: ignore[arg-type]
+            return worker._stop_event.is_set()
+
+        def run_cycle() -> None:
+            if len(waits) >= 2:
+                worker._stop_event.set()
+            else:
+                workers_cfg.proactive_interval_seconds = 300
+
+        worker.run_cycle = run_cycle  # type: ignore[method-assign]
+        monkeypatch.setattr(worker._stop_event, "wait", fake_wait)
+        worker._run()
+
+        assert waits == [1800, 300]
