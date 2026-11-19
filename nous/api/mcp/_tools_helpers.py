@@ -10,6 +10,7 @@ import re
 import unicodedata
 from typing import TYPE_CHECKING, ParamSpec, TypeVar, cast
 
+from nous.domain.config.redaction import redact_text
 from nous.domain.persona.emotion_trend import clean_context
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import relative_time_str
@@ -140,7 +141,7 @@ async def _emit_tool_called(
     try:
         data: dict = {
             "tool_name": tool_name,
-            "params_summary": _truncate_event_text(params_summary, 200),
+            "params_summary": redact_text(_truncate_event_text(params_summary, 200)),
             "result_summary": _truncate_event_text(result_summary, 80),
             "success": success,
             # session_id は明示指定を優先。内省などセッション外は "introspection" を
@@ -155,7 +156,7 @@ async def _emit_tool_called(
         if isinstance(persona, str) and persona:
             data["persona"] = persona
         if error:
-            data["error"] = error
+            data["error"] = redact_text(error, 200)
         # source は data 直下（front のライブフィルタ用）に加え metadata にも載せる。
         # recorder は metadata_json しか保存しないため、これで履歴側でも識別可能になる。
         data["metadata"] = {"source": source}

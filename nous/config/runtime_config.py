@@ -234,7 +234,7 @@ class RuntimeConfigManager:
         # Fire callbacks
         self._fire_callbacks(category, key, value)
 
-        logger.info("Updated setting %s.%s = %s", category, key, value)
+        logger.info("Updated setting %s.%s = %s", category, key, "***" if meta.get("masked") else value)
         return {"success": True, "category": category, "key": key, "value": value}
 
     def _apply_setting(self, category: str, key: str, value: Any) -> None:

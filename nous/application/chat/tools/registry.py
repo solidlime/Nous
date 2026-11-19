@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 from nous.application.chat.tools.builtin import execute_tool, filter_extra_tools, truncate_tool_result
 from nous.application.chat.tools.workspace import artifact_path
+from nous.domain.config.redaction import redact_params, redact_text
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
@@ -137,7 +138,7 @@ class ToolRegistry:
             if hasattr(ctx, "event_bus") and ctx.event_bus is not None and not self.is_mcp_tool(tool_name):
                 payload = {
                     "tool_name": tool_name,
-                    "params_summary": str(tool_input)[:200],
+                    "params_summary": redact_params(tool_input),
                     "success": True,
                     "session_id": getattr(ctx, "session_id", None),
                     "timestamp": get_now().isoformat(),
@@ -177,9 +178,9 @@ class ToolRegistry:
             return
         payload = {
             "tool_name": tool_name,
-            "params_summary": str(tool_input)[:200],
+            "params_summary": redact_params(tool_input),
             "success": False,
-            "error": error,
+            "error": redact_text(error),
             "session_id": getattr(ctx, "session_id", None),
             "timestamp": get_now().isoformat(),
             "duration_ms": round((perf_counter() - started) * 1000, 1),
