@@ -161,7 +161,12 @@ class ProspectiveWorker:
             except Exception as e:
                 self._fail(ctx, persona, task, e)
                 continue
-            self._speak(ctx, text)
+            if text is None:
+                # 他のターンが走っていて実行できなかった。タグは外さず次の巡回に回す
+                # （kanban #69: 空文字を成功扱いにすると予定が痩せていく）。
+                logger.info("ProspectiveWorker: skipped, turn busy persona=%s key=%s", persona, task.key)
+                continue
+            self._speak(ctx, text, f"task={task.key}")
             try:
                 self._finish(ctx, persona, task)
             except Exception as e:  # 1件の後始末失敗でそのサイクルの残タスクを落とさない
@@ -169,12 +174,12 @@ class ProspectiveWorker:
                 self._fail(ctx, persona, task, e)
 
     @staticmethod
-    def _speak(ctx: AppContext, text: str) -> None:
+    def _speak(ctx: AppContext, text: str, ref: str = "") -> None:
         """実行結果を main チャットへ届ける（kanban #65）。失敗しても実行自体は続ける。"""
         if not text.strip() or ctx.config is None:
             return
         try:
-            speak_to_main(ctx, text.strip(), ctx.config.max_stored_messages, TASK_SPOKE_EVENT)
+            speak_to_main(ctx, text.strip(), ctx.config.max_stored_messages, TASK_SPOKE_EVENT, ref)
         except Exception:
             logger.warning("ProspectiveWorker: speak failed persona=%s", ctx.persona, exc_info=True)
 
@@ -182,14 +187,14 @@ class ProspectiveWorker:
         recur = recur_of(task)
         tags = done_tags(task, recur)
         ctx.memory_service.update_memory(task.key, tags=tags)
-        self._event(ctx, persona, TASK_DONE_EVENT, f"{task.content[:80]} (recur={recur or '-'})")
+        self._event(ctx, persona, TASK_DONE_EVENT, f"task={task.key} {task.content[:80]} (recur={recur or '-'})")
 
     def _fail(self, ctx: AppContext, persona: str, task: Memory, error: Exception) -> None:
         fails = fail_count(task) + 1
         give_up = fails >= FAIL_LIMIT
         tags = done_tags(task, None) if give_up else retry_tags(task, fails)
         ctx.memory_service.update_memory(task.key, tags=tags)
-        summary = f"{task.content[:60]} ({fails}/{FAIL_LIMIT}) {type(error).__name__}: {error}"
+        summary = f"task={task.key} {task.content[:60]} ({fails}/{FAIL_LIMIT}) {type(error).__name__}: {error}"
         self._event(ctx, persona, TASK_FAILED_EVENT, summary)
         logger.warning("ProspectiveWorker: task failed persona=%s %s", persona, summary)
 

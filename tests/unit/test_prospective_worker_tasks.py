@@ -130,19 +130,30 @@ class TestSpeakResult:
     def test_result_is_spoken_to_main(self, worker, ctx, monkeypatch) -> None:
         w, turn = worker
         turn.return_value = "日記を書いたよ。"
-        spoken: list[str] = []
-        monkeypatch.setattr(prospective_worker, "speak_to_main", lambda _ctx, text, _n, _t: spoken.append(text))
+        spoken: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            prospective_worker, "speak_to_main", lambda _ctx, text, _n, _t, ref="": spoken.append((text, ref))
+        )
         ctx.memory_service.get_by_tags.return_value = Success([_memory(_due_tags())])
 
         w.run_agent_tasks()
 
-        assert spoken == ["日記を書いたよ。"]
+        assert spoken == [("日記を書いたよ。", "task=mem_1")]
         assert "agent.task.ran" in _events(ctx)
+        # 実行ログ側にも同じ相関子が入る（突き合わせられる。kanban #69）
+        ran = next(
+            e
+            for e in SessionEventRepository(ctx.connection).get_by_persona(PERSONA, limit=20)
+            if e.event_type == "agent.task.ran"
+        )
+        assert ran.summary.startswith("task=mem_1")
 
     def test_empty_result_does_not_speak(self, worker, ctx, monkeypatch) -> None:
         w, _turn = worker
-        spoken: list[str] = []
-        monkeypatch.setattr(prospective_worker, "speak_to_main", lambda _ctx, text, _n, _t: spoken.append(text))
+        spoken: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            prospective_worker, "speak_to_main", lambda _ctx, text, _n, _t, ref="": spoken.append((text, ref))
+        )
         ctx.memory_service.get_by_tags.return_value = Success([_memory(_due_tags())])
 
         w.run_agent_tasks()
@@ -162,6 +173,25 @@ class TestSpeakResult:
         w.run_agent_tasks()
 
         assert ctx.memory_service.update_memory.call_args.kwargs["tags"] == []
+
+
+class TestSkippedTurn:
+    """kanban #69: 実行できなかった予定を消費しない。"""
+
+    def test_busy_turn_leaves_task_untouched(self, worker, ctx, monkeypatch) -> None:
+        w, turn = worker
+        turn.return_value = None
+        spoken: list[tuple[str, str]] = []
+        monkeypatch.setattr(
+            prospective_worker, "speak_to_main", lambda _ctx, text, _n, _t, ref="": spoken.append((text, ref))
+        )
+        ctx.memory_service.get_by_tags.return_value = Success([_memory(_due_tags())])
+
+        w.run_agent_tasks()
+
+        ctx.memory_service.update_memory.assert_not_called()
+        assert spoken == []
+        assert "agent.task.ran" not in _events(ctx)
 
 
 class TestNextWait:

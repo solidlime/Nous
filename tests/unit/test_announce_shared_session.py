@@ -87,3 +87,23 @@ def test_speak_to_main_from_another_thread_persists(sqlite_conn) -> None:
 
     reloaded = SessionManager().get_or_create(PERSONA, "main", max_messages=50, db=sqlite_conn.get_memory_db())
     assert [m["content"] for m in reloaded.get_active_path()] == ["別スレッドから"]
+
+
+def test_speak_to_main_records_ref_without_leaking_it_into_the_text(sqlite_conn) -> None:
+    """相関子（kanban #69）は session event にだけ載せ、本文には混ぜない。"""
+    from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
+
+    ctx = MagicMock()
+    ctx.persona = PERSONA
+    ctx.connection = sqlite_conn
+
+    announce.speak_to_main(ctx, "日記を書いたよ", max_messages=50, event_type="agent.task.spoke", ref="task=mem_1")
+
+    window = service.get_session_manager().get_or_create(
+        PERSONA, "main", max_messages=50, db=sqlite_conn.get_memory_db()
+    )
+    assert [m["content"] for m in window.get_active_path()] == ["日記を書いたよ"]
+
+    event = SessionEventRepository(sqlite_conn).get_by_persona(PERSONA, limit=5)[0]
+    assert event.event_type == "agent.task.spoke"
+    assert event.summary == "task=mem_1 日記を書いたよ"

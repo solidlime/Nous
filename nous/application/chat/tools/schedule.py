@@ -212,11 +212,15 @@ def next_task_wait_seconds(memories: Iterable[Memory], now: datetime | None = No
     return min(future) if future else None
 
 
-async def run_self_turn(ctx: AppContext, prompt: str) -> str:
+async def run_self_turn(ctx: AppContext, prompt: str) -> str | None:
     """``session_id="self:<date>`` で1ターン走らせ、返答テキストを返す。
 
     失敗は例外で呼び出し側へ。返したテキストは呼び出し側が
     ``speak_to_main`` でユーザーのチャットへ流す（kanban #65）。
+
+    return が ``None`` のときは**走らせていない**（他のターンが実行中）。空文字は
+    「走ったが何も言わなかった」なので区別する（kanban #69: 空文字を成功扱いに
+    すると、話しかけ中の予定が実行されぬまま消費される）。
     """
     from nous.application.chat.events import TextDeltaSSE
     from nous.application.chat.service import ChatService, get_turn_hub
@@ -228,7 +232,7 @@ async def run_self_turn(ctx: AppContext, prompt: str) -> str:
     if not hub.begin_background_turn(ctx.persona):
         # ユーザーターン（または別の自発ターン）が走っている。ブロック待ちしない。
         logger.info("run_self_turn: skip because a turn is running (persona=%s)", ctx.persona)
-        return ""
+        return None
     try:
         session_id = f"{SELF_SESSION_PREFIX}{get_now().strftime('%Y-%m-%d')}"
         parts: list[str] = []

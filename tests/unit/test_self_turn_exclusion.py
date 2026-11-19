@@ -49,7 +49,7 @@ def test_run_self_turn_skips_while_user_turn_runs(caplog):
         patch("nous.application.chat.service.ChatService") as chat_cls,
         caplog.at_level(logging.INFO),
     ):
-        assert asyncio.run(run_self_turn(ctx, "なにか")) == ""
+        assert asyncio.run(run_self_turn(ctx, "なにか")) is None
         chat_cls.return_value.chat.assert_not_called()
 
     assert "skip" in caplog.text

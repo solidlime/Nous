@@ -30,8 +30,14 @@ def speak_to_main(
     text: str,
     max_messages: int,
     event_type: str = SPOKE_EVENT,
+    ref: str = "",
 ) -> None:
-    """main 履歴へ追記し、既存 chat() と同じ形の SSE で届ける。"""
+    """main 履歴へ追記し、既存 chat() と同じ形の SSE で届ける。
+
+    ``ref`` は session event の summary 先頭に付ける相関子（例 ``task=<memory key>``）。
+    実行ログ（``agent.task.ran``）とこの発言を後から突き合わせるために使う
+    （kanban #69）。話す本文には入れない。
+    """
     # ワーカースレッドから呼ばれるので、sqlite 接続は追記するスレッドで作る
     # （db_factory はマーシャル先のループで解決される。kanban #86）。
     get_session_manager().append(
@@ -58,9 +64,14 @@ def speak_to_main(
                 persona=ctx.persona,
                 event_type=event_type,
                 timestamp=get_now(),
-                summary=text[:200],
+                summary=_summarise(text, ref)[:200],
             )
         )
     except Exception:
         logger.debug("speak_to_main: failed to record %s", event_type, exc_info=True)
     logger.info("speak_to_main: persona=%s %s %s", ctx.persona, event_type, text[:60])
+
+
+def _summarise(text: str, ref: str) -> str:
+    """相関子を先頭に置く（200 字で切られても ``ref`` が残るように）。"""
+    return f"{ref} {text}".strip() if ref else text
