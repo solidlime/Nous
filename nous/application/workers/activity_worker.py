@@ -32,6 +32,7 @@ from typing import TYPE_CHECKING, Any
 from nous.application.chat.service import ChatService
 from nous.application.workers.proactive_worker import idle_minutes
 from nous.domain.memory.session_event import SessionEvent
+from nous.domain.memory.session_ids import ACTIVITY_SESSION_PREFIX
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
@@ -206,7 +207,9 @@ class ActivityWorker:
             prompt = f"{prompt}\n{session_config.activity_prompt.strip()}"
 
         parts: list[str] = []
-        async for sse in ChatService().chat(ctx, config, f"activity:{now.strftime('%Y-%m-%d')}", prompt):
+        async for sse in ChatService().chat(
+            ctx, config, f"{ACTIVITY_SESSION_PREFIX}{now.strftime('%Y-%m-%d')}", prompt
+        ):
             if not sse.startswith("data: "):
                 continue
             try:

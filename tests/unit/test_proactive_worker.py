@@ -106,6 +106,15 @@ class TestLastUserMessageAt:
         assert last is not None
         assert (get_now() - last) > timedelta(minutes=200)
 
+    def test_ignores_activity_worker_session(self, sqlite_conn) -> None:
+        # kanban #65: activity: が抜けていて、自発活動が自分の内部ターンで
+        # idle タイマーをリセットしていた。
+        _insert(sqlite_conn, "chat.message", 300)
+        _insert(sqlite_conn, "chat.message", 1, session_id="activity:2026-01-01")
+        last = SessionEventRepository(sqlite_conn).last_user_message_at(PERSONA)
+        assert last is not None
+        assert (get_now() - last) > timedelta(minutes=200)
+
     def test_none_when_no_user_message(self, sqlite_conn) -> None:
         assert SessionEventRepository(sqlite_conn).last_user_message_at(PERSONA) is None
 

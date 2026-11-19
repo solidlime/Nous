@@ -5,6 +5,7 @@ from datetime import datetime
 from typing import TYPE_CHECKING, Any
 
 from nous.domain.memory.session_event import SessionEvent
+from nous.domain.memory.session_ids import INTERNAL_SESSION_PREFIXES
 
 if TYPE_CHECKING:
     from nous.infrastructure.sqlite.connection import SQLiteConnection
@@ -14,10 +15,10 @@ if TYPE_CHECKING:
 # events.ingested は内省・ツール実行でも idle タイマーをリセットさせない。
 _IDLE_ACTIVITY_EVENT_TYPES = ("chat.message", "chat.llm_response")
 
-# ユーザー発話の判定（kanban #44）。worker が内部で回すターン（self: /
-# proactive:）も chat.message を発行するので、これらを数えると自分で idle を
-# リセットする自己ループになる。
-_INTERNAL_SESSION_PREFIXES = ("self:", "proactive:")
+# ユーザー発話の判定（kanban #44 / #65）。worker が内部で回すターン（self: /
+# proactive: / activity:）も chat.message を発行するので、これらを数えると
+# 自分で idle をリセットする自己ループになる。接頭辞は domain 側に集約。
+_INTERNAL_SESSION_PREFIXES = INTERNAL_SESSION_PREFIXES
 
 
 class SessionEventRepository:

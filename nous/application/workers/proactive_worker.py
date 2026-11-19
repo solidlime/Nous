@@ -29,6 +29,7 @@ from typing import TYPE_CHECKING
 
 from nous.application.chat.service import ChatService
 from nous.application.workers.announce import SPOKE_EVENT, speak_to_main
+from nous.domain.memory.session_ids import PROACTIVE_SESSION_PREFIX
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
@@ -161,7 +162,7 @@ class ProactiveWorker:
         if session_config.proactive_prompt.strip():
             prompt = f"{prompt}\n{session_config.proactive_prompt.strip()}"
 
-        session_id = f"proactive:{now.strftime('%Y-%m-%d')}"
+        session_id = f"{PROACTIVE_SESSION_PREFIX}{now.strftime('%Y-%m-%d')}"
         parts: list[str] = []
         async for sse in ChatService().chat(ctx, ctx.config, session_id, prompt):  # type: ignore[arg-type]
             if not sse.startswith("data: "):

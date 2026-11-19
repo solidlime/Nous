@@ -26,6 +26,7 @@ from nous.domain.memory.cue import (
     time_cue_tag,
     within_window,
 )
+from nous.domain.memory.session_ids import SELF_SESSION_PREFIX
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
@@ -228,7 +229,7 @@ async def run_self_turn(ctx: AppContext, prompt: str) -> str:
     config = ctx.config
     if config is None:
         raise RuntimeError("chat config が無い（AppContext.config is None）")
-    session_id = f"self:{get_now().strftime('%Y-%m-%d')}"
+    session_id = f"{SELF_SESSION_PREFIX}{get_now().strftime('%Y-%m-%d')}"
     parts: list[str] = []
     async for ev in ChatService().chat(ctx, config, session_id, prompt):
         if isinstance(ev, TextDeltaSSE):
