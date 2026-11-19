@@ -69,7 +69,12 @@ def register_memory_routes(mcp) -> None:
         ctx = _safe_get_context(persona)
         if not ctx:
             return JSONResponse({"error": "Persona not found"}, status_code=404)
-        body = await request.json()
+        try:
+            body = await request.json()
+        except (json.JSONDecodeError, TypeError):
+            return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "Body must be a JSON object"}, status_code=400)
         block_name = body.get("block_name", "").strip()
         content = body.get("content", "").strip()
         if not block_name or not content:

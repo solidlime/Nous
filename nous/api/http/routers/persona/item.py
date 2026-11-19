@@ -11,6 +11,7 @@ from nous.api.http.deps import (
     _safe_get_context,
 )
 from nous.api.http.routers._error_handlers import error_from_result
+from nous.domain.shared.result import Success
 
 # audit C2: appearance recomputation now lives in EquipmentService.recompute_appearance
 from nous.infrastructure.logging.structured import get_logger
@@ -38,7 +39,7 @@ def register_item_routes(mcp) -> None:
             return JSONResponse({"error": f"Persona '{persona}' not found"}, status_code=404)
         try:
             result = ctx.equipment_service.search_items()
-            if not result.is_ok:
+            if not isinstance(result, Success):
                 return error_from_result(result)
             return JSONResponse({"persona": persona, "items": [_item_to_dict(it) for it in result.value]})
         # 最終防衛線
@@ -57,6 +58,8 @@ def register_item_routes(mcp) -> None:
         except (json.JSONDecodeError, TypeError):
             return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
         item_name = body.get("item_name")
+        if not isinstance(body, dict):
+            return JSONResponse({"error": "Body must be a JSON object"}, status_code=400)
         if not item_name:
             return JSONResponse({"error": "Field 'item_name' is required"}, status_code=400)
         try:
@@ -64,7 +67,8 @@ def register_item_routes(mcp) -> None:
                 item_name,
                 body.get("category"),
                 body.get("description"),
-                body.get("quantity", 1),
+                body.get("visual_desc"),
+                int(body.get("quantity", 1) or 1),
                 body.get("tags"),
             )
             if not result.is_ok:

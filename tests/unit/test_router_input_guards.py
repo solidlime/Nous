@@ -68,6 +68,12 @@ async def test_graph_limit_zero_returns_400():
     assert resp.status_code == 400
 
 
+async def test_graph_limit_above_max_returns_400():
+    resp = await _graph_handler()(_FakeRequest(query={"limit": "1001"}))
+    assert resp.status_code == 400
+    assert b"limit must be between 1 and 1000" in resp.body
+
+
 async def test_create_memory_list_body_returns_422(monkeypatch):
     mcp = _FakeMCP()
     memory_router.register_memory_routes(mcp)

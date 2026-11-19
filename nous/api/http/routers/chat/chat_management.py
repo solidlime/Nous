@@ -579,8 +579,9 @@ async def save_chat_config(request: Request) -> JSONResponse:
     try:
         body = await request.json()
     except (json.JSONDecodeError, TypeError):
-        logger.exception("save_chat_config: invalid JSON body")
-        return JSONResponse({"error": "Invalid JSON"}, status_code=400)
+        return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
+    if not isinstance(body, dict):
+        return JSONResponse({"error": "Body must be a JSON object"}, status_code=400)
     try:
         result = await _do_save_chat_config(persona, ctx, body)
     except Exception:  # 最終防衛線: Pydantic/domain validation

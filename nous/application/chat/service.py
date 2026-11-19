@@ -332,7 +332,7 @@ class ChatService:
                 builtin = get_filtered_tools(config) if config.enable_memory_tools else []
                 _tool_names = [t.name for t in builtin]
                 has_img = "image_generate" in _tool_names
-                logger.info(
+                logger.debug(
                     "Chat tools assembled: image_gen_enabled=%s, tools=%d, has_image_generate=%s, names=%s",
                     getattr(config, "image_gen_enabled", "MISSING"),
                     len(builtin),
