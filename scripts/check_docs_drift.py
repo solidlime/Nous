@@ -127,7 +127,9 @@ def settings_env_keys() -> set[str]:
     return keys
 
 
-_ENV_RE = re.compile(r"NOUS_[A-Z0-9_]+")
+_ENV_RE = re.compile(r"NOUS_[A-Z0-9_]*[A-Z0-9](?![A-Z0-9_])")
+# 直後が `_` で終わる候補を弾いているのは、散文の `NOUS_SANDBOX_*`（一族の引用）を
+# 存在しないキーとして拾っていたから (drive-by)。
 
 
 def doc_env_keys() -> set[str]:
