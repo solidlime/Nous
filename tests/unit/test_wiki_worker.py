@@ -705,6 +705,47 @@ class TestErrorRetry:
             conn.close()
 
 
+class TestNoPersonaContext:
+    """persona コンテキストが空のサイクルで丸 1 日空振りしない（kanban #71）。"""
+
+    def test_empty_personas_counts_as_cycle_error(self, tmp_path, monkeypatch) -> None:
+        from nous.application.use_cases import AppContextRegistry
+
+        monkeypatch.setattr(AppContextRegistry, "personas", classmethod(lambda cls: []))
+        worker = WikiWorker(_settings(tmp_path))
+        worker.run_cycle()
+        # 静かに return すると _cycle_errors は 0 のままで翌日まで待ってしまう
+        assert worker._cycle_errors == 1
+
+    def test_empty_personas_retries_instead_of_waiting_a_day(self, tmp_path, monkeypatch) -> None:
+        from nous.application.use_cases import AppContextRegistry
+
+        monkeypatch.setattr(AppContextRegistry, "personas", classmethod(lambda cls: []))
+        worker = WikiWorker(_settings(tmp_path))
+        worker._empty_retries = 0
+        worker._error_retry_seconds = 0.01
+        planned: list[float] = []
+
+        def fake_next_delay() -> float:
+            planned.append(0.0)
+            return 0.0
+
+        worker._next_delay = fake_next_delay  # type: ignore[method-assign]
+        calls: list[int] = []
+
+        def run_cycle() -> None:
+            calls.append(len(calls))
+            worker._cycle_errors = 1  # persona 0 件 = 空振り
+            if len(calls) >= 2:
+                worker._stop_event.set()
+
+        worker.run_cycle = run_cycle  # type: ignore[method-assign]
+        worker._run()
+        # 定刻を引き直さず短間隔で 2 周目に入った = 丸 1 日を捨てていない
+        assert len(calls) == 2
+        assert len(planned) == 1
+
+
 # ---------------------------------------------------------------------------
 # 日記（#38）
 # ---------------------------------------------------------------------------

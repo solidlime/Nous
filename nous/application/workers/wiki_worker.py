@@ -249,6 +249,17 @@ class WikiWorker(JournalMixin, ConflictsMixin):
             logger.exception("WikiWorker: failed to list personas")
             return
 
+        if not personas:
+            # persona コンテキストは初回リクエストで遅延生成される。定刻に 0 件だと
+            # 以前は for が 0 回で静かに終わり、_cycle_errors も 0 なので翌日まで
+            # 丸 1 日空振りしていた（kanban #71）。失敗扱いにして短間隔で再挑戦させる。
+            self._cycle_errors += 1
+            logger.warning(
+                "WikiWorker: no persona context yet — nothing compiled (retrying in %.0fs)",
+                self._error_retry_seconds,
+            )
+            return
+
         for persona in personas:
             try:
                 ctx = AppContextRegistry.get(persona)
