@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import json
 from unittest.mock import AsyncMock, MagicMock
 
 import pytest
@@ -117,3 +118,82 @@ class TestImageGenerateHandler:
         result = await _handle_image_generate(mock_ctx, mock_config, {"prompt": "a cat", "n": "abc"})
         assert result["status"] == "error"
         assert "Invalid value for 'n'" in result["message"]
+
+
+# ---------------------------------------------------------------------------
+# _handle_mcp_dispatch: envelope unwrap (card #72)
+# ---------------------------------------------------------------------------
+
+
+class TestMcpDispatchEnvelope:
+    """chain: _tool_memory_search は {"ok","data","error"} envelope を返す。dispatcher が
+    data を開かずトップレベルだけ見ていたため、chat からの memory_search が常に
+    {"status":"ok"} に潰れていた（kanban #72）。"""
+
+    async def test_memory_search_keeps_memories(self):
+        from unittest.mock import patch
+
+        from nous.application.chat.tools import builtin
+
+        envelope = json.dumps({"ok": True, "data": {"memories": [{"key": "k1"}], "total_count": 1}, "error": None})
+        with patch.dict(builtin.TOOL_DISPATCH, {"memory_search": AsyncMock(return_value=envelope)}):
+            out = await builtin._handle_mcp_dispatch("memory_search", MagicMock(), MagicMock(), {"query": "x"})
+
+        assert out["status"] == "ok"
+        assert out["memories"] == [{"key": "k1"}]
+
+    async def test_memory_create_keeps_key(self):
+        from unittest.mock import patch
+
+        from nous.application.chat.tools import builtin
+
+        envelope = json.dumps({"ok": True, "data": {"key": "k2"}, "error": None})
+        with patch.dict(builtin.TOOL_DISPATCH, {"memory_create": AsyncMock(return_value=envelope)}):
+            out = await builtin._handle_mcp_dispatch("memory_create", MagicMock(), MagicMock(), {"content": "x"})
+
+        assert out == {"status": "ok", "key": "k2"}
+
+    async def test_legacy_dict_still_works(self):
+        from unittest.mock import patch
+
+        from nous.application.chat.tools import builtin
+
+        with patch.dict(builtin.TOOL_DISPATCH, {"goal_manage": AsyncMock(return_value={"ok": True, "result": "done"})}):
+            out = await builtin._handle_mcp_dispatch("goal_manage", MagicMock(), MagicMock(), {})
+
+        assert out == {"result": "done"}
+
+    async def test_envelope_error_message_is_string(self):
+        from unittest.mock import patch
+
+        from nous.application.chat.tools import builtin
+
+        envelope = json.dumps({"ok": False, "data": None, "error": {"code": "NOT_FOUND", "message": "No memory"}})
+        with patch.dict(builtin.TOOL_DISPATCH, {"memory_read": AsyncMock(return_value=envelope)}):
+            out = await builtin._handle_mcp_dispatch("memory_read", MagicMock(), MagicMock(), {})
+
+        assert out == {"status": "error", "message": "No memory"}
+
+    async def test_legacy_exception_error_is_stringified(self):
+        """旧 dict 契約は error に例外インスタンスを入れてくる（JSON 化不能）。"""
+        from unittest.mock import patch
+
+        from nous.application.chat.tools import builtin
+
+        legacy = {"ok": False, "error": ValueError("boom")}
+        with patch.dict(builtin.TOOL_DISPATCH, {"goal_manage": AsyncMock(return_value=legacy)}):
+            out = await builtin._handle_mcp_dispatch("goal_manage", MagicMock(), MagicMock(), {})
+
+        assert out["status"] == "error"
+        assert out["message"] == "boom"
+        json.dumps(out)  # 直列化できること
+
+    async def test_none_error_falls_back_to_unknown(self):
+        from unittest.mock import patch
+
+        from nous.application.chat.tools import builtin
+
+        with patch.dict(builtin.TOOL_DISPATCH, {"goal_manage": AsyncMock(return_value={"ok": False, "error": None})}):
+            out = await builtin._handle_mcp_dispatch("goal_manage", MagicMock(), MagicMock(), {})
+
+        assert out["message"] == "unknown"

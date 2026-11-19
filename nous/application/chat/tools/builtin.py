@@ -169,33 +169,40 @@ async def _handle_mcp_dispatch(tool_name: str, ctx: AppContext, config: ChatConf
     else:
         result = result_raw
 
+    if not isinstance(result, dict):
+        return {"status": "ok", "content": str(result)}
+
+    # envelope（{"ok","data","error"}）は payload が data の下にある
+    data = result.get("data")
+    payload = data if isinstance(data, dict) else result
+
     # Translate core dict format to builtin format
     if result.get("ok"):
         # memory_create duplicate case
-        if result.get("status") == "duplicate":
+        if payload.get("status") == "duplicate":
             return {
                 "status": "duplicate",
-                "similar_to": result.get("similar_to", []),
-                "message": result.get("message", ""),
+                "similar_to": payload.get("similar_to", []),
+                "message": payload.get("message", ""),
             }
-        if "key" in result:
-            return {"status": "ok", "key": result["key"]}
-        if "memories" in result:
-            return {"status": "ok", "memories": result["memories"]}
-        if "status" in result:
-            return {"status": "ok", "updated": result.get("content", "")}
-        if "result" in result:
-            return {"result": result["result"]}
-        if "files" in result:
-            return result  # sandbox_files list
-        if "content_base64" in result:
-            return result  # sandbox_files read (image)
-        if "content" in result:
-            return result  # sandbox_files read (text)
-        if "path" in result:
-            return {"status": "ok", "path": result.get("path", "")}
+        for key in ("key", "memories", "files", "content_base64", "content", "path"):
+            if key in payload:
+                return payload if key in ("files", "content_base64", "content") else {**payload, "status": "ok"}
+        if "status" in payload:
+            return {"status": "ok", "updated": payload.get("content", "")}
+        if "result" in payload:
+            return {"result": payload["result"]}
         return {"status": "ok"}
-    return {"status": "error", "message": result.get("error", "unknown")}
+    return {"status": "error", "message": _error_message(result.get("error"))}
+
+
+def _error_message(error: object) -> str:
+    """envelope の error は dict、legacy は例外インスタンス。どちらも文字列にする。"""
+    if isinstance(error, dict):
+        return str(error.get("message") or error.get("code") or "unknown")[:200]
+    if error is None:
+        return "unknown"
+    return str(error)[:200]
 
 
 # ── Image generation ──

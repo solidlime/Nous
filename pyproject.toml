@@ -64,6 +64,9 @@ show_missing = true
 
 [tool.mypy]
 python_version = "3.12"
+# 単一ファイル検査時に import 先のエラーまで報告されるのを止める（pi-lens の誤帰属対策）。
+# `mypy nous/` のようにパッケージ全体を渡す検査では全ファイルが root になるため挙動は変わらない。
+follow_imports = "silent"
 warn_unused_configs = true
 warn_return_any = true
 warn_unused_ignores = true
