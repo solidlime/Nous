@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import asyncio
 import contextlib
 import json
 from collections import OrderedDict
@@ -14,6 +15,7 @@ from .tree_session import TreeSessionWindow
 
 if TYPE_CHECKING:
     import sqlite3
+    from collections.abc import Callable
 
 logger = get_logger(__name__)
 
@@ -38,6 +40,51 @@ class SessionManager:
     def __init__(self, max_sessions: int = 100) -> None:
         self._max = max_sessions
         self._sessions: OrderedDict[tuple[str, str], TreeSessionWindow] = OrderedDict()
+        # サーバーのイベントループ。窓が握る sqlite 接続はスレッド親和性を持つので、
+        # ワーカースレッドからの追記はここへマーシャルする (kanban #86)。
+        self._loop: asyncio.AbstractEventLoop | None = None
+
+    def bind_loop(self, loop: asyncio.AbstractEventLoop) -> None:
+        """このマネージャを所有するイベントループを登録する（起動時に1回）。"""
+        self._loop = loop
+
+    def append(
+        self,
+        persona: str,
+        session_id: str,
+        role: str,
+        content: str,
+        max_messages: int = 200,
+        db_factory: Callable[[], sqlite3.Connection] | None = None,
+    ) -> None:
+        """別スレッドからでも安全な追記。
+
+        窓の ``_persist`` は生成時のスレッドの sqlite 接続を使うので、ワーカー
+        スレッドから直接 ``add`` すると ``ProgrammingError`` になり、記録が
+        無言で落ちる。ループが束縛されていて現在地と違えば、サーバーループへ
+        委譲してから追記する。接続は呼び出し元のスレッドで作ってはいけないので
+        ``db_factory`` を渡し、追記するスレッドで解决する。
+        """
+
+        def _apply() -> None:
+            db = db_factory() if db_factory is not None else None
+            self.get_or_create(persona, session_id, max_messages=max_messages, db=db).add(role, content)
+
+        try:
+            current = asyncio.get_running_loop()
+        except RuntimeError:
+            current = None
+        if self._loop is None or current is self._loop or not self._loop.is_running():
+            _apply()
+            return
+
+        async def _run() -> None:
+            _apply()
+
+        try:
+            asyncio.run_coroutine_threadsafe(_run(), self._loop).result(timeout=10)
+        except Exception:
+            logger.warning("SessionManager.append: cross-thread append failed", exc_info=True)
 
     def get_or_create(
         self,

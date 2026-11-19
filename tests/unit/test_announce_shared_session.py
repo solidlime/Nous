@@ -48,3 +48,42 @@ def test_speak_to_main_does_not_drop_live_turn_context(sqlite_conn) -> None:
     # SQLite にも両方書かれている（片方の窓が丸ごと上書きしていない）
     reloaded = SessionManager().get_or_create(PERSONA, "main", max_messages=50, db=sqlite_conn.get_memory_db())
     assert [m["content"] for m in reloaded.get_active_path()] == ["聞いてる？", "聞いてるよ"]
+
+
+def test_speak_to_main_from_another_thread_persists(sqlite_conn) -> None:
+    """ワーカースレッドから呼んでも chat_sessions に残る（kanban #86）。
+
+    窓の sqlite 接続は生成スレッドに縛られる。ここではサーバーループ役の
+    スレッド（＝テストスレッド）で先に窓を作り、別スレッドから
+    ``speak_to_main`` を呼ぶ。マーシャルしないと ``ProgrammingError`` を
+    ``_persist`` が飲み、発言が DB から消える。
+    """
+    import asyncio
+    import threading
+
+    ctx = MagicMock()
+    ctx.persona = PERSONA
+    ctx.connection = sqlite_conn
+    errors: list[BaseException] = []
+
+    async def _server() -> None:
+        service.get_session_manager().bind_loop(asyncio.get_running_loop())
+        service.get_session_manager().get_or_create(PERSONA, "main", max_messages=50, db=sqlite_conn.get_memory_db())
+
+        def _worker() -> None:
+            try:
+                announce.speak_to_main(ctx, "別スレッドから", max_messages=50)
+            except BaseException as e:  # pragma: no cover - 失敗時のみ
+                errors.append(e)
+
+        thread = threading.Thread(target=_worker)
+        thread.start()
+        while thread.is_alive():
+            await asyncio.sleep(0.01)
+        thread.join()
+
+    asyncio.run(_server())
+    assert errors == []
+
+    reloaded = SessionManager().get_or_create(PERSONA, "main", max_messages=50, db=sqlite_conn.get_memory_db())
+    assert [m["content"] for m in reloaded.get_active_path()] == ["別スレッドから"]

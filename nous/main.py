@@ -3,7 +3,7 @@ from __future__ import annotations
 import asyncio
 import os
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from mcp.server.mcpserver import MCPServer
 from mcp.server.mcpserver.tools.base import Tool
@@ -353,6 +353,26 @@ def _shutdown() -> None:
         logger.exception("Shutdown: close_all_async failed")
 
 
+def _bind_session_loop() -> None:
+    """SessionManager にサーバーのイベントループを教える (kanban #86)。
+
+    ワーカースレッドから自発発言を履歴に書くとき、窓が握る sqlite 接続は
+    生成スレッドに縛られる。追記をこのループへマーシャルさせるために束縛する。
+    """
+    from nous.application.chat.service import get_session_manager
+
+    try:
+        get_session_manager().bind_loop(asyncio.get_running_loop())
+    except Exception:
+        get_logger("main").exception("bind_session_loop failed")
+
+
+async def _serve(server: Any) -> None:
+    """サーバーを回す前に SessionManager へループを束縛する。"""
+    _bind_session_loop()
+    await server.serve()
+
+
 def main() -> None:
     """Run the Nous server."""
     import uvicorn
@@ -361,7 +381,7 @@ def main() -> None:
     app = mcp.streamable_http_app(json_response=True, stateless_http=True)
     server = uvicorn.Server(uvicorn.Config(app, host=settings.server.host, port=settings.server.port))
     try:
-        asyncio.run(server.serve())
+        asyncio.run(_serve(server))
     finally:
         _shutdown()
 

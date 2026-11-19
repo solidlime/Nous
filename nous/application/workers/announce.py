@@ -32,12 +32,16 @@ def speak_to_main(
     event_type: str = SPOKE_EVENT,
 ) -> None:
     """main 履歴へ追記し、既存 chat() と同じ形の SSE で届ける。"""
-    get_session_manager().get_or_create(
+    # ワーカースレッドから呼ばれるので、sqlite 接続は追記するスレッドで作る
+    # （db_factory はマーシャル先のループで解決される。kanban #86）。
+    get_session_manager().append(
         ctx.persona,
         "main",
+        "assistant",
+        text,
         max_messages=max_messages,
-        db=ctx.connection.get_memory_db(),
-    ).add("assistant", text)
+        db_factory=ctx.connection.get_memory_db,
+    )
 
     hub = get_turn_hub()
     # フロントは turn_started でターン枠を開き、text_delta を本文として描き、
