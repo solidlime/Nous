@@ -10,17 +10,14 @@ var safeSetHTML = C.safeSetHTML;
 /* ── Registration store (tabId → skeleton HTML) ── */
 var _registry = {};
 
-/* ── Default skeleton HTML for each tab (used when no registration) ── */
+/* ── Default skeleton HTML for each tab (used when no registration) ──
+   #93: only non-self-managed tabs need a default here — self-managed
+   tabs never reach the lookup (show() returns early via data-self-managed). */
 var _defaults = {
   overview:
     '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-6">' +
     '<div class="skeleton skeleton-card glass"></div>'.repeat(4) +
     '</div><div class="grid grid-cols-1 lg:grid-cols-2 gap-6">' +
-    '<div class="skeleton glass" style="height:200px"></div>'.repeat(2) +
-    "</div>",
-  analytics:
-    '<div class="skeleton skeleton-chart glass mb-6"></div>' +
-    '<div class="grid grid-cols-1 md:grid-cols-2 gap-4">' +
     '<div class="skeleton glass" style="height:200px"></div>'.repeat(2) +
     "</div>",
   memories:
@@ -30,49 +27,49 @@ var _defaults = {
     "</div>",
   settings:
     '<div class="skeleton glass mb-4" style="height:160px"></div>'.repeat(3),
-  graph: '<div class="skeleton glass" style="height:600px"></div>',
-  "import-export":
-    '<div class="skeleton glass mb-4" style="height:200px"></div>' +
-    '<div class="skeleton glass" style="height:200px"></div>',
-  personas:
-    '<div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">' +
-    '<div class="skeleton skeleton-card glass"></div>'.repeat(3) +
-    "</div>",
-  admin: '<div class="skeleton glass" style="height:300px"></div>',
-  timeline: '<div class="skeleton glass" style="height:500px"></div>',
-  activity: '<div class="skeleton glass" style="height:300px"></div>',
 };
 
-/* ── Tabs that manage their own loading state (should not be skeleton-replaced) ── */
-var _selfManaged = new Set([
-  "graph",
-  "import-export",
-  "personas",
-  "chat",
-  "timeline",
-  "activity",
-  "wiki",
-  "projects",
-]);
+/* ── Tabs that manage their own loading state (should not be skeleton-replaced) ──
+   #93: read from the nav button's data-self-managed (emitted by
+   dashboard.py) — this static copy of the list is gone. */
 
 /* ── Register a custom skeleton config for a tab ── */
 function register(tabId, config) {
   _registry[tabId] = config;
 }
 
+/* ── Content container of a tab panel — the [id$="-content"] convention.
+   #93: single definition (show() and base.js renderNoPersona share it).
+   Two contracts, kept apart on purpose:
+   (a) renderNoPersona must NOT fall back to the panel root — the content-less
+       panels (chat/wiki/activity/timeline) manage their own DOM and a root
+       fallback would wipe it (see base.test.js "0 personas" case).
+   (b) show() DOES keep the root fallback for legacy behavior: a content-less
+       panel without selfManaged still swaps its root to a skeleton on switch.
+       Currently unreachable (all content-less tabs are selfManaged in
+       dashboard.py) but preserved for compatibility.
+   :scope > — content divs are direct children of their section; a descendant
+   query could hit nested ids like #block-modal-content first. If a content div
+   is ever nested deeper in a non-selfManaged panel, panelContentEl returns
+   null and show() would skeleton the whole panel root — keep -content divs
+   direct children, or make the tab selfManaged. */
+function panelContentEl(panelId) {
+  var container = document.getElementById("tab-" + panelId);
+  return container ? container.querySelector(':scope > [id$="-content"]') : null;
+}
+
 /* ── Show skeleton for a given tab ── */
 function show(tabId) {
-  var container = document.getElementById("tab-" + tabId);
-  if (!container) return;
-
-  /* Self-managed tabs handle their own loading */
-  if (_selfManaged.has(tabId)) return;
+  var navBtn = Array.from(document.querySelectorAll(".tab-btn")).find(function(b) { return b.dataset.tab === tabId; }) || null;
+  if (navBtn && navBtn.dataset.selfManaged) return;
 
   /* Check registration first, then default */
   var skeletonHtml = _registry[tabId] || _defaults[tabId] ||
     '<div class="skeleton skeleton-card glass"></div>';
 
-  var content = container.querySelector('[id$="-content"]') || container;
+  /* Legacy fallback for (b): content-less panel still skeletons its root — see contract note above. */
+  var content = panelContentEl(tabId) || document.getElementById("tab-" + tabId);
+  if (!content) return;
   safeSetHTML(content, skeletonHtml);
 }
 
@@ -150,6 +147,7 @@ N.Components.skeleton = {
   list: skeletonList,
   errorCard: errorCard,
   emptyState: emptyState,
+  panelContentEl: panelContentEl,
 };
 
 })(window.Nous);

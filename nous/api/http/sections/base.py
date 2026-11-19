@@ -4,6 +4,9 @@ Provides the shared HTML head, navigation bar, utility JavaScript,
 and the overall page shell that section-specific renderers plug into.
 """
 
+import html
+import json
+
 from nous import __version__
 
 # ---------------------------------------------------------------------------
@@ -127,18 +130,33 @@ def render_head() -> str:
 def render_nav(tabs: list[dict]) -> str:
     """Build ``<nav class="tab-bar">`` dynamically from *tabs*.
 
-    Each element in *tabs* is ``{"id": "...", "lucide": "...", "label": "..."}``.
+    Each element in *tabs* is ``{"id": ..., "lucide": ..., "label": ...}``
+    plus optional wiring keys (#93 — dashboard.py is the single source
+    of truth): ``loader`` (JS function path), ``loaderArgs`` (JSON array),
+    ``selfManaged`` (skip default skeleton swap).
     All tabs are shown directly; the first tab is marked active.
     """
 
-    def _tab_btn(tab: dict, active: bool, extra_cls: str = "") -> str:
-        cls = f"tab-btn{' active' if active else ''}{' ' + extra_cls if extra_cls else ''}"
+    def _tab_btn(tab: dict, active: bool) -> str:
+        cls = f"tab-btn{' active' if active else ''}"
         sel = "true" if active else "false"
-        icon_html = f'<i data-lucide="{tab["lucide"]}"></i>' if tab.get("lucide") else tab.get("icon", "")
+        icon_html = f'<i data-lucide="{html.escape(tab["lucide"], quote=True)}"></i>' if tab.get("lucide") else ""
+        # #93: tabs are authored in dashboard.py (trusted), but escape anyway —
+        # this is an attribute boundary and the docstring accepts any dict.
+        attrs = f'data-tab="{html.escape(tab["id"], quote=True)}"'
+        if tab.get("loader"):
+            attrs += f' data-loader="{html.escape(tab["loader"], quote=True)}"'
+        if tab.get("loaderArgs"):
+            # #93: loaderArgs is a list — emit a complete JSON array, so the
+            # JS side is a plain JSON.parse (no fragment wrapping contract).
+            args_json = json.dumps(tab["loaderArgs"], separators=(",", ":"))
+            attrs += f' data-loader-args="{html.escape(args_json, quote=True)}"'
+        if tab.get("selfManaged"):
+            attrs += ' data-self-managed="true"'
         return (
-            f'<button class="{cls}" data-tab="{tab["id"]}" '
+            f'<button class="{cls}" {attrs} '
             f'role="tab" aria-selected="{sel}">'
-            f"{icon_html} {tab['label']}</button>"
+            f"{icon_html} {html.escape(tab['label'])}</button>"
         )
 
     buttons = [_tab_btn(t, i == 0) for i, t in enumerate(tabs)]

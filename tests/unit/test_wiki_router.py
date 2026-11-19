@@ -199,6 +199,50 @@ def test_dashboard_renders_wiki_tab():
     assert "/static/features/wiki.js" in html
 
 
+def test_dashboard_nav_wiring_is_complete():
+    """#93: nav の data-tab 集合 == パネル id 集合、全ボタンに loader。
+
+    タブ定義の真実の源は dashboard.py の tabs リスト。セクション側の
+    id="tab-*" は手書きのままなので、ここがずれると #91 型の
+    （永久スケルトン／内容上書き）に戻る——この不変条件で固定する。
+    """
+    import re
+
+    from nous.api.http.dashboard import render_dashboard
+
+    html = render_dashboard("herta")
+    nav_tabs = re.findall(r'class="tab-btn[^"]*"[^>]*data-tab="([^"]+)"', html)
+    assert nav_tabs, "nav buttons not rendered"
+    for btn in re.findall(r'<button class="tab-btn[^"]*?"[^>]*>', html):
+        assert "data-loader=" in btn, f"nav button without loader: {btn}"
+    panel_ids = set(re.findall(r'id="tab-([^"]+)"', html))
+    assert set(nav_tabs) == panel_ids, (
+        f"nav/panel drift: nav={sorted(nav_tabs)} panels={sorted(panel_ids)}"
+    )
+    # SSR 'active' is authored in two places (nav first tab / overview.py
+    # panel) — keep them pointing at the same tab.
+    active_nav = re.findall(
+        r'class="tab-btn active"[^>]*data-tab="([^"]+)"', html
+    )
+    active_panel = re.findall(r'id="tab-([^"]+)" class="tab-panel active"', html)
+    assert active_nav == active_panel, (
+        f"active tab drift: nav={active_nav} panel={active_panel}"
+    )
+    # #93: attributes the JS side reads must survive render — self-managed
+    # markers and loader args come from the same dashboard.py source.
+    sm_tabs = re.findall(r'data-tab="([^"]+)"[^>]*data-self-managed', html)
+    assert sm_tabs, "no self-managed markers rendered"
+    assert "data-loader-args=\"[true]\"" in html, (
+        "activity loaderArgs [true] missing from SSR"
+    )
+    # loader-args appears exactly once (activity), on a self-managed tab
+    args_tabs = re.findall(
+        r'data-tab="([^"]+)"[^>]*data-loader-args', html
+    )
+    assert args_tabs == ["activity"], f"unexpected loaderArgs tabs: {args_tabs}"
+    assert "activity" in sm_tabs, "activity must be self-managed"
+
+
 # ---------------------------------------------------------------------------
 # PUT /api/wiki/{persona}/{slug:path} — ダッシュボードからの手書き保存
 # ---------------------------------------------------------------------------
@@ -259,10 +303,12 @@ class TestWikiSaveApi:
         assert page["title"] == "直した題名"
         assert page["sources"] == ["m1", "m2"]
 
+        from nous.domain.shared.result import Success
         from nous.infrastructure.wiki.store import WikiStore
 
-        stored = WikiStore(ctx.settings.data_root, "herta").read_page("project-nous").value
-        assert stored.body == "誤字を直した本文"
+        result = WikiStore(ctx.settings.data_root, "herta").read_page("project-nous")
+        assert isinstance(result, Success), result
+        assert result.value.body == "誤字を直した本文"
         raw = (
             WikiStore(ctx.settings.data_root, "herta")
             .wiki_dir()
@@ -289,10 +335,12 @@ class TestWikiSaveApi:
             )
         assert resp.status_code == 200
 
+        from nous.domain.shared.result import Success
         from nous.infrastructure.wiki.store import WikiStore
 
-        stored = WikiStore(ctx.settings.data_root, "herta").read_page("project-nous").value
-        assert stored.tags == ("journal", "2026-11")
+        result = WikiStore(ctx.settings.data_root, "herta").read_page("project-nous")
+        assert isinstance(result, Success), result
+        assert result.value.tags == ("journal", "2026-11")
 
     @pytest.mark.asyncio
     async def test_traversal_rejected(self, read_routes):

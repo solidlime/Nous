@@ -5,7 +5,7 @@
 (function(N) {
 "use strict";
 var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
+var api = C.api, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var appendChatMessage = N.Chat.ui && N.Chat.ui.append;
 var showTypingIndicator = N.Chat.ui && N.Chat.ui.showTyping;
 var removeTypingIndicator = N.Chat.ui && N.Chat.ui.removeTyping;
@@ -40,7 +40,7 @@ function showHelpCommand() {
     msg += "  例: `" + cmd.example + "`\n\n";
   });
   msg += "**キーボードショートカット**\n\n";
-  msg += "`Alt+1` ~ `Alt+0` — タブ切り替え\n";
+  msg += "`Alt+1`~`9` — タブ切替（nav 順）／`Alt+0` — 最後のタブ\n";
   msg += "`Ctrl+F` — 検索\n";
   msg += "`Enter` — 改行 / `Ctrl+Enter` — 送信\n";
   appendChatMessage("assistant", msg, timeStr, true);

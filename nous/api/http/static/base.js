@@ -21,6 +21,20 @@ window.S = S;
 var C = window.Nous.Core;
 var safeSetHTML = C.safeSetHTML;
 
+/* #93: shared guidance for the no-persona path (init + loadTab) */
+const NO_PERSONA_MSG = "ペルソナがありません。右上の ＋ から作成してください。";
+
+function renderNoPersona(tab) {
+  /* #93: use skeleton.js's [id$="-content"] convention. No -content child
+     (chat/wiki/activity/timeline manage their own DOM) → leave the panel
+     alone; replacing its root would destroy it even after a persona is
+     created. */
+  var c = N.Components.skeleton.panelContentEl(tab);
+  if (!c) return;
+  safeSetHTML(c, N.Components.skeleton.emptyState("user-plus", NO_PERSONA_MSG));
+  if (typeof lucide !== "undefined") lucide.createIcons();
+}
+
 /* Persona storage helpers — write to both keys for backward compatibility */
 function getStoredPersona() {
   return localStorage.getItem("mmcp-persona");
@@ -43,6 +57,9 @@ function showSkeleton(tabId) {
    TAB SWITCHING
    ================================================================= */
 function switchTab(tab) {
+  /* #93: tabs live on the nav — anything else (stale localStorage id,
+   deleted tab) falls back to overview instead of a blank main area. */
+  if (!Array.from(document.querySelectorAll(".tab-btn")).some((b) => b.dataset.tab === tab)) tab = "overview";
   S.tab = tab;
   localStorage.setItem("mmcp-tab", tab);
   document.querySelectorAll(".tab-btn").forEach((b) => {
@@ -69,26 +86,44 @@ function switchTab(tab) {
   }, 100);
 }
 N.Core.switchTab = switchTab;
-var TAB_LOADERS = {
-  overview:  function() { return N.Features.Overview.loadOverview(); },
-  analytics: null,
-  memories:  function() { return N.Features.Memories.loadMemories(); },
-  wiki:      function() { return N.Features.Wiki.loadWiki(); },
-  timeline:  function() { return N.Features.Timeline.loadTimeline(); },
-  graph:     function() { return N.Features.Graph.loadGraph(); },
-  'import-export': null,
-  personas:  null,
-  chat:      function() { return N.Chat.core.loadChat(); },
-  settings:  function() { return N.Features.Settings.loadSettings(); },
-  projects: function() { return N.Features.Projects.loadProject(); },
-  admin:     null,
-  activity:  function() { return N.Features.Activity.loadActivity(true); },
-};
+/* #93 — TAB_LOADERS is gone: tab wiring (loader path / args / skeleton
+   behaviour) lives on each nav button as data-* attributes emitted from
+   dashboard.py's tabs list, the single source of truth. */
+function resolvePathFn(path) {
+  var obj = window;
+  var parts = path.split(".");
+  for (var i = 0; i < parts.length; i++) {
+    obj = obj[parts[i]];
+    if (!obj) return null;
+  }
+  return typeof obj === "function" ? obj : null;
+}
 function loadTab(tab) {
-  if (!S.persona && tab !== "settings" && tab !== "personas") return;
-  var fn = TAB_LOADERS[tab];
+  /* #93: no persona yet (defensive path — the server usually redirects to
+     the setup page): draw guidance instead of leaving showSkeleton()'s
+     skeleton up forever. */
+  if (!S.persona && tab !== "settings") {
+    renderNoPersona(tab);
+    return;
+  }
+  var btn = Array.from(document.querySelectorAll(".tab-btn")).find(function(b) { return b.dataset.tab === tab; }) || null;
+  var fn = btn && btn.dataset.loader ? resolvePathFn(btn.dataset.loader) : null;
   if (fn) {
-    fn();
+    /* #93: loaderArgs is a complete JSON array emitted by dashboard.py —
+       guard anyway so a bad value can't kill the switch after
+       showSkeleton() already ran. */
+    var args;
+    try {
+      args = btn.dataset.loaderArgs ? JSON.parse(btn.dataset.loaderArgs) : [];
+    } catch (e) {
+      /* #93: args parsing runs after showSkeleton(), so this cannot change
+         skeleton behavior — the warn exists because falling back to [] would
+         otherwise let the loader run silently with wrong arguments
+         (e.g. activity keeps its stale feed on reset=false). */
+      console.warn("bad data-loader-args:", tab, e);
+      args = [];
+    }
+    fn.apply(null, args);
   } else {
     console.warn("[loadTab] loader not found for tab:", tab);
   }
@@ -151,14 +186,11 @@ async function init() {
     const sel = document.getElementById("persona-select");
     safeSetHTML(sel, "");
     if (personas.length === 0) {
+      /* #93: do NOT return here — init's remaining wiring (create-persona
+         button, modal bindings, tab clicks, keyboard nav) must still run. */
       safeSetHTML(sel, '<option value="">No personas found</option>');
-      safeSetHTML(document.getElementById("overview-content"),
-        '<div class="empty-state"><div class="empty-state-icon"><i data-lucide="user-plus"></i></div>' +
-        '<div class="empty-state-text">Personasタブでペルソナを作成してください。</div>' +
-        '<button class="empty-state-cta" data-tab="personas"><i data-lucide="user-plus"></i> ペルソナを作成</button></div>');
-      if (typeof lucide !== "undefined") lucide.createIcons();
-      return;
-    }
+      renderNoPersona("overview");
+    } else {
     personas.forEach((p) => {
       const opt = document.createElement("option");
       opt.value = p;
@@ -181,6 +213,7 @@ async function init() {
     syncDeleteBtn();
     C.connectSSE(_target);
     switchTab(S.tab);
+    } // personas.length > 0
   } catch (e) {
     C.toast("Failed to load personas: " + e.message, "error");
   }
@@ -384,23 +417,17 @@ async function init() {
 
   // Keyboard: tab navigation
   document.addEventListener("keydown", (e) => {
+    if (e.isComposing) return; // IME入力中はタブ切替無効
     if (e.altKey && ((e.key >= "1" && e.key <= "9") || e.key === "0")) {
       e.preventDefault();
-      const tabs = [
-        "overview",
-        "analytics",
-        "memories",
-        "timeline",
-        "graph",
-        "import-export",
-        "personas",
-        "chat",
-        "settings",
-        "admin",
-        "activity",
-      ];
-      const idx = e.key === "0" ? 9 : parseInt(e.key) - 1;
-      if (idx < tabs.length) switchTab(tabs[idx]);
+      // #93: tab order comes from the nav itself — the tabs list in
+      // dashboard.py is the single source of truth, no local copy.
+      const tabs = Array.from(
+        document.querySelectorAll(".tab-btn"),
+        (b) => b.dataset.tab
+      );
+      const idx = e.key === "0" ? tabs.length - 1 : parseInt(e.key) - 1;
+      if (idx >= 0 && idx < tabs.length) switchTab(tabs[idx]);
     }
 
     // Arrow key tab navigation (Left / Right)
@@ -487,8 +514,8 @@ function toggleShortcutHelp() {
     "</div>" +
     '<div class="shortcut-help-body">' +
     "<table>" +
-    "<tr><td><kbd>Alt+1</kbd>–<kbd>9</kbd></td><td>Switch tabs</td></tr>" +
-    "<tr><td><kbd>Alt+0</kbd></td><td>Switch to Activity tab</td></tr>" +
+    "<tr><td><kbd>Alt+1</kbd>–<kbd>9</kbd></td><td>Switch tabs (order = nav)</td></tr>" +
+    "<tr><td><kbd>Alt+0</kbd></td><td>Switch to the last tab</td></tr>" +
     "<tr><td><kbd>Ctrl+F</kbd> / <kbd>⌘F</kbd></td><td>Focus search input</td></tr>" +
     "<tr><td><kbd>Esc</kbd></td><td>Close modals / panels</td></tr>" +
     "<tr><td><kbd>?</kbd></td><td>Toggle this help</td></tr>" +

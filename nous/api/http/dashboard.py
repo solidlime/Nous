@@ -19,16 +19,19 @@ from .sections.wiki import render_wiki_tab
 
 def render_dashboard(persona: str | None = None) -> str:
     """Return the complete HTML string for the SPA dashboard."""
-    tabs = [
-        {"id": "overview", "lucide": "layout-dashboard", "label": "Overview"},
-        {"id": "memories", "lucide": "brain", "label": "Memories"},
-        {"id": "wiki", "lucide": "book-open", "label": "Wiki"},
-        {"id": "projects", "lucide": "folder-kanban", "label": "Projects"},
-        {"id": "chat", "lucide": "message-circle", "label": "Chat"},
-        {"id": "activity", "lucide": "activity", "label": "Activity"},
-        {"id": "settings", "lucide": "settings", "label": "Settings"},
-        {"id": "timeline", "lucide": "clock", "label": "Timeline"},
-        {"id": "graph", "lucide": "share-2", "label": "Graph"},
+    # Single source of truth for all tab wiring (#93): the nav generator
+    # (render_nav), the tab loader (base.js loadTab) and the skeleton switch
+    # (skeleton.js show) all read from this list — add a tab here only.
+    tabs: list[dict] = [
+        {"id": "overview", "lucide": "layout-dashboard", "label": "Overview", "loader": "Nous.Features.Overview.loadOverview"},
+        {"id": "memories", "lucide": "brain", "label": "Memories", "loader": "Nous.Features.Memories.loadMemories"},
+        {"id": "wiki", "lucide": "book-open", "label": "Wiki", "loader": "Nous.Features.Wiki.loadWiki", "selfManaged": True},
+        {"id": "projects", "lucide": "folder-kanban", "label": "Projects", "loader": "Nous.Features.Projects.loadProject", "selfManaged": True},
+        {"id": "chat", "lucide": "message-circle", "label": "Chat", "loader": "Nous.Chat.core.loadChat", "selfManaged": True},
+        {"id": "activity", "lucide": "activity", "label": "Activity", "loader": "Nous.Features.Activity.loadActivity", "loaderArgs": [True], "selfManaged": True},
+        {"id": "settings", "lucide": "settings", "label": "Settings", "loader": "Nous.Features.Settings.loadSettings"},
+        {"id": "timeline", "lucide": "clock", "label": "Timeline", "loader": "Nous.Features.Timeline.loadTimeline", "selfManaged": True},
+        {"id": "graph", "lucide": "share-2", "label": "Graph", "loader": "Nous.Features.Graph.loadGraph", "selfManaged": True},
     ]
 
     nav_html = render_nav(tabs)
