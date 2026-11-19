@@ -2,6 +2,7 @@ from __future__ import annotations
 
 import asyncio
 
+from nous.config.settings import get_settings
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.mcp_client.types import MCPServerConfig, MCPTool
 
@@ -38,7 +39,8 @@ async def list_tools(config: MCPServerConfig) -> list[MCPTool]:
             await _http.aclose()
 
     try:
-        return await asyncio.wait_for(_inner(), timeout=30.0)
+        timeout = float(get_settings().mcp_client.request_timeout_seconds)
+        return await asyncio.wait_for(_inner(), timeout=timeout)
     except Exception as e:
         logger.warning("http_client list_tools failed (%s): %s", config.url, e)
         return []
@@ -70,7 +72,8 @@ async def call_tool(config: MCPServerConfig, tool_name: str, args: dict) -> dict
             await _http.aclose()
 
     try:
-        return await asyncio.wait_for(_inner(), timeout=30.0)
+        timeout = float(get_settings().mcp_client.request_timeout_seconds)
+        return await asyncio.wait_for(_inner(), timeout=timeout)
     except Exception as e:
         logger.warning("http_client call_tool failed (%s/%s): %s", config.url, tool_name, e)
         return {"error": str(e)}

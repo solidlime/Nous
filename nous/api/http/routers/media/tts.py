@@ -719,25 +719,22 @@ async def _do_stream_tts(persona: str, ctx, body: dict) -> Response:
 
 
 async def _do_tts_health(persona: str, ctx) -> dict:
-    """GET /api/tts/{persona}/health の本体。irodori /v1/models を見て接続状態を返す。"""
+    """GET /api/tts/{persona}/health の本体。irodori /v1/models を見て接続状態を返す。
+
+    疎通判定とモデル一覧は IrodoriEngine に委譲する（タイムアウトの二重定義を解消）。
+    """
+    from nous.infrastructure.voice.irodori import IrodoriEngine
+
     chat_config = _load_chat_config(persona)
-    base_url = _get_irodori_config(ctx, chat_config).url.rstrip("/")
-
-    import httpx
-
+    irodori_config = _get_irodori_config(ctx, chat_config)
+    base_url = irodori_config.url.rstrip("/")
     try:
-        async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
-            resp = await client.get(f"{base_url}/v1/models")
-            models_data = resp.json() if resp.status_code == 200 else None
-            models = []
-            if models_data and isinstance(models_data, dict) and "data" in models_data:
-                for item in models_data["data"]:
-                    mid = item.get("id", "")
-                    if mid:
-                        models.append({"id": mid, "name": mid})
-            return {"ok": True, "connected": True, "url": base_url, "models": models}
+        models = await IrodoriEngine(irodori_config).fetch_models()
     except Exception:
+        models = None
+    if models is None:
         return {"ok": True, "connected": False, "url": base_url, "error": "Connection check failed"}
+    return {"ok": True, "connected": True, "url": base_url, "models": models}
 
 
 def _sanitize_cache_filename(filename: object) -> str | None:

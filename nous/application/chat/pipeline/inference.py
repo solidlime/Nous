@@ -18,8 +18,8 @@ from nous.application.chat.events import (
     ToolCallSSE,
     ToolResultSSE,
 )
+from nous.application.chat.tools import approval
 from nous.application.chat.tools.approval import (
-    APPROVAL_TIMEOUT_SECONDS,
     approval_payload,
     approval_required,
 )
@@ -472,7 +472,9 @@ class InferenceStep:
             getattr(ctx, "persona", "") or "",
             tc.tool_use_id or f"approval-{id(tc)}",
             approval_payload(tc.tool_name, tc.tool_input),
-            APPROVAL_TIMEOUT_SECONDS,
+            # モジュール属性経由で呼び出し時読み（approval.__getattr__ が settings
+            # を解決）。from-import だと import 時点の値で固定され hot_reload が嘘になる。
+            approval.APPROVAL_TIMEOUT_SECONDS,
         )
         if decision == "allow":
             return None

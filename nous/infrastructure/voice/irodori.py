@@ -18,7 +18,6 @@ _EMOTION_SPEED: dict[str, float] = {
 }
 
 _DEFAULT_SPEED: float = 1.0
-_MAX_RETRIES: int = 3  # 初回 + 2リトライ
 
 
 class IrodoriEngine(VoiceEngine):
@@ -28,6 +27,8 @@ class IrodoriEngine(VoiceEngine):
         self._url = config.url.rstrip("/")
         self._voice = config.voice
         self._timeout = httpx.Timeout(config.timeout_seconds)
+        self._health_timeout = httpx.Timeout(config.health_timeout_seconds)
+        self._retry_count = config.retry_count
         self._advanced = config.advanced
 
     def set_voice(self, voice: str) -> None:
@@ -72,7 +73,7 @@ class IrodoriEngine(VoiceEngine):
     ) -> bytes:
         """Irodori-TTS で音声合成しWAVバイト列を返す。
 
-        接続エラーの場合は最大2回リトライする。
+        接続エラーの場合は settings.irodori.retry_count まで試行する。
         """
         # float 演算の誤差 (1.1000000000000001 等) を防ぐため2桁に丸めてから送信
         # Irodori-TTS-Server の SpeechRequest はトップレベル "irodori" を見る。
@@ -80,7 +81,7 @@ class IrodoriEngine(VoiceEngine):
         payload = self._build_payload(text, emotion, caption, speed)
 
         last_exception: Exception | None = None
-        for attempt in range(_MAX_RETRIES):
+        for attempt in range(self._retry_count):
             try:
                 async with httpx.AsyncClient(timeout=self._timeout) as client:
                     resp = await client.post(f"{self._url}/v1/audio/speech", json=payload)
@@ -88,10 +89,10 @@ class IrodoriEngine(VoiceEngine):
                     return resp.content
             except (httpx.ConnectError, httpx.TimeoutException) as e:
                 last_exception = e
-                if attempt < _MAX_RETRIES - 1:
+                if attempt < self._retry_count - 1:
                     await asyncio.sleep(1)
                     continue
-                raise RuntimeError(f"Irodori TTS failed after {_MAX_RETRIES} attempts") from last_exception
+                raise RuntimeError(f"Irodori TTS failed after {self._retry_count} attempts") from last_exception
             except httpx.HTTPStatusError as e:
                 # HTTP エラーはリトライしない
                 raise RuntimeError(f"Irodori TTS returned HTTP {e.response.status_code}: {e.response.text}") from e
@@ -144,11 +145,29 @@ class IrodoriEngine(VoiceEngine):
 
     # ── health_check ──────────────────────────────────────────
 
+    async def _get_models_response(self) -> httpx.Response | None:
+        """GET /v1/models。接続系エラーは None（health_check / fetch_models 共通）。"""
+        try:
+            async with httpx.AsyncClient(timeout=self._health_timeout) as client:
+                return await client.get(f"{self._url}/v1/models")
+        except httpx.HTTPError:
+            return None
+
     async def health_check(self) -> bool:
         """サーバーに疎通確認する (GET /v1/models で確認)。"""
+        resp = await self._get_models_response()
+        return resp is not None and resp.status_code == 200
+
+    async def fetch_models(self) -> list[dict] | None:
+        """GET /v1/models のモデル一覧。未接続・非 200 は None（health_check と同じ判定）。"""
+        resp = await self._get_models_response()
+        if resp is None or resp.status_code != 200:
+            return None
         try:
-            async with httpx.AsyncClient(timeout=httpx.Timeout(5.0)) as client:
-                resp = await client.get(f"{self._url}/v1/models")
-                return resp.status_code == 200
-        except httpx.HTTPError:
-            return False
+            data = resp.json()
+        except ValueError:
+            return []
+        items = data.get("data") if isinstance(data, dict) else None
+        if not isinstance(items, list):
+            return []
+        return [{"id": mid, "name": mid} for item in items if isinstance(item, dict) and (mid := item.get("id"))]

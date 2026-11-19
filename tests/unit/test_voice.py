@@ -396,3 +396,65 @@ class TestVoiceFactory:
         engine = get_voice_engine(config)
 
         assert isinstance(engine, IrodoriEngine)
+
+
+# ============================================================
+# TestIrodoriSettingsWiring — Phase 2 コンフィグ外部化（D2-18）
+# ============================================================
+
+
+class TestIrodoriSettingsWiring:
+    """IrodoriConfig の retry_count / health_timeout_seconds が実挙動に効くこと"""
+
+    @pytest.mark.asyncio
+    async def test_retry_count_from_config(self):
+        """retry_count=1 なら接続エラーで即失敗（固定値3ではない）"""
+        from nous.infrastructure.voice.irodori import IrodoriEngine
+
+        config = IrodoriConfig(url="http://irodori:8088", retry_count=1)
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.post = AsyncMock(side_effect=httpx.ConnectError("refused"))
+            mock_cls.return_value.__aenter__.return_value = mock_client
+
+            with pytest.raises(RuntimeError, match="after 1 attempts"):
+                await IrodoriEngine(config).synthesize("hello", emotion="neutral")
+
+            assert mock_client.post.await_count == 1
+
+    @pytest.mark.asyncio
+    async def test_health_timeout_from_config(self):
+        """health_timeout_seconds が health_check の httpx.Timeout に渡る"""
+        from nous.infrastructure.voice.irodori import IrodoriEngine
+
+        config = IrodoriConfig(url="http://irodori:8088", health_timeout_seconds=2)
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_client = MagicMock()
+            mock_resp = MagicMock(status_code=200)
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            mock_cls.return_value.__aenter__.return_value = mock_client
+
+            assert await IrodoriEngine(config).health_check() is True
+            assert mock_cls.call_args[1]["timeout"] == httpx.Timeout(2)
+
+    @pytest.mark.asyncio
+    async def test_fetch_models_parses_ids_and_reports_disconnect(self):
+        """/v1/models の data[].id を {id,name} に写像し、非200は None"""
+        from nous.infrastructure.voice.irodori import IrodoriEngine
+
+        engine = IrodoriEngine(IrodoriConfig(url="http://irodori:8088"))
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_client = MagicMock()
+            mock_resp = MagicMock(status_code=200)
+            mock_resp.json = MagicMock(return_value={"data": [{"id": "kiritan"}, {"no_id": 1}]})
+            mock_client.get = AsyncMock(return_value=mock_resp)
+            mock_cls.return_value.__aenter__.return_value = mock_client
+
+            assert await engine.fetch_models() == [{"id": "kiritan", "name": "kiritan"}]
+
+        with patch("httpx.AsyncClient") as mock_cls:
+            mock_client = MagicMock()
+            mock_client.get = AsyncMock(return_value=MagicMock(status_code=503))
+            mock_cls.return_value.__aenter__.return_value = mock_client
+
+            assert await engine.fetch_models() is None
