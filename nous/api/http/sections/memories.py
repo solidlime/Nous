@@ -1,13 +1,5 @@
 """Memories tab section: HTML skeleton and JavaScript for full CRUD, advanced search, sorting, and batch operations."""
 
-from pathlib import Path
-
-_JS_DIR = Path(__file__).resolve().parent.parent / "static" / "features" / "memories"
-_JS = "".join(
-    (_JS_DIR / f).read_text(encoding="utf-8")
-    for f in ["memories-core.js", "memories-list.js", "memories-search.js", "memories-edit.js"]
-)
-
 
 def render_memories_tab() -> str:
     """Return the memories tab HTML section with all UI elements."""
@@ -271,8 +263,3 @@ def render_memories_tab() -> str:
                 </div>
             </div>
         </section>"""
-
-
-def render_memories_js() -> str:
-    """Return all JavaScript for the Memories tab."""
-    return _JS

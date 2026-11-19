@@ -5,8 +5,6 @@ source-priority display (env > override > default), settings profiles,
 search/filter, field validation, and dependency rules.
 """
 
-from pathlib import Path
-
 
 def render_settings_tab() -> str:
     """Return the HTML for the Settings tab panel with skeleton loader and inline CSS."""
@@ -32,15 +30,3 @@ def render_settings_tab() -> str:
                 <div class="glass p-6"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text"></div><div class="skeleton skeleton-text" style="width:70%"></div></div>
             </div>
         </section>"""
-
-
-_JS_DIR = Path(__file__).resolve().parent.parent / "static" / "features" / "settings"
-_JS = "".join(
-    (_JS_DIR / f).read_text(encoding="utf-8")
-    for f in ["settings-validation.js", "settings-save.js", "settings-ui.js", "settings-form.js", "settings-core.js"]
-)
-
-
-def render_settings_js() -> str:
-    """Return all JavaScript for the Settings tab."""
-    return _JS

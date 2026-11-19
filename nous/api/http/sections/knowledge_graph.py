@@ -177,22 +177,3 @@ def render_graph_tab() -> str:
                  style="display:none;position:fixed;inset:0;background:rgba(0,0,0,0.3);z-index:999"></div>
           </div>
         </section>"""
-
-
-def render_graph_js() -> str:
-    """Return the JavaScript for the Knowledge Graph tab.
-
-    Defines:
-    - ``loadGraph()``              — main entry; fetches data, builds graph
-    - ``populateGraphFilters()``   — populates tag/emotion <select> from node data
-    - ``buildVisData()``           — converts API nodes/edges → vis-network format
-    - ``buildTooltip()``           — HTML tooltip for node hover
-    - ``applyGraphFilters()``      — client-side tag/emotion filtering
-    - ``renderNetwork()``          — creates / re-creates vis.Network instance
-    - ``openGraphDetailPanel()``   — shows slide-out detail panel for a node
-    - ``closeGraphDetailPanel()``  — hides the detail panel
-    - IIFE ``setupGraphEvents()``  — wires toolbar event listeners
-
-    No ``<script>`` tags — the string is concatenated by ``dashboard.py``.
-    """
-    return _JS

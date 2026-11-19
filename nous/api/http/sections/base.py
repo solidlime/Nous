@@ -147,26 +147,15 @@ def render_nav(tabs: list[dict]) -> str:
 
 
 # ---------------------------------------------------------------------------
-# 3. render_utilities_js
+# 3. render_layout_shell
 # ---------------------------------------------------------------------------
 
 
-def render_utilities_js() -> str:
-    """Return a ``<script>`` tag loading the shared utility JavaScript.
-    Now handled via defer in render_head() — returns empty."""
-    return ""
-
-
-# ---------------------------------------------------------------------------
-# 4. render_layout_shell
-# ---------------------------------------------------------------------------
-
-
-def render_layout_shell(nav_html: str, tab_contents: str, tab_js: str) -> str:
+def render_layout_shell(nav_html: str, tab_contents: str) -> str:
     """Compose the full HTML page.
 
-    Uses string concatenation (NOT f-strings) because the embedded
-    JavaScript relies on ``${}`` template literals.
+    Uses string concatenation (NOT f-strings) because tab HTML strings
+    rely on ``${}`` template literals.
     """
     return (
         "<!DOCTYPE html>\n"

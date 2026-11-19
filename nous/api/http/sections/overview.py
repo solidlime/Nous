@@ -1,16 +1,4 @@
-"""Overview tab section: HTML skeleton and JavaScript for loadOverview()."""
-
-from pathlib import Path
-
-_BASE = Path(__file__).resolve().parent.parent / "static/features/overview"
-_JS = (
-    (_BASE / "overview-blocks.js").read_text(encoding="utf-8")
-    + (_BASE / "overview-inventory.js").read_text(encoding="utf-8")
-    + (_BASE / "overview-core.js").read_text(encoding="utf-8")
-    + (_BASE / "overview-stats.js").read_text(encoding="utf-8")
-    + (_BASE / "overview-charts.js").read_text(encoding="utf-8")
-    + (_BASE / "overview-context.js").read_text(encoding="utf-8")
-)
+"""Overview tab section: HTML skeleton for loadOverview()."""
 
 
 def render_overview_tab() -> str:
@@ -33,8 +21,3 @@ def render_overview_tab() -> str:
                 <div class="grid grid-cols-1 lg:grid-cols-2 gap-6"><div class="glass p-6"><div class="skeleton skeleton-chart"></div></div><div class="glass p-6"><div class="skeleton skeleton-chart"></div></div></div>
             </div>
         </section>"""
-
-
-def render_overview_js() -> str:
-    """Return the loadOverview() JavaScript function and helpers as a plain string."""
-    return _JS

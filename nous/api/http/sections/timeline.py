@@ -15,10 +15,6 @@ Response shape (per entry):
     }
 """
 
-from pathlib import Path
-
-_JS = (Path(__file__).resolve().parent.parent / "static/features/timeline.js").read_text(encoding="utf-8")
-
 
 def render_timeline_tab() -> str:
     """Return the HTML for the Memory Timeline tab panel.
@@ -107,8 +103,3 @@ def render_timeline_tab() -> str:
             <div id="tl-legend"></div>
         </section>
     """
-
-
-def render_timeline_js() -> str:
-    """Return the JavaScript for the Memory Timeline tab."""
-    return _JS

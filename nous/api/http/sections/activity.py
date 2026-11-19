@@ -7,10 +7,6 @@ API consumed:
     GET /api/session-events/{persona}?limit=50&offset=0&event_type=&order=desc
 """
 
-from pathlib import Path
-
-_JS = (Path(__file__).resolve().parent.parent / "static/features/activity.js").read_text(encoding="utf-8")
-
 
 def render_activity_tab() -> str:
     """Return the HTML for the Activity tab panel."""
@@ -195,8 +191,3 @@ def render_activity_tab() -> str:
             <!-- Load more button (inserted dynamically) -->
         </section>
         """
-
-
-def render_activity_js() -> str:
-    """Return the JavaScript for the Activity tab."""
-    return _JS
