@@ -2,7 +2,7 @@
    #102 — img/audio の src URL に資格情報が乗ること（openViewer 入口の sign）。
    auth.test.js が sign() 単体を担保するので、ここは src への投入を証明する。
    ================================================================= */
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 async function load() {
   window.Nous = window.Nous || {};
@@ -54,12 +54,23 @@ describe('#102 media src auth (chat-attachments)', () => {
     expect(source.src).toContain('/api/tts/herta/cache/x.wav?token=k');
   });
 
-  it('openViewer は pdf iframe の src に ?token= を載せる', async () => {
+  it('openViewer は pdf を iframe でなく新タブで開く（XFO DENY 対策）', async () => {
     const attachments = await load();
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
     attachments.openViewer('/api/chat/herta/attachment/doc.pdf', 'pdf');
-    const frame = inner.querySelector('iframe');
-    expect(frame).toBeTruthy();
-    expect(frame.src).toContain('/api/chat/herta/attachment/doc.pdf?token=k');
+    expect(openSpy).toHaveBeenCalledWith(
+      '/api/chat/herta/attachment/doc.pdf?token=k', '_blank', 'noopener');
+    // iframe は描画されないので DOM には置かない
+    expect(inner.querySelector('iframe')).toBe(null);
+    openSpy.mockRestore();
+  });
+
+  it('openViewer は外部 URL の pdf は開かない（open redirect 防護）', async () => {
+    const attachments = await load();
+    const openSpy = vi.spyOn(window, 'open').mockImplementation(() => null);
+    attachments.openViewer('https://evil.example/doc.pdf', 'pdf');
+    expect(openSpy).not.toHaveBeenCalled();
+    openSpy.mockRestore();
   });
 
   it('viewer を閉じたら inner は空になる', async () => {
@@ -67,5 +78,25 @@ describe('#102 media src auth (chat-attachments)', () => {
     attachments.openViewer('/api/chat/herta/attachment/a.png', 'image');
     attachments.closeViewer();
     expect(inner.textContent).toBe('');
+  });
+
+  it('viewer を閉じたら audio は pause される（要素を外しても鳴り続けるため）', async () => {
+    const attachments = await load();
+    attachments.openViewer('/api/tts/herta/cache/x.wav', 'audio', 'audio/wav');
+    const audio = inner.querySelector('audio');
+    expect(audio).toBeTruthy();
+    const pauseSpy = vi.spyOn(audio, 'pause');
+    attachments.closeViewer();
+    expect(pauseSpy).toHaveBeenCalled();
+    expect(inner.textContent).toBe('');
+  });
+
+  it('open し直すとき前回の audio は pause される', async () => {
+    const attachments = await load();
+    attachments.openViewer('/api/tts/herta/cache/x.wav', 'audio', 'audio/wav');
+    const first = inner.querySelector('audio');
+    const pauseSpy = vi.spyOn(first, 'pause');
+    attachments.openViewer('/api/chat/herta/attachment/a.png', 'image');
+    expect(pauseSpy).toHaveBeenCalled();
   });
 });

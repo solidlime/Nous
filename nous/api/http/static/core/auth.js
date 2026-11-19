@@ -13,7 +13,7 @@ function _fromLocation() {
   try {
     var m = /[?&]token=([^&#]+)/.exec((window.location && window.location.search) || "");
     if (m) return decodeURIComponent(m[1]).trim();
-  } catch (_) {}
+  } catch {}
   return "";
 }
 
@@ -25,14 +25,14 @@ function _stripTokenFromUrl() {
     if (!u.searchParams.has("token")) return;
     u.searchParams.delete("token");
     history.replaceState(history.state, "", u.pathname + (u.search || "") + (u.hash || ""));
-  } catch (_) {}
+  } catch {}
 }
 
 function _sameOrigin(url) {
   try {
     return new URL(url, window.location.href).origin === window.location.origin;
-  } catch (_) {
-    return true;
+  } catch {
+    return false;  // fail-close: パース不能な URL は鍵を付けない
   }
 }
 
@@ -40,7 +40,7 @@ N.Core.auth = {
   /* 保存済みキー。無ければ URL の ?token= を拾って保存する。 */
   token: function() {
     var t = "";
-    try { t = (window.localStorage.getItem(KEY) || "").trim(); } catch (_) {}
+    try { t = (window.localStorage.getItem(KEY) || "").trim(); } catch {}
     if (t) return t;
     t = _fromLocation();
     /* 保存できなかったら URL は消さない（そこが唯一のキーの所在になる）。 */
@@ -49,11 +49,11 @@ N.Core.auth = {
   },
 
   store: function(t) {
-    try { window.localStorage.setItem(KEY, t); return true; } catch (_) { return false; }
+    try { window.localStorage.setItem(KEY, t); return true; } catch { return false; }
   },
 
   clear: function() {
-    try { window.localStorage.removeItem(KEY); } catch (_) {}
+    try { window.localStorage.removeItem(KEY); } catch {}
   },
 
   /* 既存ヘッダ（plain object / Headers / 配列）を壊さず Authorization を足す。
@@ -86,10 +86,13 @@ N.Core.auth = {
 
   /* EventSource 用: URL に token= を足す（既にあれば触らない）。
      ヘッダを送れない代償としてキーが URL に乗る（アクセスログに残る）。
-     恒久解は cookie セッション。 */
+     恒久解は cookie セッション。
+     #102 review: blob:/data: は鍵不要で、query が付くと blob レジストリ照合を
+     壊す恐れがあるため sign 対象外（http(s) と相対パスのみ）。 */
   sign: function(url) {
     var t = this.token();
     if (!t || !url || /[?&]token=/.test(url)) return url;
+    if (!/^https?:/i.test(url) && !/^[/?#]/.test(url)) return url;
     if (!_sameOrigin(url)) return url;
     return url + (url.indexOf("?") === -1 ? "?" : "&") + "token=" + encodeURIComponent(t);
   }

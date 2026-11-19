@@ -146,6 +146,15 @@ describe('core/auth', () => {
     expect(auth.sign('http://other.example/stream')).toBe('http://other.example/stream');
   });
 
+  it('sign() は blob:/data: にキーを付けない（#102 review — blob レジストリ照合を壊す）', async () => {
+    window.localStorage.setItem('nousApiKey', 'abc123');
+    const auth = await load();
+    expect(auth.sign('blob:http://localhost:3210/uuid-1')).toBe(
+      'blob:http://localhost:3210/uuid-1',
+    );
+    expect(auth.sign('data:image/png;base64,AAAA')).toBe('data:image/png;base64,AAAA');
+  });
+
   it('401 が返ったら保存済みの鍵を捨てる（ローテート後の自壊を防ぐ）', async () => {
     window.localStorage.setItem('nousApiKey', 'stale');
     window.fetch = vi.fn(() => Promise.resolve({ status: 401 }));

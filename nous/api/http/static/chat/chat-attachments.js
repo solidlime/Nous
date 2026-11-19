@@ -108,7 +108,9 @@ function renderAttachmentBadge(att) {
 }
 
 function openMediaViewer(url, type, mimeType, data) {
-  url = N.Core.auth.sign(url);  // #102: img/audio/iframe は鍵を URL で受け取る
+  // #102 review: 前回の open から生きたままの audio/video は要素を外しても鳴り続ける
+  innerOfViewer().pauseAll();
+  url = N.Core.auth.sign(url);  // #102: img/audio は鍵を URL で受け取る
   const overlay = document.getElementById("media-viewer-overlay");
   const inner = document.getElementById("media-viewer-inner");
   if (!overlay || !inner) return;
@@ -152,14 +154,18 @@ function openMediaViewer(url, type, mimeType, data) {
     vid.autoplay = true;
     inner.appendChild(vid);
   } else if (type === "pdf") {
-    /* #102: createElement で組み立てる — safeSetHTML の DOMPurify は iframe を除去する。 */
-    const frame = document.createElement("iframe");
-    frame.src = url;
-    frame.width = "100%";
-    frame.height = "80vh";
-    frame.style.border = "none";
-    frame.style.borderRadius = "8px";
-    inner.appendChild(frame);
+    /* #102 review: middleware が全レスポンスに x-frame-options: DENY +
+       frame-ancestors 'none' を付けるため iframe は描画されない（ネットワーク 200
+       でもレンダリングが拒否される）。トップレベルの新タブは XFO の対象外なので
+       window.open で開く — サーバ変更ゼロで iframe src に鍵を置く攻撃面も消える。 */
+    /* #102 review: 添付 URL は same-origin 相対パスが前提 — 外部 URL は
+       開かない (open redirect 防護)。 */
+    try {
+      if (new URL(url, location.href).origin !== location.origin) return;
+    } catch { return; }
+    // pi-lens-ignore: ast-grep:no-open-redirect-js
+    window.open(url, "_blank", "noopener");
+    return;
   } else if (type === "audio") {
     /* #102: 同上 — audio/source も DOMPurify ホワイトリスト外。 */
     const audio = document.createElement("audio");
@@ -192,16 +198,27 @@ function openMediaViewer(url, type, mimeType, data) {
   document.addEventListener("keydown", openMediaViewer._escHandler);
 }
 
+function innerOfViewer() {
+  const inner = document.getElementById("media-viewer-inner");
+  return {
+    el: inner,
+    pauseAll() {
+      if (!inner) return;
+      inner.querySelectorAll("audio,video").forEach(function (m) { m.pause(); });
+    },
+  };
+}
+
 function closeMediaViewer() {
   const overlay = document.getElementById("media-viewer-overlay");
   const inner = document.getElementById("media-viewer-inner");
   if (overlay) overlay.classList.remove("visible");
   if (openMediaViewer._escHandler) {
-    try { document.removeEventListener("keydown", openMediaViewer._escHandler); } catch (_) {}
+    try { document.removeEventListener("keydown", openMediaViewer._escHandler); } catch {}
   }
   if (inner) {
-    const vid = inner.querySelector("video");
-    if (vid) vid.pause();
+    // #102 review: audio/video は要素を外しても鳴り続けるので必ず pause してから空にする
+    inner.querySelectorAll("audio,video").forEach(function (m) { m.pause(); });
     inner.textContent = "";
   }
 }
