@@ -9,7 +9,7 @@ from typing import Any, cast
 from starlette.datastructures import UploadFile
 
 from nous.api.http.routers.chat import chat_management as cm
-from nous.application.chat.tools.attachments import MAX_ATTACHMENT_BYTES
+from nous.domain.config.chat_config import ChatConfig
 
 
 class _ChunkedUpload:
@@ -45,8 +45,9 @@ def test_read_limited_returns_body_within_limit():
 
 def test_read_limited_short_circuits_on_declared_size():
     """Content-Length 由来の size が上限超なら、1 バイトも読まない。"""
-    upload = UploadFile(file=BytesIO(b""), size=MAX_ATTACHMENT_BYTES + 1, filename="big.bin")
-    assert asyncio.run(cm._read_limited(upload, MAX_ATTACHMENT_BYTES)) is None
+    limit = ChatConfig().max_attachment_bytes
+    upload = UploadFile(file=BytesIO(b""), size=limit + 1, filename="big.bin")
+    assert asyncio.run(cm._read_limited(upload, limit)) is None
 
 
 def test_upload_returns_413_and_writes_nothing(monkeypatch):
@@ -59,7 +60,7 @@ def test_upload_returns_413_and_writes_nothing(monkeypatch):
         return {"filename": "x"}
 
     monkeypatch.setattr(cm, "_do_attachment_upload", _spy)
-    upload = UploadFile(file=BytesIO(b""), size=MAX_ATTACHMENT_BYTES + 1, filename="big.bin")
+    upload = UploadFile(file=BytesIO(b""), size=ChatConfig().max_attachment_bytes + 1, filename="big.bin")
 
     response = asyncio.run(cm.attachment_upload(cast("Any", _FakeRequest(upload))))
 

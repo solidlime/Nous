@@ -7,7 +7,6 @@ from starlette.responses import JSONResponse, Response
 
 from nous.api.http.deps import _PERSONA_PATTERN
 from nous.api.http.routers.chat.chat_stream import _resolve_request
-from nous.application.chat.tools.attachments import MAX_ATTACHMENT_BYTES
 from nous.config.settings import get_settings
 from nous.domain.config.chat_config import ChatConfig, ChatConfigFileRepository
 from nous.infrastructure.logging.structured import get_logger
@@ -632,11 +631,18 @@ async def attachment_upload(request: Request) -> JSONResponse:
     if not isinstance(upload, UploadFile) or not upload:
         return JSONResponse({"error": "file field required"}, status_code=400)
 
+    repo = ChatConfigFileRepository(get_settings().data_root)
+    try:
+        config = repo.get(persona)
+    except Exception:
+        config = ChatConfig(persona=persona)
+    limit = config.max_attachment_bytes
+
     filename = upload.filename or "upload"
-    file_bytes = await _read_limited(upload, MAX_ATTACHMENT_BYTES)
+    file_bytes = await _read_limited(upload, limit)
     if file_bytes is None:
         return JSONResponse(
-            {"error": f"file too large (max {MAX_ATTACHMENT_BYTES // (1024 * 1024)} MB)"}, status_code=413
+            {"error": f"file too large (max {limit // (1024 * 1024)} MB)"}, status_code=413
         )
     return JSONResponse(await _do_attachment_upload(persona, ctx, filename, file_bytes))
 

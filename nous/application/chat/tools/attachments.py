@@ -33,7 +33,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024  # WebUI の添付上限と揃える
 SANDBOX_UPLOADS = "/home/agent/uploads"
 
 
@@ -74,7 +73,7 @@ def _sandbox_source(persona: str, path: str) -> str:
     return source
 
 
-async def _copy_from_sandbox(manager: object, persona: str, path: str, name: str | None) -> Path:
+async def _copy_from_sandbox(manager: object, persona: str, path: str, name: str | None, limit: int) -> Path:
     source = _sandbox_source(persona, path)
     directory = Path(get_settings().persona_uploads_dir(persona))
     directory.mkdir(parents=True, exist_ok=True)
@@ -88,7 +87,7 @@ async def _copy_from_sandbox(manager: object, persona: str, path: str, name: str
         f"src=$(readlink -f -- {shlex.quote(source)}) || exit 1; "
         f'case "$src" in {base}/?*) ;; *) exit 3 ;; esac; '
         f'size=$(stat -c %s -- "$src") || exit 1; '
-        f'[ "$size" -le {MAX_ATTACHMENT_BYTES} ] || exit 2; '
+        f'[ "$size" -le {limit} ] || exit 2; '
         f'cp -- "$src" {shlex.quote(f"{SANDBOX_UPLOADS}/{part_name}")} || exit 1; '
         f"mv -f -- {shlex.quote(f'{SANDBOX_UPLOADS}/{part_name}')} "
         f"{shlex.quote(f'{SANDBOX_UPLOADS}/{dest.name}')}"
@@ -102,7 +101,7 @@ async def _copy_from_sandbox(manager: object, persona: str, path: str, name: str
         if code == 3:
             raise AttachmentError(f"ワークスペース外は触れない: {path}")
         if code == 2:
-            raise AttachmentError(f"大きすぎる（上限 {MAX_ATTACHMENT_BYTES // (1024 * 1024)}MB）: {path}")
+            raise AttachmentError(f"大きすぎる（上限 {limit // (1024 * 1024)}MB）: {path}")
         if code != 0:
             detail = (payload.get("stderr_tail") or "").strip().splitlines()
             raise AttachmentError(f"コピーできなかった: {detail[0] if detail else 'cp failed'}")
@@ -124,8 +123,8 @@ def _copy_on_host(config: ChatConfig, persona: str, path: str, name: str | None)
     source = resolve_in_workspace(workspace_root(config), path)
     if not source.is_file():
         raise AttachmentError(f"ファイルが無い: {path}")
-    if source.stat().st_size > MAX_ATTACHMENT_BYTES:
-        raise AttachmentError(f"大きすぎる（上限 {MAX_ATTACHMENT_BYTES // (1024 * 1024)}MB）: {path}")
+    if source.stat().st_size > config.max_attachment_bytes:
+        raise AttachmentError(f"大きすぎる（上限 {config.max_attachment_bytes // (1024 * 1024)}MB）: {path}")
     if source.is_symlink():
         raise AttachmentError(f"symlink は添付できない: {path}")
     directory = Path(get_settings().persona_uploads_dir(persona))
@@ -163,14 +162,15 @@ async def _handle_attach_file(ctx: AppContext, config: ChatConfig, tool_input: d
     name = _safe_name(raw_name, "") or None
 
     manager = sandbox_manager(config)
+    limit = config.max_attachment_bytes
     try:
         if manager is not None:
-            dest = await _copy_from_sandbox(manager, persona, path, name)
+            dest = await _copy_from_sandbox(manager, persona, path, name, limit)
         else:
             dest = _copy_on_host(config, persona, path, name)
-        if dest.stat().st_size > MAX_ATTACHMENT_BYTES:
+        if dest.stat().st_size > limit:
             dest.unlink(missing_ok=True)
-            raise AttachmentError(f"大きすぎる（上限 {MAX_ATTACHMENT_BYTES // (1024 * 1024)}MB）: {path}")
+            raise AttachmentError(f"大きすぎる（上限 {limit // (1024 * 1024)}MB）: {path}")
     except (WorkspaceError, AttachmentError) as e:
         return {"status": "error", "message": str(e)}
     except OSError as e:

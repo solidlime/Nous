@@ -8,9 +8,9 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from nous.application.chat.tools.attachments import (
-    MAX_ATTACHMENT_BYTES,
     _handle_attach_file,
 )
+from nous.domain.config.chat_config import ChatConfig
 
 
 def _settings(tmp_path):
@@ -41,6 +41,7 @@ def config(workspace) -> Any:
     config.sandbox_enabled = False
     config.sandbox_manager_url = ""
     config.sandbox_manager_token = ""
+    config.max_attachment_bytes = ChatConfig().max_attachment_bytes
     return config
 
 
@@ -137,7 +138,7 @@ class TestRejects:
 
     @pytest.mark.asyncio
     async def test_oversize_deletes_copy(self, tmp_path, workspace, ctx, config):
-        (workspace / "big.bin").write_bytes(b"\0" * (MAX_ATTACHMENT_BYTES + 1))
+        (workspace / "big.bin").write_bytes(b"\0" * (ChatConfig().max_attachment_bytes + 1))
         with _patch_settings(tmp_path):
             result = await _handle_attach_file(ctx, config, {"path": "big.bin"})
         assert result["status"] == "error"

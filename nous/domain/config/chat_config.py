@@ -91,6 +91,12 @@ class ChatConfig(BaseModel):
     memory_min_score: float = Field(
         default=0.35, description="想起結果を注入する最低スコア。これ未満の記憶は文脈に入れない。"
     )  # 0.35: 複合スコア（recency/importance/relevance）の下位ノイズを切る実測閾値
+    max_attachment_bytes: int = Field(
+        default=10 * 1024 * 1024,
+        ge=1024 * 1024,
+        le=100 * 1024 * 1024,
+        description="添付ファイル1伴の上限バイト（10MB=10485760）。",
+    )
     provider_config: ProviderConfig = Field(default_factory=ProviderConfig)
     session_config: SessionConfig = Field(default_factory=SessionConfig)
     compression_config: CompressionConfig = Field(default_factory=CompressionConfig)

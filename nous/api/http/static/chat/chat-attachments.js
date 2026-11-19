@@ -10,7 +10,8 @@ var S = window.S;
 
 var CHAT = N.Chat.state;
 
-var MAX_ATTACHMENT_BYTES = 10 * 1024 * 1024;
+var MAX_ATTACHMENT_BYTES =
+  (N.Chat.settings && N.Chat.settings.max_attachment_bytes) || 10 * 1024 * 1024;
 
 async function uploadAttachment(file) {
   if (!S.persona) {
@@ -18,7 +19,13 @@ async function uploadAttachment(file) {
     return;
   }
   if (file && file.size > MAX_ATTACHMENT_BYTES) {
-    toast("ファイルが大きすぎます（上限10MB）: " + (file.name || ""), "error");
+    toast(
+      "ファイルが大きすぎます（上限" +
+        Math.round(MAX_ATTACHMENT_BYTES / 1048576) +
+        "MB）: " +
+        (file.name || ""),
+      "error"
+    );
     return;
   }
   const formData = new FormData();
