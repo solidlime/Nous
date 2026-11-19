@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 from datetime import UTC, timedelta
+from typing import cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -318,17 +319,17 @@ class TestAppContextMigration:
     def test_memory_enricher_created_with_api_key(self, tmp_path):
         """When memory_enrichment is enabled and api_key is set, MemoryEnricher is created (lines 120-124)."""
         from nous.application.use_cases import AppContext
-        from nous.config.settings import Settings
+        from nous.config.settings import LLMConfig, Settings
 
         settings = Settings(
             data_root=str(tmp_path),
-            memory_enrichment={
-                "enabled": True,
-                "api_key": "test-key-123",
-                "provider": "openai",
-                "model": "gpt-4o",
-                "base_url": "https://api.openai.com",
-            },
+            memory_enrichment=LLMConfig(
+                enabled=True,
+                api_key="test-key-123",
+                provider="openai",
+                model="gpt-4o",
+                base_url="https://api.openai.com",
+            ),
         )
 
         with patch("nous.infrastructure.llm.memory_enricher.MemoryEnricher") as mock_memory_enricher:
@@ -465,9 +466,9 @@ class TestAppContextVectorStore:
     def test_vector_store_init_success(self, tmp_path):
         """When Qdrant is available, vector_store is initialized (lines 174-176)."""
         from nous.application.use_cases import AppContext
-        from nous.config.settings import Settings
+        from nous.config.settings import QdrantConfig, Settings
 
-        settings = Settings(data_root=str(tmp_path), qdrant={"url": "http://localhost:6333"})
+        settings = Settings(data_root=str(tmp_path), qdrant=QdrantConfig(url="http://localhost:6333"))
 
         # Distinct instance per QdrantVectorStore() call: stray daemon threads
         # from earlier tests may hit these class mocks while this patch is
@@ -496,15 +497,16 @@ class TestAppContextVectorStore:
             assert result is not None
             assert result is ctx._vector_store
             assert result in instances
-            result.ensure_collection.assert_called_once_with("test_persona")
+            # result は _vs_factory が返した MagicMock（型推論は QdrantVectorStore）
+            cast("MagicMock", result).ensure_collection.assert_called_once_with("test_persona")
             ctx.close()
 
     def test_vector_store_health_check_false(self, tmp_path):
         """When health_check returns False, vector_store stays None."""
         from nous.application.use_cases import AppContext
-        from nous.config.settings import Settings
+        from nous.config.settings import QdrantConfig, Settings
 
-        settings = Settings(data_root=str(tmp_path), qdrant={"url": "http://localhost:6333"})
+        settings = Settings(data_root=str(tmp_path), qdrant=QdrantConfig(url="http://localhost:6333"))
 
         with patch("nous.application.use_cases.QdrantClientManager") as mock_qdrant_client_manager:
             mock_mgr = AsyncMock()
@@ -561,14 +563,20 @@ class TestAppContextVectorStore:
         ctx = AppContext(settings, "test_persona")
 
         # Make get_strength return Failure → _strength_lookup falls to return 1.0
-        ctx.memory_repo.get_strength = MagicMock(return_value=Failure(Exception("not found")))
-
         from nous.domain.search.engine import SearchQuery
 
         # Use hybrid mode which goes through the ranker.
         # vector_store must be None so QdrantSemanticSearch is not created (it would fail).
         # The search engine then uses only keyword results + ranker.
-        with patch.object(ctx, "_vector_store", None):
+        with (
+            patch.object(
+                ctx.memory_repo,
+                "get_strength",
+                MagicMock(return_value=Failure(Exception("not found"))),
+                create=True,
+            ),
+            patch.object(ctx, "_vector_store", None),
+        ):
             se = ctx.search_engine
             mem = MagicMock(
                 key="test_key", importance=0.5, created_at=MagicMock(), content="test content", tags=["test"]
@@ -610,11 +618,17 @@ class TestAppContextVectorStore:
         ctx = AppContext(settings, "test_persona")
 
         # Make get_strength return Success(None) → _strength_lookup falls to return 1.0
-        ctx.memory_repo.get_strength = MagicMock(return_value=Success(None))
-
         from nous.domain.search.engine import SearchQuery
 
-        with patch.object(ctx, "_vector_store", None):
+        with (
+            patch.object(
+                ctx.memory_repo,
+                "get_strength",
+                MagicMock(return_value=Success(None)),
+                create=True,
+            ),
+            patch.object(ctx, "_vector_store", None),
+        ):
             se = ctx.search_engine
             mem = MagicMock(
                 key="test_key", importance=0.5, created_at=MagicMock(), content="test content", tags=["test"]
