@@ -27,7 +27,7 @@ import json
 import threading
 from typing import TYPE_CHECKING
 
-from nous.application.chat.service import ChatService
+from nous.application.chat.service import ChatService, get_turn_hub
 from nous.application.workers.announce import SPOKE_EVENT, speak_to_main
 from nous.domain.memory.session_ids import PROACTIVE_SESSION_PREFIX
 from nous.domain.shared.time_utils import get_now
@@ -163,21 +163,29 @@ class ProactiveWorker:
             prompt = f"{prompt}\n{session_config.proactive_prompt.strip()}"
 
         session_id = f"{PROACTIVE_SESSION_PREFIX}{now.strftime('%Y-%m-%d')}"
-        parts: list[str] = []
-        async for sse in ChatService().chat(ctx, ctx.config, session_id, prompt):  # type: ignore[arg-type]
-            if not sse.startswith("data: "):
-                continue
-            try:
-                payload = json.loads(sse.removeprefix("data: "))
-            except ValueError:
-                continue
-            kind = payload.get("type")
-            if kind == "error":
-                # LLM 失敗時は「⚠ 応答を作れなかった」を自発発言として main に残さない。
-                return ""
-            if kind == "text_delta":
-                parts.append(str(payload.get("content") or ""))
-        return "".join(parts).strip()
+        hub = get_turn_hub()
+        if not hub.begin_background_turn(ctx.persona):
+            # ユーザーターン中は自発ターンを重ねない（ブロック待ちしない。kanban #67）。
+            logger.info("proactive: skip — a turn is running (persona=%s)", ctx.persona)
+            return ""
+        try:
+            parts: list[str] = []
+            async for sse in ChatService().chat(ctx, ctx.config, session_id, prompt):  # type: ignore[arg-type]
+                if not sse.startswith("data: "):
+                    continue
+                try:
+                    payload = json.loads(sse.removeprefix("data: "))
+                except ValueError:
+                    continue
+                kind = payload.get("type")
+                if kind == "error":
+                    # LLM 失敗時は「⚠ 応答を作れなかった」を自発発言として main に残さない。
+                    return ""
+                if kind == "text_delta":
+                    parts.append(str(payload.get("content") or ""))
+            return "".join(parts).strip()
+        finally:
+            hub.end_background_turn(ctx.persona)
 
     def _speak(self, ctx: AppContext, text: str, max_messages: int) -> None:
         """main 履歴へ追記し、既存 chat() と同じ形の SSE で届ける。"""

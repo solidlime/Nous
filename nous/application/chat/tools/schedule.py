@@ -219,14 +219,22 @@ async def run_self_turn(ctx: AppContext, prompt: str) -> str:
     ``speak_to_main`` でユーザーのチャットへ流す（kanban #65）。
     """
     from nous.application.chat.events import TextDeltaSSE
-    from nous.application.chat.service import ChatService
+    from nous.application.chat.service import ChatService, get_turn_hub
 
     config = ctx.config
     if config is None:
         raise RuntimeError("chat config が無い（AppContext.config is None）")
-    session_id = f"{SELF_SESSION_PREFIX}{get_now().strftime('%Y-%m-%d')}"
-    parts: list[str] = []
-    async for ev in ChatService().chat(ctx, config, session_id, prompt):
-        if isinstance(ev, TextDeltaSSE):
-            parts.append(ev.content)
-    return "".join(parts)
+    hub = get_turn_hub()
+    if not hub.begin_background_turn(ctx.persona):
+        # ユーザーターン（または別の自発ターン）が走っている。ブロック待ちしない。
+        logger.info("run_self_turn: skip because a turn is running (persona=%s)", ctx.persona)
+        return ""
+    try:
+        session_id = f"{SELF_SESSION_PREFIX}{get_now().strftime('%Y-%m-%d')}"
+        parts: list[str] = []
+        async for ev in ChatService().chat(ctx, config, session_id, prompt):
+            if isinstance(ev, TextDeltaSSE):
+                parts.append(ev.content)
+        return "".join(parts)
+    finally:
+        hub.end_background_turn(ctx.persona)

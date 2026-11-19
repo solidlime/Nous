@@ -29,7 +29,7 @@ import json
 import threading
 from typing import TYPE_CHECKING, Any
 
-from nous.application.chat.service import ChatService
+from nous.application.chat.service import ChatService, get_turn_hub
 from nous.application.workers.proactive_worker import idle_minutes
 from nous.domain.memory.session_event import SessionEvent
 from nous.domain.memory.session_ids import ACTIVITY_SESSION_PREFIX
@@ -206,22 +206,30 @@ class ActivityWorker:
         if session_config.activity_prompt.strip():
             prompt = f"{prompt}\n{session_config.activity_prompt.strip()}"
 
-        parts: list[str] = []
-        async for sse in ChatService().chat(
-            ctx, config, f"{ACTIVITY_SESSION_PREFIX}{now.strftime('%Y-%m-%d')}", prompt
-        ):
-            if not sse.startswith("data: "):
-                continue
-            try:
-                payload = json.loads(sse.removeprefix("data: "))
-            except ValueError:
-                continue
-            kind = payload.get("type")
-            if kind == "error":
-                return None
-            if kind == "text_delta":
-                parts.append(str(payload.get("content") or ""))
-        return self._parse("".join(parts))
+        hub = get_turn_hub()
+        if not hub.begin_background_turn(ctx.persona):
+            # ユーザーターン中は自発ターンを重ねない（ブロック待ちしない。kanban #67）。
+            logger.info("activity: skip — a turn is running (persona=%s)", ctx.persona)
+            return None
+        try:
+            parts: list[str] = []
+            async for sse in ChatService().chat(
+                ctx, config, f"{ACTIVITY_SESSION_PREFIX}{now.strftime('%Y-%m-%d')}", prompt
+            ):
+                if not sse.startswith("data: "):
+                    continue
+                try:
+                    payload = json.loads(sse.removeprefix("data: "))
+                except ValueError:
+                    continue
+                kind = payload.get("type")
+                if kind == "error":
+                    return None
+                if kind == "text_delta":
+                    parts.append(str(payload.get("content") or ""))
+            return self._parse("".join(parts))
+        finally:
+            hub.end_background_turn(ctx.persona)
 
     @staticmethod
     def _parse(text: str) -> dict[str, Any] | None:

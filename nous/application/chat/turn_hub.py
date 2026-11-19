@@ -26,6 +26,9 @@ class TurnHub:
         # publish された場合に call_soon_threadsafe で安全に配送するため保持。
         self._subscribers: dict[str, list[tuple[asyncio.Queue, asyncio.AbstractEventLoop | None]]] = {}
         self._running: set[str] = set()
+        # 自発ターン（proactive / prospective / activity）の占有。ユーザーターンとは
+        # 別に持ち、ユーザーの 409 を自発ターンが誘発しないようにする (kanban #67)。
+        self._background: set[str] = set()
         # 承認待ち: (persona, approval_id) -> 決定待ちの Event。
         # inference がターン内で待ち、POST /approval が set する。
         self._approvals: dict[str, dict[str, asyncio.Event]] = {}
@@ -45,7 +48,23 @@ class TurnHub:
     def is_running(self, persona: str) -> bool:
         """このペルソナでターンが走っているか（削除の事前確認用）。"""
         with self._lock:
-            return persona in self._running
+            return persona in self._running or persona in self._background
+
+    def begin_background_turn(self, persona: str) -> bool:
+        """自発ターンの排他。ユーザーターン中／別の自発ターン中なら False。
+
+        自発側はブロック待ちしない（tick を飛ばす）。飛ばす判断は呼び出し側の
+        ログに残すこと（無言で捨てない）。
+        """
+        with self._lock:
+            if persona in self._running or persona in self._background:
+                return False
+            self._background.add(persona)
+            return True
+
+    def end_background_turn(self, persona: str) -> None:
+        with self._lock:
+            self._background.discard(persona)
 
     def end_turn(self, persona: str) -> None:
         """実行フラグ解除。バッファは残置（遅延接続のリプレイ用）。"""
