@@ -7,19 +7,8 @@ search/filter, field validation, and dependency rules.
 
 
 def render_settings_tab() -> str:
-    """Return the HTML for the Settings tab panel with skeleton loader and inline CSS."""
+    """Return the HTML for the Settings tab panel with skeleton loader."""
     return """
-        <style>
-        .setting-category-card .cat-body { transition: max-height 0.3s ease; overflow: hidden; }
-        .setting-diff-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-blue); display: inline-block; }
-        .setting-reset-btn { background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.2); border-radius: 8px; color: var(--accent-blue); cursor: pointer; font-size: 0.72rem; padding: 4px 10px; transition: all 0.2s; white-space: nowrap; }
-        .setting-reset-btn:hover { background: rgba(96,165,250,0.2); }
-        .cat-reset-btn { background: rgba(96,165,250,0.08); border: 1px solid rgba(96,165,250,0.15); border-radius: 8px; color: var(--accent-blue); cursor: pointer; font-size: 0.72rem; padding: 3px 10px; transition: all 0.2s; }
-        .cat-reset-btn:hover { background: rgba(96,165,250,0.18); }
-        .cat-toggle-btn { background: none; border: none; color: var(--text-muted); cursor: pointer; font-size: 0.9rem; padding: 2px 6px; transition: transform 0.2s; }
-        .profile-chip { transition: all 0.2s; }
-        .profile-chip:hover { transform: translateY(-1px); box-shadow: 0 4px 12px rgba(var(--accent-blue-rgb), 0.2); }
-        </style>
         <!-- ========== SETTINGS TAB ========== -->
         <section id="tab-settings" class="tab-panel" role="tabpanel">
             <div style="margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">

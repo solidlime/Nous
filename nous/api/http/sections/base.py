@@ -41,6 +41,8 @@ def render_head() -> str:
     <link rel="stylesheet" href="/static/styles/chat.css">
     <link rel="stylesheet" href="/static/styles/chat-mobile.css">
     <link rel="stylesheet" href="/static/styles/utilities.css">
+    <!-- sections.css は必ず最後・unlayered を維持（埋め込み <style> と等価な強さ。link 順・@layer 無登録を崩さない） -->
+    <link rel="stylesheet" href="/static/styles/sections.css">
     <!-- Nous Core Modules (Phase 1: Foundation) -->
     <script src="/static/core/namespace.js" defer></script>
     <script src="/static/core/constants.js" defer></script>

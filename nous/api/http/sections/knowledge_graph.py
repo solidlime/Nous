@@ -40,7 +40,6 @@ def render_graph_tab() -> str:
     - Toolbar with tag/emotion filters, node-limit buttons, physics toggle, refresh
     - vis-network container (600px height)
     - Slide-out detail panel (right side, 400px)
-    - Scoped styles for spinner, active limit button, and panel overlay
     """
     return """
         <!-- ========== KNOWLEDGE GRAPH TAB ========== -->
@@ -48,57 +47,6 @@ def render_graph_tab() -> str:
             <div style="margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
                 <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="share-2"></i></span> Knowledge Graph</h2>
             </div>
-          <style>
-            /* Spinner animation for graph loading */
-            @keyframes graph-spin {
-              to { transform: rotate(360deg); }
-            }
-            .graph-spinner {
-              width: 36px; height: 36px;
-              border: 3px solid rgba(var(--accent-blue-rgb), 0.2);
-              border-top-color: var(--accent-blue);
-              border-radius: 50%;
-              animation: graph-spin 0.8s linear infinite;
-            }
-
-            /* Active state for node-limit buttons */
-            .graph-limit-btn.active {
-              background: rgba(var(--accent-blue-rgb), 0.35);
-              border-color: var(--accent-blue);
-              box-shadow: 0 0 12px rgba(var(--accent-blue-rgb), 0.15);
-            }
-
-            /* Detail panel backdrop - respects light/dark via variable */
-            #graph-panel-overlay {
-              backdrop-filter: blur(2px);
-            }
-
-            /* Multi-select tweak: show scrollbar when expanded */
-            #graph-tag-filter {
-              scrollbar-width: thin;
-            }
-            /* Collapsed state: show only the checked option(s) so a partial
-               second row never clips under "All Tags" */
-            #graph-tag-filter option:not(:checked) { display: none; }
-            #graph-tag-filter:focus {
-              max-height: 160px !important;
-            }
-            #graph-tag-filter:focus option { display: block; }
-
-            /* Make vis-network canvas fill container */
-            #graph-container .vis-network {
-              outline: none;
-            }
-
-            /* Override vis-network default tooltip style */
-            #graph-container .vis-tooltip {
-              white-space: normal !important;
-              background: transparent !important;
-              border: none !important;
-              padding: 0 !important;
-              box-shadow: none !important;
-            }
-          </style>
 
           <div id="graph-content">
             <!-- Toolbar -->

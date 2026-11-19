@@ -20,6 +20,13 @@
     --glass-bg-faint: rgba(28, 28, 30, 0.3);
     --glass-bg-light: rgba(44, 44, 46, 0.4);
 
+    /* Surface veils — translucent white overlays on raised surfaces.
+       Same relative scale as --glass-border (dark: white / light: dark). */
+    --veil-faint: rgba(255, 255, 255, 0.02);
+    --veil-subtle: rgba(255, 255, 255, 0.04);
+    --veil: rgba(255, 255, 255, 0.06);
+    --veil-strong: rgba(255, 255, 255, 0.08);
+
     /* Separators */
     --separator-opaque: #38383a;
     --separator-non-opaque: rgba(84, 84, 88, 0.65);
@@ -127,6 +134,14 @@ html.light {
     --accent-red: #ff3b30;
     --accent-teal: #5ac8fa;
     --accent-indigo: #5856d6;
+    /* RGB triples must track the light hex values above */
+    --accent-red-rgb: 255, 59, 48;
+
+    /* Light veils — Apple systemFill grey (readable on white and grouped bg) */
+    --veil-faint: rgba(120, 120, 128, 0.08);
+    --veil-subtle: rgba(120, 120, 128, 0.12);
+    --veil: rgba(120, 120, 128, 0.16);
+    --veil-strong: rgba(120, 120, 128, 0.2);
 
     /* Light shadows */
     --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
