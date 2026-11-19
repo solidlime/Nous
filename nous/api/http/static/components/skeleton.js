@@ -58,10 +58,34 @@ function panelContentEl(panelId) {
   return container ? container.querySelector(':scope > [id$="-content"]') : null;
 }
 
+/* ── Elapsed-seconds badge (#111) ──
+   A slow server leaves the skeleton up for the whole 30s api.js timeout,
+   which reads as "frozen". The badge makes the wait visible. Timer stops
+   on: badge disconnect (loader swaps the panel), the next show(), or the
+   60s self-kill below — whichever comes first, so no loader cleanup hook
+   is needed. */
+var _elapsedTimer = null;
+function _stopElapsed() {
+  if (_elapsedTimer) { clearInterval(_elapsedTimer); _elapsedTimer = null; }
+}
+function _startElapsed(badge) {
+  _stopElapsed();
+  /* Elapsed is anchored to this show(), not to fetch start: tab bounce
+     resets to 0s, which matches the new fetch that fires with it. */
+  var start = Date.now();
+  badge.textContent = "Loading…";
+  badge.setAttribute("aria-hidden", "true"); /* per-second text is noise for SR */
+  _elapsedTimer = setInterval(function () {
+    if (!badge.isConnected) { _stopElapsed(); return; }
+    if (Date.now() - start > 60000) { _stopElapsed(); return; } /* self-kill: orphan loader path never re-swaps */
+    badge.textContent = "Loading… " + Math.floor((Date.now() - start) / 1000) + "s";
+  }, 1000);
+}
+
 /* ── Show skeleton for a given tab ── */
 function show(tabId) {
   var navBtn = Array.from(document.querySelectorAll(".tab-btn")).find(function(b) { return b.dataset.tab === tabId; }) || null;
-  if (navBtn && navBtn.dataset.selfManaged) return;
+  if (navBtn && navBtn.dataset.selfManaged) { _stopElapsed(); return; }
 
   /* Check registration first, then default */
   var skeletonHtml = _registry[tabId] || _defaults[tabId] ||
@@ -69,8 +93,16 @@ function show(tabId) {
 
   /* Legacy fallback for (b): content-less panel still skeletons its root — see contract note above. */
   var content = panelContentEl(tabId) || document.getElementById("tab-" + tabId);
-  if (!content) return;
+  if (!content) { _stopElapsed(); return; }
   safeSetHTML(content, skeletonHtml);
+  /* Badge is built via createElement, not inside safeSetHTML: it carries no
+     user input, and this keeps it alive even when DOMPurify is absent
+     (test env) — safeSetHTML falls back to textContent there. */
+  var badge = document.createElement("div");
+  badge.className = "skeleton-elapsed";
+  badge.setAttribute("data-skeleton-elapsed", "");
+  content.appendChild(badge);
+  _startElapsed(badge);
 }
 
 /* ── Skeleton card HTML ── */

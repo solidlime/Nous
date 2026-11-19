@@ -104,6 +104,8 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 .skeleton-line { height: 16px; margin-bottom: 8px; }
 .skeleton-line.short { width: 60%; }
 .skeleton-circle { width: 48px; height: 48px; border-radius: 50%; }
+/* #111: elapsed badge under a live skeleton — makes a slow fetch read as "slow", not "frozen" */
+.skeleton-elapsed { margin-top: 12px; text-align: center; font-size: 0.85rem; color: var(--text-muted); }
 
 /* ============================================================
    PROGRESS BAR — Apple HIG Style
