@@ -11,7 +11,6 @@ import contextlib
 import os
 import re
 import secrets
-import shutil
 import subprocess
 import threading
 import time
@@ -76,16 +75,31 @@ def _auth(x_sandbox_token: str = Header(default="")) -> None:
         raise HTTPException(status_code=401, detail="sandbox token mismatch")
 
 
+_in_flight_guard = threading.Lock()
+
+
 def _enter(persona: str) -> None:
-    _in_flight[persona] = _in_flight.get(persona, 0) + 1
+    # _enter_exclusive の排他判定と同じ dict を触るので、guard 内で加算する。
+    with _in_flight_guard:
+        _in_flight[persona] = _in_flight.get(persona, 0) + 1
 
 
 def _leave(persona: str) -> None:
-    left = _in_flight.get(persona, 0) - 1
-    if left > 0:
-        _in_flight[persona] = left
-    else:
-        _in_flight.pop(persona, None)
+    with _in_flight_guard:
+        left = _in_flight.get(persona, 0) - 1
+        if left > 0:
+            _in_flight[persona] = left
+        else:
+            _in_flight.pop(persona, None)
+
+
+def _enter_exclusive(persona: str) -> bool:
+    """in_flight が空でなければ False。空なら自分が 1 として入って True。"""
+    with _in_flight_guard:
+        if _in_flight.get(persona, 0) > 0:
+            return False
+        _in_flight[persona] = 1
+        return True
 
 
 def _data_root() -> Path:
@@ -230,69 +244,19 @@ def _mount_specs(root: Path, persona: str) -> list[tuple[Path, str, bool]]:
     ]
 
 
-_home_fixed: set[str] = set()
-_home_warned: set[str] = set()
+# 旧 uid 運用（1026:100）のコンテナは root 前提の操作で書けない場所がある。
+# 毎 exec ではなく、コンテナごとに 1 回だけ警告する。
+_user_warned: set[str] = set()
 
 
-def _fix_home(container: str, user: str | None = None) -> None:
-    """$HOME をコンテナの uid に寄せる（コンテナごとに 1 回だけ）。
-
-    イメージの /home/agent は WORKDIR が先に作るため root 所有になり得る
-    （useradd -m は既存ディレクトリを作り直さない）。実機でも ``HOME=NG`` になった。
-    マウント先は chmod で済ませているが、$HOME 本体と .agents が書けないままだと
-    pip install --user / git config --global が落ちる。chown は冪等なので作り直さない。
-
-    manager は cap_drop: ALL なので os.chown はできない。sandbox 側は既定 caps を
-    持っているので、コンテナの root で exec して chown させる。**この結合に依存して
-    いる**（sandbox にも cap-drop を入れると、この修正は静かに無効になる）。
-    失敗は無視する（rootless では効かないが、元の症状が残るだけで exec は続ける）。
-    """
-    if container in _home_fixed:
+def _warn_non_root(container: str, user: str | None) -> None:
+    spec = (user or "").strip()
+    if not spec or spec in {"0", "0:0"} or container in _user_warned:
         return
-    # 既存コンテナの真実は .Config.User。SANDBOX_UID を後から変えても壊さない。
-    spec = user or f"{_env('SANDBOX_UID', '1026')}:{_env('SANDBOX_GID', '100')}"
-    if ":" not in spec:
-        spec = f"{spec}:{_env('SANDBOX_GID', '100')}"
-    detail = ""
-    failed = False
-    for path in ("/home/agent", "/home/agent/.agents"):
-        proc, err = _call("exec", "-u", "0", container, "chown", spec, path, timeout=15.0)
-        if proc is None or proc.returncode != 0:
-            failed = True
-            detail = err or (proc.stderr.strip() if proc is not None else "")
-    if failed:
-        # 毎 exec 警告しない（同じコンテナでは 1 回だけ）。
-        if container not in _home_warned:
-            _home_warned.add(container)
-            logger.warning(
-                "sandbox $HOME を chown できない（rootless では効果なし）: %s/%s %s", container, spec, detail
-            )
-        return
-    _home_fixed.add(container)
-
-
-def _fix_mount_perms(persona: str, user: str | None = None) -> None:
-    """rw マウントを書き込み可能にする。
-
-    sandbox は非 root（既定 1026:100）で走る。manager が mkdir しただけだと
-    root 所有になり書けない。chown は cap_drop: ALL でできないので chmod する。
-    既存コンテナを start するだけの経路では run 時の chmod が済んでいないため、
-    ensure のたびに掛け直す（失敗しても exec は続ける）。
-    """
-    _fix_home(_container(persona), user)
-    root = _host_data_root()
-    if root is None:
-        return
-    local = _data_root()
-    for host, _target, read_only in _mount_specs(root, persona):
-        if read_only:
-            continue
-        try:
-            d = local / host.relative_to(root)
-            if d.is_dir() and (d.stat().st_mode & 0o777) != 0o777:
-                os.chmod(d, 0o777)  # nosec B103 - 隔離ディレクトリ。上の docstring 参照。
-        except (OSError, ValueError):
-            continue
+    _user_warned.add(container)
+    logger.warning(
+        "sandbox が root で動いていない（root 前提の運用では書けない場所がある）: %s user=%s", container, spec
+    )
 
 
 def _post_start_check(container: str) -> str | None:
@@ -336,7 +300,7 @@ def _install_missing(container: str, packages: list[str]) -> list[str]:
         "export DEBIAN_FRONTEND=noninteractive; "
         "apt-get update && apt-get install -y --no-install-recommends " + " ".join(missing)
     )
-    # コンテナは --user 1026:100 で走る。apt は root でないと必ず失敗する。
+    # 旧 1026 コンテナも動くので、apt は uid に依らず root で打つ。
     proc, err = _call("exec", "-u", "0", container, "bash", "-lc", script, timeout=APT_EXTRA_TIMEOUT_SECONDS)
     if proc is None:
         logger.warning("sandbox apt install failed (%s): %s", container, err)
@@ -353,10 +317,8 @@ def _install_missing(container: str, packages: list[str]) -> list[str]:
 def _post_run(container: str) -> str | None:
     """run 直後の面倒。戻り値に載るのは DNS の失敗だけ（apt は警告で済ませる）。"""
     # run 直後は必ず新規コンテナ。外部の docker rm で作り直された場合も
-    # ここを通るので、$HOME の chown キャッシュはここで捨てる。
-    _home_fixed.discard(container)
-    _home_warned.discard(container)
-    _fix_home(container)
+    # ここを通るので、root 以外の警告キャッシュはここで捨てる。
+    _user_warned.discard(container)
     dns_err = _post_start_check(container)
     if dns_err:
         return dns_err
@@ -381,6 +343,34 @@ def _failure(message: str) -> dict:
         "truncated": False,
         "log_path": None,
     }
+
+
+def _container_id(name: str) -> tuple[str | None, str | None]:
+    """既存コンテナの ID とラベルを inspect で確かめる。(ID, エラー)。両方 None は不在。"""
+    fmt = '{{.Id}} {{index .Config.Labels "com.nous.sandbox"}}'
+    state, err = _call("inspect", "--format", fmt, name, timeout=30.0)
+    if state is None:
+        return None, err or "docker inspect failed"
+    if state.returncode != 0:
+        if _missing(state.stderr):
+            return None, None
+        # sock の権限エラーなど。「無い」と決めつけると原因が隠れる。
+        return None, f"docker inspect 失敗: {state.stderr.strip() or 'unknown error'}"
+    cid, _, label = state.stdout.strip().partition(" ")
+    if not cid:
+        return None, f"{name} の ID が取れない"
+    # 名前だけ一致する他人のコンテナを掴まない。
+    if label.strip() != "1":
+        return None, f"{name} は nous の sandbox ではない（com.nous.sandbox ラベルが無い）"
+    return cid, None
+
+
+def _image_repo(image: str) -> str:
+    """tag と digest を剥がして repository 部だけ残す（port 付き registry 対応）。"""
+    repo = image.split("@", 1)[0]
+    head, sep, tail = repo.rpartition("/")
+    # host:5000/foo の ``:`` を剥がすと repository でなくなるので、``/`` 以降だけ見る。
+    return head + sep + tail.rsplit(":", 1)[0]
 
 
 _ensure_locks: dict[str, threading.Lock] = {}
@@ -434,15 +424,14 @@ def _ensure_inner(
         # 名前だけで他人のコンテナを exec しない。自分が作ったものだけ触る。
         if label.strip() != "1":
             return f"{name} は nous の sandbox ではない（com.nous.sandbox ラベルが無い）"
+        _warn_non_root(name, user)
         if running == "true":
-            _fix_mount_perms(persona, user.strip() or None)
             return None
         started, err = _call("start", name)
         if started is None:
             return err or "docker start failed"
         if started.returncode != 0:
             return started.stderr.strip() or "docker start failed"
-        _fix_mount_perms(persona, user.strip() or None)
         return _post_start_check(name)
 
     detail = inspected.stderr.strip()
@@ -476,10 +465,9 @@ def _ensure_inner(
         "512",
         "--pids-limit",
         "1024",
-        "--security-opt",
-        "no-new-privileges",
+        # root で走らせる（ペルソナ専用マシン）。apt / mount 不可の制限は docs/sandbox.md 参照。
         "--user",
-        f"{_env('SANDBOX_UID', '1026')}:{_env('SANDBOX_GID', '100')}",
+        "0:0",
         "--network",
         net,
     ]
@@ -490,11 +478,6 @@ def _ensure_inner(
         try:
             target_dir = local / host.relative_to(root)
             target_dir.mkdir(parents=True, exist_ok=True)
-            # sandbox は非 root（既定 1026:100）で走る。manager は root なので
-            # mkdir しただけだと root 所有になり、ペルソナが書けない。
-            # chown は cap_drop: ALL でできないので、書けるように chmod する。
-            if not read_only:
-                os.chmod(target_dir, 0o777)  # nosec B103 - sandbox 専用の隔離ディレクトリ。詳細は上のコメント。
         except OSError as e:
             return f"ホスト側ディレクトリを作れない: {host}: {e}"
         args += ["-v", f"{host}:{target}" + (":ro" if read_only else "")]
@@ -551,10 +534,8 @@ def _write_log(persona: str, command: str, stdout: str, stderr: str) -> str | No
     body = f"$ {command}\n\n[stdout]\n{stdout}\n\n[stderr]\n{stderr}\n"
     try:
         path.parent.mkdir(parents=True, exist_ok=True)
-        # ペルソナは root 所有のファイルを消せない。ログは自分で読む/消すので 0666 に。
-        os.chmod(path.parent, 0o777)  # nosec B103 - 隔離ディレクトリ。上の _fix_mount_perms 参照。
+        # sandbox は root なので 0644 のまま読める。world-writable を残す理由が無い。
         path.write_text(body, encoding="utf-8")
-        os.chmod(path, 0o666)  # nosec B103 - 同上。中身は実行内容のログだけ。
     except OSError:
         logger.warning("sandbox log write failed: %s", path, exc_info=True)
         return None
@@ -580,29 +561,67 @@ def _exec_timeout(seconds: float | None, idle_minutes: float) -> float:
     return max(1.0, min(limit, seconds))
 
 
+def _forget_stopped(persona: str, last: float, restart: bool = True) -> bool:
+    """stop 後の compare-and-pop。記録を消したら True を返す。
+
+    stop の実行中（最大 10 秒）に exec が ``_last_used`` を上げていたら、その記録は
+    消さない。消すと誰も idle 判定を持たない running コンテナが残る。ensure 失敗の
+    exec は記録を消さず 0.0（期限切れセンチネル）を書くので、ここは stop 自身の
+    pop とだけ compare する。``last`` への setdefault は、この窓で記録が消えて
+    しまっていた場合の防御。使い始めた exec は ensure を通過済みで拾い直せない
+    ので、``restart=True`` のときは ``start`` で戻す。幽霊（missing）経路は
+    コンテナが無いので ``restart=False``。
+    """
+    with _in_flight_guard:
+        if _in_flight.get(persona, 0) > 0 or _last_used.get(persona) != last:
+            # 記録が消えていたら ``last`` で復元する（無いと idle 判定から永久に外れる）。
+            _last_used.setdefault(persona, last)
+        else:
+            _last_used.pop(persona, None)
+            return True
+    if not restart:
+        return False
+    # 戻しに失敗しても warning だけ。exec の次回 ensure が start する。
+    proc, err = _call("start", _container(persona))
+    if proc is None:
+        logger.warning("sandbox restart after stop failed: %s %s", persona, err)
+    elif proc.returncode != 0:
+        logger.warning("sandbox restart after stop failed: %s %s", persona, proc.stderr.strip())
+    return False
+
+
 def _stop_idle(now: float | None = None) -> list[str]:
     """アイドル超過のコンテナを stop する（rm しない）。停止した persona を返す。"""
     now = time.time() if now is None else now
     stopped: list[str] = []
-    for persona, last in list(_last_used.items()):
-        if persona in _in_flight:
-            continue
-        minutes = _idle_override.get(persona, _idle_minutes())
-        if last >= now - minutes * 60.0:
-            continue
+    for persona in list(_last_used):
+        # 判定と _in_flight / _last_used の読みを同じ guard で行う。ループ入口の
+        # last を使い回すと、exec が _last_used を上げた直後に stop を着地させてしまう。
+        with _in_flight_guard:
+            if _in_flight.get(persona, 0) > 0:
+                continue
+            last = _last_used.get(persona)
+            if last is None or last >= now - _idle_override.get(persona, _idle_minutes()) * 60.0:
+                continue
+        # shortcut: stop 自体は guard の外（最大 10 秒）。その隙間に始まった exec は
+        #           下の compare-and-pop で検出して start で戻す。取りこぼすのは
+        #           この判定〜pop の間に始まり、かつ stop が成功しなかった場合だけ
+        #           （exec 側の次回 ensure が拾う）。
         proc, err = _call("stop", _container(persona))
         if proc is None:
             logger.warning("sandbox stop failed: %s %s", persona, err)
             continue
         if proc.returncode != 0:
             if _missing(proc.stderr):
-                # 運用者が手で消した等。幽霊を毎回 stop しに行かない。
-                _last_used.pop(persona, None)
+                # 運用者が手で消した等。幽霊を毎回 stop しに行かない（コンテナが無いので
+                # start 戻しはしない）。
+                _forget_stopped(persona, last, restart=False)
                 continue
             logger.warning("sandbox stop failed: %s %s", persona, proc.stderr.strip())
             continue
-        _last_used.pop(persona, None)
-        stopped.append(persona)
+        # compare-and-pop。stop 中に誰かが使い始めていたら記録は消さず start で戻す。
+        if _forget_stopped(persona, last):
+            stopped.append(persona)
     return stopped
 
 
@@ -666,6 +685,15 @@ class PersonaRequest(BaseModel):
     idle_minutes: float | None = None
 
 
+class RestoreRequest(BaseModel):
+    persona: str
+    # 必須にすると FastAPI が 422 を返し {status:"error"} 契約を破る。空は _IMAGE_RE が弾く。
+    image: str = ""
+    # 消す前の network/memory を引き継がないと、復元直後に既定値で run し直すことになる。
+    network: str | None = None
+    memory: str | None = None
+
+
 @app.post("/exec", dependencies=[Depends(_auth)])
 def exec_in_sandbox(req: ExecRequest) -> dict:
     persona = _persona(req.persona)
@@ -674,13 +702,20 @@ def exec_in_sandbox(req: ExecRequest) -> dict:
     # 実行中に idle 掃除が SIGTERM を打たないよう、ensure より先に印を付ける。
     if req.idle_minutes and req.idle_minutes > 0:
         _idle_override[persona] = max(1.0, min(600.0, req.idle_minutes))
-    _last_used[persona] = time.time()
+    mine = time.time()
+    _last_used[persona] = mine
     _enter(persona)
     try:
         err = _ensure(persona, image=req.image, network=req.network, memory=req.memory)
         if err:
-            # 失敗したコンテナを idle 掃除が stop し続けないよう、記録も消す。
-            _last_used.pop(persona, None)
+            # 記録は消さず期限切れ扱いにする。消すと stop と交差した際に、
+            # start で戻したコンテナが idle 判定から外れる（次スイープが stop → pop）。
+            # 0.0 は mine がまだ現値のときだけ書く。ensure の遅い間に並行 exec が
+            # 新しい時刻を書いていたら、そちらを壊さない。
+            # shortcut: compare と代入は不可分でない。潰れるのは並行 exec の新値だが、
+            # stop/start 1回で済むので全永続運用では無害。厳密に守るなら全 writer を lock する。
+            if _last_used.get(persona) == mine:
+                _last_used[persona] = 0.0
             return _failure(err)
         args = ["exec"]
         if req.cwd:
@@ -717,59 +752,85 @@ def exec_in_sandbox(req: ExecRequest) -> dict:
     }
 
 
-@app.post("/reset", dependencies=[Depends(_auth)])
-def reset_sandbox(req: PersonaRequest) -> dict:
-    persona = _persona(req.persona)
-    if persona in _in_flight:
-        return _failure(f"{persona} は実行中（exec の終了後に reset する）")
-    # 消す前に、_ensure と同じ「マウント元が解決できるか」を確かめる。
-    if _host_data_root() is None:
-        return _failure("host data root が解決できない（SANDBOX_HOST_DATA_ROOT に絶対パスを設定する）")
-    name = _container(persona)
-    # 同名で作り直されるので、$HOME の chown 済みキャッシュを持ち越さない。
-    _home_fixed.discard(name)
-    _home_warned.discard(name)
-    fmt = '{{.Id}} {{index .Config.Labels "com.nous.sandbox"}}'
-    state, err = _call("inspect", "--format", fmt, name, timeout=30.0)
-    if state is None:
-        return _failure(err or "docker inspect failed")
-    if state.returncode == 0:
-        # 名前でなく ID で消す（inspect と rm の間に同名で作り直されても消さない）。
-        cid, _, label = state.stdout.strip().partition(" ")
-        if not cid:
-            return _failure(f"{name} の ID が取れない")
-        # 名前だけ一致する他人のコンテナを消さない。
-        if label.strip() != "1":
-            return _failure(f"{name} は nous の sandbox ではない（com.nous.sandbox ラベルが無い）")
-        removed, err = _call("rm", "-f", cid)
-        if removed is None:
-            return _failure(err or "docker rm failed")
-        if removed.returncode != 0 and not _missing(removed.stderr):
-            return _failure(removed.stderr.strip() or "docker rm failed")
-    elif not _missing(state.stderr):
-        return _failure(f"docker inspect 失敗: {state.stderr.strip() or 'unknown error'}")
-    # 消すのはマウント元の workspace。ログと資材は残す。
-    workspace = _data_root() / "persona" / persona / "workspace"
-    if workspace.exists():
-        try:
-            shutil.rmtree(workspace)
-        except OSError:
-            # 消せていないのに ok を返さない（旧 workspace が残ったまま「リセット済み」にしない）。
-            logger.warning("sandbox workspace reset failed: %s", workspace, exc_info=True)
-            return _failure(f"workspace を消せない: {workspace}")
-    try:
-        workspace.mkdir(parents=True, exist_ok=True)
-    except OSError as exc:
-        return _failure(f"workspace を作れない: {workspace}: {exc}")
-    _last_used.pop(persona, None)
-    if req.idle_minutes and req.idle_minutes > 0:
-        _idle_override[persona] = max(1.0, min(600.0, req.idle_minutes))
+SNAPSHOT_TIMEOUT_SECONDS = 300.0
 
-    err = _ensure(persona, image=req.image, network=req.network, memory=req.memory)
+
+@app.post("/snapshot", dependencies=[Depends(_auth)])
+def snapshot_sandbox(req: PersonaRequest) -> dict:
+    persona = _persona(req.persona)
+    name = _container(persona)
+    cid, err = _container_id(name)
     if err:
         return _failure(err)
+    if cid is None:
+        # snapshot は「実在するマシンの状態保存」。無ければ作らない。
+        return _failure(f"{name} が無い（snapshot は実在するコンテナにだけ取れる）")
+    base = req.image or _env("SANDBOX_IMAGE", "ubuntu:24.04")
+    if not _IMAGE_RE.fullmatch(base):
+        return _failure(f"image {base!r} が不正")
+    repo = _image_repo(base)
+    # repo が空・末尾 / だと commit は失敗する方向にしか倒れないので、ここで止める。
+    if not repo or repo.endswith("/"):
+        return _failure(f"image {base!r} の repository 部が不正")
+    image = f"{repo}:{persona}-snap-{datetime.now(UTC).strftime('%Y%m%d-%H%M%S-%f')}"
+    # --pause=false: commit 中も exec を止めない。瞬間の整合性は保証しない（docs 参照）。
+    proc, err = _call("commit", "--pause=false", cid, image, timeout=SNAPSHOT_TIMEOUT_SECONDS)
+    if proc is None:
+        return _failure(err or "docker commit failed")
+    if proc.returncode != 0:
+        return _failure(proc.stderr.strip() or "docker commit failed")
+    return {"status": "ok", "image": image}
+
+
+@app.post("/restore", dependencies=[Depends(_auth)])
+def restore_sandbox(req: RestoreRequest) -> dict:
+    persona = _persona(req.persona)
+    if not _IMAGE_RE.fullmatch(req.image or ""):
+        return _failure(f"image {req.image!r} が不正")
+    name = _container(persona)
+    # idle 掃除が復元途中のコンテナを stop しに来ないよう、先に利用時刻を入れる。
     _last_used[persona] = time.time()
-    return {"status": "ok"}
+    # restore は rm と run をまたぐので、exec のような並行実行を原子に拒否する必要がある。
+    if not _enter_exclusive(persona):
+        return _failure(f"{persona} は実行中（exec の終了後に restore する）")
+    try:
+        with _ensure_lock(persona):
+            cid, err = _container_id(name)
+            if err:
+                return _failure(err)
+            if cid is not None:
+                # 名前でなく ID で消す（inspect と rm の間に同名で作り直されても消さない）。
+                removed, rerr = _call("rm", "-f", cid)
+                if removed is None:
+                    return _failure(rerr or "docker rm failed")
+                if removed.returncode != 0 and not _missing(removed.stderr):
+                    return _failure(removed.stderr.strip() or "docker rm failed")
+            # _ensure だとロックを二重取得するので _ensure_inner を直に呼ぶ。
+            eerr = _ensure_inner(persona, image=req.image, network=req.network, memory=req.memory)
+            if eerr:
+                return _failure(eerr)
+            # 事後検証: 実際に要求イメージで動いているか（既存 running を掴む競合の保険）。
+            state, ierr = _call(
+                "inspect",
+                "--format",
+                '{{.Config.Image}} {{index .Config.Labels "com.nous.sandbox"}}',
+                name,
+                timeout=30.0,
+            )
+            if state is None:
+                return _failure(ierr or "docker inspect failed")
+            if state.returncode != 0:
+                # コンテナ消滅 / sock の権限エラーを「ラベルが無い」と誤診しない。
+                return _failure(f"inspect 失敗: {state.stderr.strip()[:200]}")
+            actual, _, label = state.stdout.strip().partition(" ")
+            if label.strip() != "1":
+                return _failure(f"{name} は nous の sandbox ではない（com.nous.sandbox ラベルが無い）")
+            if actual != req.image:
+                return _failure(f"復元できなかった（{actual} で稼働中）")
+        _last_used[persona] = time.time()
+        return {"status": "ok"}
+    finally:
+        _leave(persona)
 
 
 @app.get("/list", dependencies=[Depends(_auth)])

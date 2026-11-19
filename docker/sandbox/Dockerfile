@@ -29,25 +29,8 @@ RUN git config --system user.name persona \
 
 WORKDIR /home/agent
 
-# 非 root で動かす。UID/GID はホスト（Synology は 1026/users）に合わせる。
-# 合わせないと bind した workspace/wiki に書き込めず、ホスト側でも読めない
-# 所有者のファイルができる。runner が --user でも渡すので、ここは
-# イメージ単体で `docker run` した場合の既定。
-ARG SANDBOX_UID=1026
-ARG SANDBOX_GID=100
-# GID 100 は ubuntu:24.04 の `users` グループとして既にある。既存なら作らずに使う。
-RUN if getent group ${SANDBOX_GID} >/dev/null; then \
-        G=$(getent group ${SANDBOX_GID} | cut -d: -f1); \
-    else \
-        groupadd -g ${SANDBOX_GID} agent; G=agent; \
-    fi \
-    && useradd -u ${SANDBOX_UID} -g "$G" -m -d /home/agent -s /bin/bash agent
-# 上の WORKDIR が先に /home/agent を作るので、useradd -m は「既にある」と判断して
-# 何もしない。結果 /home/agent は root:root 0755 のままで $HOME に書けない
-# （pip install --user / git config --global が落ちる。実機でも HOME=NG になる）。
-# .agents は -v の親として Docker が root で作る場所なので、ここで用意しておく。
-RUN mkdir -p /home/agent/.agents \
-    && chown -R ${SANDBOX_UID}:${SANDBOX_GID} /home/agent
-USER agent
+# ペルソナ専用マシンとして root（uid 0）で走らせる。sandbox_manager が --user 0:0 を渡す。
+# .agents は -v の親として Docker が root 0755 で勝手に作る場所なので、明示的に用意しておく。
+RUN mkdir -p /home/agent/.agents
 
 CMD ["sleep", "infinity"]

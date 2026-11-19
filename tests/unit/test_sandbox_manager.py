@@ -7,10 +7,10 @@ docker は実行しない。``_docker`` を FakeDocker に差し替えて引数�
 from __future__ import annotations
 
 import os
-import stat
+import re
 import subprocess
 import time
-from typing import TYPE_CHECKING, cast
+from typing import TYPE_CHECKING, Any, cast
 
 import pytest
 from fastapi.testclient import TestClient
@@ -18,6 +18,7 @@ from fastapi.testclient import TestClient
 from nous.services import sandbox_manager as sm
 
 if TYPE_CHECKING:
+    from collections.abc import Callable
     from pathlib import Path
 
 TOKEN = "test-token"
@@ -34,6 +35,7 @@ class FakeDocker:
         label: str = "1",
         container_id: str = "abc123def456",
         not_found: bool = False,
+        id_error: str = "",
         **by_subcommand: object,
     ) -> None:
         self.calls: list[tuple[str, ...]] = []
@@ -42,21 +44,53 @@ class FakeDocker:
         self.label = label
         self.container_id = container_id
         self.not_found = not_found
+        # /restore の事後検証が返す .Config.Image を差し替えるための器。
+        self.running_image: str | None = None
+        self.id_error = id_error
+        self.last_run_image: str | None = None
+        # /restore の rm が ensure ロックの内側で走っているか（lock 保持の直接証拠）。
+        self.rm_lock_held: list[bool] = []
+        # /restore の事後検証（{{.Config.Image}}）を失敗させるための器。
+        self.verify_error = ""
+        # stop の実行中に走らせるフック（stop の 10 秒の隙間で exec が始まる状況を作る）。
+        self.on_stop: Callable[[], None] | None = None
 
     def __call__(self, *args: str, timeout: float = 60.0) -> subprocess.CompletedProcess[str]:
         self.calls.append(args)
-        # /data のマウント元とラベルは format で見分ける
-        if args[0] == "inspect" and any("{{range .Mounts}}" in a for a in args):
-            return subprocess.CompletedProcess(["docker", *args], 0, self.mount, "")
-        if args[0] == "inspect" and any("com.nous.sandbox" in a and "{{.Id}}" in a for a in args):
-            if self.not_found:
-                return subprocess.CompletedProcess(["docker", *args], 1, "", "No such object")
-            return subprocess.CompletedProcess(["docker", *args], 0, f"{self.container_id} {self.label}", "")
-        spec = self.by_subcommand.get(args[0], (0, "", ""))
+        if args and args[0] == "rm":
+            self.rm_lock_held.append(sm._ensure_lock("alice").locked())
+        if args[0] == "run" and "sleep" in args:
+            self.last_run_image = args[args.index("sleep") - 1]
+        if args[0] == "stop" and self.on_stop is not None:
+            self.on_stop()
+        inspected = self._inspect(args)
+        if inspected is not None:
+            return inspected
+        spec = self.by_subcommand.get(args[0] if args else "", (0, "", ""))
         if isinstance(spec, BaseException):
             raise spec
         code, out, err = cast("tuple[int, str, str]", spec)
         return subprocess.CompletedProcess(["docker", *args], code, out, err)
+
+    def _inspect(self, args: tuple[str, ...]) -> subprocess.CompletedProcess[str] | None:
+        """inspect は format 文字列でどの問い合わせか見分ける（inspect 以外は None）。"""
+        if args[0] != "inspect":
+            return None
+        joined = " ".join(args)
+        if "{{range .Mounts}}" in joined:
+            return subprocess.CompletedProcess(["docker", *args], 0, self.mount, "")
+        if "{{.Id}}" in joined and "com.nous.sandbox" in joined:
+            if self.id_error:
+                return subprocess.CompletedProcess(["docker", *args], 1, "", self.id_error)
+            if self.not_found:
+                return subprocess.CompletedProcess(["docker", *args], 1, "", "No such object")
+            return subprocess.CompletedProcess(["docker", *args], 0, f"{self.container_id} {self.label}", "")
+        if "{{.Config.Image}}" in joined:
+            if self.verify_error:
+                return subprocess.CompletedProcess(["docker", *args], 1, "", self.verify_error)
+            image = self.running_image or self.last_run_image or ""
+            return subprocess.CompletedProcess(["docker", *args], 0, f"{image} {self.label}", "")
+        return None
 
 
 @pytest.fixture
@@ -67,13 +101,26 @@ def fake(monkeypatch, tmp_path) -> FakeDocker:
     monkeypatch.setattr(sm, "_last_used", {})
     monkeypatch.setattr(sm, "_idle_override", {})
     monkeypatch.setattr(sm, "_in_flight", {})
-    # $HOME の chown は 1 回だけ。テスト間で持ち越さない。
-    monkeypatch.setattr(sm, "_home_fixed", set())
-    monkeypatch.setattr(sm, "_home_warned", set())
+    # root 以外の警告はコンテナごとに 1 回。テスト間で持ち越さない。
+    monkeypatch.setattr(sm, "_user_warned", set())
     monkeypatch.setattr(sm, "_host_root", None)
     # HOSTNAME は自分自身のコンテナ ID（短縮形）と一致していなければならない。
     monkeypatch.setenv("HOSTNAME", "0123456789ab")
     monkeypatch.setenv("NOUS_SANDBOX_MANAGER_TOKEN", TOKEN)
+    # 開発 shell の SANDBOX_* で挙動が変わらないようにする（差し替えるテストだけが setenv する）。
+    for name in (
+        "SANDBOX_IMAGE",
+        "SANDBOX_NETWORK",
+        "SANDBOX_MEMORY",
+        "SANDBOX_IDLE_MINUTES",
+        "SANDBOX_ALLOWED_NETWORKS",
+        "SANDBOX_APT_EXTRA",
+        "SANDBOX_TZ",
+        "SANDBOX_DNS_CHECK",
+        "SANDBOX_GIT_USER_NAME",
+        "SANDBOX_GIT_USER_EMAIL",
+    ):
+        monkeypatch.delenv(name, raising=False)
     docker = FakeDocker(mount=f"0123456789abff {tmp_path / 'host'}", inspect=(0, "true 1\n", ""), exec=(0, "ok\n", ""))
     monkeypatch.setattr(sm, "_docker", docker)
     return docker
@@ -89,7 +136,9 @@ def test_auth_requires_the_shared_token(fake) -> None:
     anonymous = TestClient(sm.app)
     assert anonymous.post("/exec", json={"persona": "alice", "command": "id"}).status_code == 401
     assert anonymous.get("/list").status_code == 401
-    assert anonymous.post("/reset", json={"persona": "alice"}).status_code == 401
+    assert anonymous.post("/reset", json={"persona": "alice"}).status_code == 404
+    assert anonymous.post("/snapshot", json={"persona": "alice"}).status_code == 401
+    assert anonymous.post("/restore", json={"persona": "alice", "image": "ubuntu:24.04"}).status_code == 401
 
 
 def test_auth_refuses_a_wrong_token(fake) -> None:
@@ -170,9 +219,12 @@ def test_exec_runs_container_when_missing(client, fake, tmp_path: Path) -> None:
     # media は nous が書く生成物なので読み取り専用。
     assert f"{tmp_path}/host/persona/alice/media:/home/agent/media:ro" in run
     assert "--user" in run
-    # _fix_home は sandbox の既定 caps（CAP_CHOWN）で exec する。ここで cap を
-    # 落とすと $HOME の chown が静かに効かなくなる（tests/unit/test_sandbox_manager.py の
-    # test_fix_home_* が前提にしている）。
+    # ペルソナ専用マシンなので root で走らせる。
+    assert run[run.index("--user") + 1] == "0:0"
+    assert run[run.index("--pids-limit") + 1] == "1024"
+    assert run[run.index("--memory") + 1] == "4g"
+    # no-new-privileges は廃止（root 前提の運用に合わせる）。
+    assert "no-new-privileges" not in run
     assert not any(a.startswith("--cap-drop") for a in run)
     assert f"{tmp_path}/host/persona/alice/skills:/home/agent/.agents/skills" in run
     assert f"{tmp_path}/host/skills:/home/agent/.agents/global-skills:ro" in run
@@ -183,10 +235,6 @@ def test_exec_runs_container_when_missing(client, fake, tmp_path: Path) -> None:
     assert (tmp_path / "container" / "persona" / "alice" / "wiki").is_dir()
     assert (tmp_path / "container" / "persona" / "alice" / "uploads").is_dir()
     assert (tmp_path / "container" / "persona" / "alice" / "media").is_dir()
-    # sandbox は非 root（既定 1026:100）で走る。manager は root なので
-    # mkdir しただけだと書けない。rw のマウント先は 777 にしておく。
-    mode = (tmp_path / "container" / "persona" / "alice" / "workspace").stat().st_mode
-    assert stat.S_IMODE(mode) == 0o777
 
 
 def test_run_uses_cpu_shares_because_the_kernel_has_no_cfs(client, fake) -> None:
@@ -272,20 +320,6 @@ def test_dns_check_can_be_skipped(fake, monkeypatch) -> None:
     assert fake.calls == []
 
 
-def test_fix_mount_perms_opens_rw_mounts_only(fake, tmp_path: Path) -> None:
-    """既存コンテナの start 経路は run の chmod を通らない。掛け直す。"""
-    rw = tmp_path / "container" / "persona" / "alice" / "wiki"
-    ro = tmp_path / "container" / "persona" / "alice" / "media"
-    for d in (rw, ro):
-        d.mkdir(parents=True)
-        os.chmod(d, 0o755)
-
-    sm._fix_mount_perms("alice")
-
-    assert stat.S_IMODE(rw.stat().st_mode) == 0o777
-    assert stat.S_IMODE(ro.stat().st_mode) == 0o755
-
-
 def test_apt_extra_skips_apt_when_everything_is_installed(client, fake, monkeypatch) -> None:
     monkeypatch.setenv("SANDBOX_APT_EXTRA", "jq,tree")
     fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
@@ -312,7 +346,7 @@ def test_apt_extra_installs_only_the_missing_packages(client, fake, monkeypatch)
 
     installs = [c for c in seen.calls if "apt-get install" in " ".join(c)]
     assert len(installs) == 1
-    # コンテナは --user 1026:100 で走るので、apt は root で打たないと必ず失敗する。
+    # 旧 1026 コンテナも動くので、apt は uid に依らず root で打つ。
     assert installs[0][1:4] == ("-u", "0", "alice-sandbox")
     script = installs[0][-1]
     assert "DEBIAN_FRONTEND=noninteractive" in script
@@ -399,28 +433,9 @@ def test_tail_truncates_to_120_lines_and_full_log_is_saved(client, fake, tmp_pat
     assert "line0" in log_path.read_text(encoding="utf-8")
 
 
-def test_reset_creates_dir_when_container_absent(client, fake, monkeypatch, tmp_path: Path) -> None:
-    removed: list[str] = []
-    monkeypatch.setattr(sm.shutil, "rmtree", lambda p, **kw: removed.append(str(p)))
-    fake.not_found = True
-    fake.by_subcommand["inspect"] = (1, "", "No such object")
-    fake.by_subcommand["run"] = (0, "abc123\n", "")
-    (tmp_path / "container" / "persona" / "alice" / "workspace").mkdir(parents=True)
-
-    assert client.post("/reset", json={"persona": "alice"}).json() == {"status": "ok"}
-    # 存在しないのに名前で rm しない（同名の他人を消さない）。
-    assert not any(c[0] == "rm" for c in fake.calls)
-    assert removed == [str(tmp_path / "container" / "persona" / "alice" / "workspace")]
-    assert any(c[0] == "run" for c in fake.calls)
-
-
-def test_reset_removes_by_id_not_name(client, fake, monkeypatch, tmp_path: Path) -> None:
-    monkeypatch.setattr(sm.shutil, "rmtree", lambda p, **kw: None)
-    (tmp_path / "container" / "persona" / "alice" / "workspace").mkdir(parents=True)
-
-    assert client.post("/reset", json={"persona": "alice"}).json() == {"status": "ok"}
-    assert ("rm", "-f", "abc123def456") in fake.calls
-    assert not any(c == ("rm", "-f", "alice-sandbox") for c in fake.calls)
+def test_reset_is_gone(client) -> None:
+    """全消去 API は廃止。壊れたら snapshot から /restore で戻す。"""
+    assert client.post("/reset", json={"persona": "alice"}).status_code == 404
 
 
 def test_idle_stop_only_hits_old_sandboxes(fake, monkeypatch) -> None:
@@ -455,15 +470,6 @@ def test_list_shape(client, fake) -> None:
 def test_persona_must_start_alnum_and_be_bounded(client, fake, persona: str) -> None:
     assert client.post("/exec", json={"persona": persona, "command": "id"}).status_code == 400
     assert fake.calls == []
-
-
-def test_reset_fails_when_rm_fails(client, fake) -> None:
-    fake.by_subcommand["rm"] = (1, "", "cannot remove alice-sandbox")
-
-    body = client.post("/reset", json={"persona": "alice"}).json()
-    assert body["status"] == "error"
-    assert "cannot remove" in body["stderr_tail"]
-    assert not any(c[0] == "run" for c in fake.calls)
 
 
 def test_container_without_our_label_is_refused(client, fake) -> None:
@@ -571,42 +577,258 @@ def test_host_data_root_ignores_a_foreign_container(fake, monkeypatch, tmp_path:
     assert sm._host_data_root() is None
 
 
-def test_reset_refuses_a_container_we_did_not_create(client, fake) -> None:
+def test_snapshot_commits_the_container_to_a_timestamped_image(client, fake, monkeypatch) -> None:
+    monkeypatch.setenv("SANDBOX_IMAGE", "ghcr.io/solidlime/nous-sandbox:latest")
+
+    body = client.post("/snapshot", json={"persona": "alice"}).json()
+
+    assert body["status"] == "ok"
+    commit = next(c for c in fake.calls if c[0] == "commit")
+    assert commit[1] == "--pause=false"
+    assert commit[2] == "abc123def456"
+    repo, _, tag = commit[3].rpartition(":")
+    assert repo == "ghcr.io/solidlime/nous-sandbox"
+    # %f が無いと同一秒の 2 回目が既存タグを黙って上書きする。
+    assert re.fullmatch(r"alice-snap-\d{8}-\d{6}-\d{6}", tag)
+    assert body["image"] == commit[3]
+
+
+def test_snapshot_uses_the_requested_image_as_repository(client, fake) -> None:
+    body = client.post("/snapshot", json={"persona": "alice", "image": "ubuntu:24.04"}).json()
+
+    assert body["image"].startswith("ubuntu:alice-snap-")
+
+
+def test_snapshot_gives_commit_a_long_timeout(client, fake, monkeypatch) -> None:
+    """writable layer が数 GB でも 60 秒既定で落ちないように。"""
+    seen: list[tuple[str, float]] = []
+
+    def spy(*args: str, timeout: float = 60.0) -> subprocess.CompletedProcess[str]:
+        seen.append((args[0], timeout))
+        return cast("subprocess.CompletedProcess[str]", fake(*args, timeout=timeout))
+
+    monkeypatch.setattr(sm, "_docker", spy)
+    client.post("/snapshot", json={"persona": "alice"})
+
+    commit = [timeout for name, timeout in seen if name == "commit"]
+    assert commit == [sm.SNAPSHOT_TIMEOUT_SECONDS] and commit[0] == 300.0
+
+
+def test_snapshot_repo_falls_back_to_the_code_default(client, fake) -> None:
+    body = client.post("/snapshot", json={"persona": "alice"}).json()
+
+    assert body["image"].startswith("ubuntu:alice-snap-")
+
+
+def test_snapshot_refuses_a_bare_registry_repository(client, fake) -> None:
+    """repo が空 or 末尾 / だとタグを付けられない。"""
+    body = client.post("/snapshot", json={"persona": "alice", "image": "host:5000/"}).json()
+
+    assert body["status"] == "error" and "repository" in body["stderr_tail"]
+    assert not any(c[0] == "commit" for c in fake.calls)
+
+
+def test_snapshot_stops_on_an_inspect_error(client, fake) -> None:
+    fake.id_error = "permission denied while trying to connect to the Docker daemon socket"
+
+    body = client.post("/snapshot", json={"persona": "alice"}).json()
+
+    assert body["status"] == "error" and "permission denied" in body["stderr_tail"]
+    assert not any(c[0] == "commit" for c in fake.calls)
+
+
+def test_snapshot_without_a_container_is_an_error(client, fake) -> None:
+    """snapshot は実在するマシンの状態保存。無ければ作らない。"""
+    fake.not_found = True
+
+    body = client.post("/snapshot", json={"persona": "alice"}).json()
+
+    assert body["status"] == "error"
+    assert not any(c[0] in {"commit", "run"} for c in fake.calls)
+
+
+def test_snapshot_refuses_a_container_we_did_not_create(client, fake) -> None:
     fake.label = "<no value>"
 
-    body = client.post("/reset", json={"persona": "alice"}).json()
-    assert body["status"] == "error"
-    assert "sandbox" in body["stderr_tail"]
-    assert not any(c[0] == "rm" for c in fake.calls)
+    body = client.post("/snapshot", json={"persona": "alice"}).json()
+
+    assert body["status"] == "error" and "sandbox" in body["stderr_tail"]
+    assert not any(c[0] == "commit" for c in fake.calls)
 
 
-def test_reset_refuses_while_exec_runs(client, fake, monkeypatch) -> None:
-    monkeypatch.setattr(sm, "_in_flight", {"alice": 1})
+def test_snapshot_commit_failure_is_an_error(client, fake) -> None:
+    fake.by_subcommand["commit"] = (1, "", "no space left on device")
 
-    body = client.post("/reset", json={"persona": "alice"}).json()
-    assert body["status"] == "error"
-    assert "実行中" in body["stderr_tail"]
-    assert not any(c[0] == "rm" for c in fake.calls)
+    body = client.post("/snapshot", json={"persona": "alice"}).json()
+
+    assert body["status"] == "error" and "no space" in body["stderr_tail"]
 
 
-def test_reset_uses_request_options(client, fake, monkeypatch) -> None:
+@pytest.mark.parametrize(
+    ("image", "repo"),
+    [
+        ("ubuntu:24.04", "ubuntu"),
+        ("ghcr.io/solidlime/nous-sandbox:latest", "ghcr.io/solidlime/nous-sandbox"),
+        ("host:5000/foo", "host:5000/foo"),
+        ("host:5000/foo:1.0", "host:5000/foo"),
+        ("ubuntu@sha256:abc", "ubuntu"),
+    ],
+)
+def test_image_repo_strips_only_the_tag(image: str, repo: str) -> None:
+    assert sm._image_repo(image) == repo
+
+
+def test_restore_removes_the_container_and_recreates_it_from_the_image(client, fake) -> None:
+    fake.by_subcommand["inspect"] = (1, "", "No such object")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+
+    assert client.post("/restore", json={"persona": "alice", "image": "alice-snap-1"}).json() == {"status": "ok"}
+    # ID 指定で消す（inspect と rm の間に同名で作り直されても他人を消さない）。
+    assert ("rm", "-f", "abc123def456") in fake.calls
+    assert not any(c == ("rm", "-f", "alice-sandbox") for c in fake.calls)
+    # rm の後に、要求された image で run する（既存 running を見て素通りしない）。
+    names = [c[0] for c in fake.calls]
+    assert names.index("rm") < names.index("run")
+    assert next(c for c in fake.calls if c[0] == "run")[-3] == "alice-snap-1"
+
+
+def test_restore_holds_the_ensure_lock_while_removing(client, fake) -> None:
+    """rm と run の間に exec が差し込まれないこと（ensure ロックが復元中ずっと保持される）。"""
+    fake.by_subcommand["inspect"] = (1, "", "No such object")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+
+    assert client.post("/restore", json={"persona": "alice", "image": "alice-snap-1"}).json() == {"status": "ok"}
+
+    assert fake.rm_lock_held == [True]
+
+
+def test_restore_passes_network_and_memory_to_run(client, fake, monkeypatch) -> None:
     monkeypatch.setenv("SANDBOX_ALLOWED_NETWORKS", "sbx-net")
     fake.by_subcommand["inspect"] = (1, "", "No such object")
     fake.by_subcommand["run"] = (0, "abc123\n", "")
 
-    assert client.post("/reset", json={"persona": "alice", "image": "ubuntu:22.04", "network": "sbx-net"}).json() == {
-        "status": "ok"
-    }
+    body = client.post(
+        "/restore",
+        json={"persona": "alice", "image": "alice-snap-1", "network": "sbx-net", "memory": "2g"},
+    ).json()
+
+    assert body == {"status": "ok"}
     run = next(c for c in fake.calls if c[0] == "run")
-    assert "ubuntu:22.04" in run
     assert run[run.index("--network") + 1] == "sbx-net"
+    assert run[run.index("--memory") + 1] == "2g"
+
+
+def test_restore_verifies_the_image_that_is_actually_running(client, fake) -> None:
+    """run が古い running を掴んだ場合に ok を返さない。"""
+    fake.by_subcommand["inspect"] = (0, "true 1\n", "")
+    fake.running_image = "ubuntu:22.04"
+
+    body = client.post("/restore", json={"persona": "alice", "image": "alice-snap-1"}).json()
+
+    assert body["status"] == "error" and "ubuntu:22.04" in body["stderr_tail"]
+    assert sm._in_flight == {}
+
+
+def test_restore_without_an_image_keeps_the_error_contract(client, fake) -> None:
+    """422 にすると {status:error} 契約が崩れるので、空 image は自分で弾く。"""
+    res = client.post("/restore", json={"persona": "alice"})
+
+    assert res.status_code == 200
+    assert res.json()["status"] == "error"
+    assert fake.calls == []
+
+
+def test_restore_stops_on_an_inspect_error(client, fake) -> None:
+    fake.id_error = "permission denied while trying to connect to the Docker daemon socket"
+
+    body = client.post("/restore", json={"persona": "alice", "image": "alice-snap-1"}).json()
+
+    assert body["status"] == "error" and "permission denied" in body["stderr_tail"]
+    assert not any(c[0] in {"rm", "run"} for c in fake.calls)
+
+
+def test_restore_reports_a_failed_recreate(client, fake) -> None:
+    fake.by_subcommand["inspect"] = (1, "", "No such object")
+    fake.by_subcommand["run"] = (1, "", "pull access denied\n")
+
+    body = client.post("/restore", json={"persona": "alice", "image": "alice-snap-1"}).json()
+
+    assert body["status"] == "error" and "pull access denied" in body["stderr_tail"]
+    assert any(c[0] == "rm" for c in fake.calls)
+
+
+def test_restore_marks_last_used(client, fake) -> None:
+    fake.by_subcommand["inspect"] = (1, "", "No such object")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+
+    assert client.post("/restore", json={"persona": "alice", "image": "alice-snap-1"}).json() == {"status": "ok"}
+    assert sm._last_used["alice"] > 0
+
+
+def test_restore_without_a_container_only_creates_it(client, fake) -> None:
+    fake.not_found = True
+    fake.by_subcommand["inspect"] = (1, "", "No such object")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+
+    assert client.post("/restore", json={"persona": "alice", "image": "ubuntu:22.04"}).json() == {"status": "ok"}
+    assert not any(c[0] == "rm" for c in fake.calls)
+    assert "ubuntu:22.04" in next(c for c in fake.calls if c[0] == "run")
+
+
+def test_restore_refuses_while_exec_runs(client, fake, monkeypatch) -> None:
+    monkeypatch.setattr(sm, "_in_flight", {})
+    sm._enter("alice")
+
+    body = client.post("/restore", json={"persona": "alice", "image": "ubuntu:24.04"}).json()
+
+    assert body["status"] == "error" and "実行中" in body["stderr_tail"]
+    assert not any(c[0] == "rm" for c in fake.calls)
+    # 拒否経路で restore 自身が in_flight を足していない（exec の 1 本だけのまま）。
+    assert sm._in_flight == {"alice": 1}
+    sm._leave("alice")
+    assert sm._in_flight == {}
+
+
+def test_restore_refuses_a_container_we_did_not_create(client, fake) -> None:
+    fake.label = "<no value>"
+
+    body = client.post("/restore", json={"persona": "alice", "image": "ubuntu:24.04"}).json()
+
+    assert body["status"] == "error" and "sandbox" in body["stderr_tail"]
+    assert not any(c[0] == "rm" for c in fake.calls)
+
+
+def test_restore_fails_when_rm_fails(client, fake) -> None:
+    fake.by_subcommand["rm"] = (1, "", "cannot remove alice-sandbox")
+
+    body = client.post("/restore", json={"persona": "alice", "image": "ubuntu:24.04"}).json()
+
+    assert body["status"] == "error" and "cannot remove" in body["stderr_tail"]
+    assert not any(c[0] == "run" for c in fake.calls)
+    assert sm._in_flight == {}
+
+
+def test_restore_reports_an_inspect_failure_after_run(client, fake) -> None:
+    """事後検証の inspect が失敗したとき「ラベルが無い」と誤診しない。"""
+    fake.by_subcommand["inspect"] = (1, "", "No such object")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+    fake.verify_error = "permission denied while trying to connect to the Docker daemon socket"
+
+    body = client.post("/restore", json={"persona": "alice", "image": "alice-snap-1"}).json()
+
+    assert body["status"] == "error" and "inspect 失敗" in body["stderr_tail"]
+
+
+@pytest.mark.parametrize("image", ["", "--privileged"])
+def test_restore_requires_a_valid_image(client, fake, image: str) -> None:
+    body = client.post("/restore", json={"persona": "alice", "image": image}).json()
+
+    assert body["status"] == "error" and "image" in body["stderr_tail"]
+    assert fake.calls == []
 
 
 def test_in_flight_counts_concurrent_execs(monkeypatch) -> None:
     monkeypatch.setattr(sm, "_in_flight", {})
-    # $HOME の chown は 1 回だけ。テスト間で持ち越さない。
-    monkeypatch.setattr(sm, "_home_fixed", set())
-    monkeypatch.setattr(sm, "_home_warned", set())
     sm._enter("alice")
     sm._enter("alice")
     assert sm._in_flight == {"alice": 2}
@@ -626,28 +848,100 @@ def test_idle_stop_forgets_a_missing_container(fake, monkeypatch) -> None:
     assert "ghost" not in sm._last_used
 
 
-def test_reset_fails_when_workspace_cannot_be_removed(client, fake, monkeypatch, tmp_path: Path) -> None:
-    def deny(path, *args, **kwargs):  # noqa: ANN001, ARG001
-        raise PermissionError("denied")
+def test_idle_stop_skips_a_persona_with_a_running_exec(fake, monkeypatch) -> None:
+    """exec 実行中に stop が着地すると、走り出したコンテナを止めて exec が失敗する。"""
+    monkeypatch.setenv("SANDBOX_IDLE_MINUTES", "30")
+    monkeypatch.setattr(sm, "_in_flight", {})
+    now = time.time()
+    sm._last_used["alice"] = now - 31 * 60
+    sm._enter("alice")
 
-    monkeypatch.setattr(sm.shutil, "rmtree", deny)
-    fake.by_subcommand["run"] = (0, "abc123\n", "")
-    (tmp_path / "container" / "persona" / "alice" / "workspace").mkdir(parents=True)
-
-    body = client.post("/reset", json={"persona": "alice"}).json()
-    assert body["status"] == "error"
-    assert "workspace" in body["stderr_tail"]
-    assert not any(c[0] == "run" for c in fake.calls)
+    assert sm._stop_idle(now=now) == []
+    assert not any(c[0] == "stop" for c in fake.calls)
+    assert "alice" in sm._last_used
 
 
-def test_reset_fails_closed_without_host_root(client, fake, monkeypatch) -> None:
-    monkeypatch.delenv("SANDBOX_HOST_DATA_ROOT")
-    fake.mount = ""
+class _ProbedLastUsed(dict[str, float]):
+    """``_last_used`` の読みが guard の内側で起きたかを記録する dict。"""
 
-    body = client.post("/reset", json={"persona": "alice"}).json()
-    assert body["status"] == "error"
-    assert "data root" in body["stderr_tail"]
-    assert not any(c[0] in {"rm", "run"} for c in fake.calls)
+    def __init__(self, data: dict[str, float], reads: list[bool]) -> None:
+        super().__init__(data)
+        self.reads = reads
+
+    def get(self, key: str, default: Any = None) -> Any:
+        self.reads.append(sm._in_flight_guard.locked())
+        return super().get(key, default)
+
+    def setdefault(self, key: str, default: float = 0.0) -> float:
+        self.reads.append(sm._in_flight_guard.locked())
+        return super().setdefault(key, default)
+
+    def pop(self, key: str, default: Any = None) -> Any:
+        self.reads.append(sm._in_flight_guard.locked())
+        return super().pop(key, default)
+
+
+def test_idle_stop_reads_last_used_under_the_guard(fake, monkeypatch) -> None:
+    """判定をループ入口のスナップショットへ戻すと、この assert が落ちる。"""
+    monkeypatch.setenv("SANDBOX_IDLE_MINUTES", "30")
+    now = time.time()
+    reads: list[bool] = []
+    monkeypatch.setattr(sm, "_last_used", _ProbedLastUsed({"alice": now - 31 * 60}, reads))
+    fake.by_subcommand["stop"] = (0, "alice-sandbox\n", "")
+
+    assert sm._stop_idle(now=now) == ["alice"]
+    # 判定と compare-and-pop の両方。1 つでも guard の外なら False が混ざる。
+    assert reads and all(reads)
+
+
+def test_idle_stop_restarts_when_an_exec_starts_during_the_stop(fake, monkeypatch) -> None:
+    """stop の隙間に始まった exec の記録を消すと、誰も idle 判定を持たない running が残る。"""
+    monkeypatch.setenv("SANDBOX_IDLE_MINUTES", "30")
+    now = time.time()
+    reads: list[bool] = []
+    monkeypatch.setattr(sm, "_last_used", _ProbedLastUsed({"alice": now - 31 * 60}, reads))
+    fake.by_subcommand["stop"] = (0, "alice-sandbox\n", "")
+
+    def _exec_starts() -> None:
+        sm._last_used["alice"] = now
+
+    fake.on_stop = _exec_starts
+
+    assert sm._stop_idle(now=now) == []
+    assert sm._last_used["alice"] == now
+    # restart 分岐の setdefault も guard の内側。外へ動くと False が混ざる。
+    assert reads and all(reads)
+    assert ("start", "alice-sandbox") in fake.calls
+
+
+def test_idle_stop_keeps_a_record_when_the_pop_already_happened(fake, monkeypatch) -> None:
+    """並行スイープが記録を消し終えていた場合も、start で戻したコンテナを idle 判定に残す。"""
+    monkeypatch.setenv("SANDBOX_IDLE_MINUTES", "30")
+    now = time.time()
+    monkeypatch.setattr(sm, "_last_used", {"alice": now - 31 * 60})
+    fake.by_subcommand["stop"] = (0, "alice-sandbox\n", "")
+    fake.on_stop = lambda: sm._last_used.pop("alice", None)  # 並行スイープが pop し終えていた相当
+
+    assert sm._stop_idle(now=now) == []
+    assert sm._last_used["alice"] == now - 31 * 60  # setdefault が last に戻した値そのもの
+    assert ("start", "alice-sandbox") in fake.calls
+
+
+def test_missing_container_keeps_a_record_when_an_exec_starts_during_the_stop(fake, monkeypatch) -> None:
+    """幽霊経路も、stop 中に使い始めた exec がいたら記録は消さず start もしない。"""
+    monkeypatch.setenv("SANDBOX_IDLE_MINUTES", "30")
+    now = time.time()
+    monkeypatch.setattr(sm, "_last_used", {"ghost": now - 31 * 60})
+    fake.by_subcommand["stop"] = (1, "", "Error: No such container: ghost-sandbox")
+
+    def _exec_starts() -> None:
+        sm._last_used["ghost"] = now
+
+    fake.on_stop = _exec_starts
+
+    assert sm._stop_idle(now=now) == []
+    assert sm._last_used["ghost"] == now
+    assert not any(c[0] == "start" for c in fake.calls)
 
 
 def test_named_volume_mount_is_refused(fake, monkeypatch) -> None:
@@ -662,6 +956,45 @@ def test_exec_rejects_a_host_network(client, fake) -> None:
     body = client.post("/exec", json={"persona": "alice", "command": "id", "network": "host"}).json()
     assert body["status"] == "error" and "network" in body["stderr_tail"]
     assert not any(call[0] == "run" for call in fake.calls)
+
+
+def test_exec_failure_expires_the_record_instead_of_dropping_it(client, fake, monkeypatch) -> None:
+    """ensure 失敗で記録を消すと stop との交差で idle 判定から外れる。期限切れ 0.0 を残す。"""
+    monkeypatch.setattr(sm, "_last_used", {})
+
+    body = client.post("/exec", json={"persona": "alice", "command": "id", "network": "host"}).json()
+
+    assert body["status"] == "error" and "network" in body["stderr_tail"]
+    assert sm._last_used["alice"] == 0.0
+
+
+def test_the_expired_record_is_collected_by_the_next_sweep(fake, monkeypatch) -> None:
+    """exec 失敗が残した 0.0 は、次スイープが stop → pop で回収する。"""
+    monkeypatch.setenv("SANDBOX_IDLE_MINUTES", "30")
+    now = time.time()
+    monkeypatch.setattr(sm, "_last_used", {"alice": 0.0})
+    fake.by_subcommand["stop"] = (0, "alice-sandbox\n", "")
+
+    assert sm._stop_idle(now=now) == ["alice"]
+    assert "alice" not in sm._last_used
+
+
+def test_exec_failure_keeps_a_newer_record_written_in_parallel(client, fake, monkeypatch) -> None:
+    """ensure の遅い間に並行 exec が書いた新値を、0.0 の期限切れで上書きしない。"""
+    now = time.time()
+    monkeypatch.setattr(sm, "_last_used", {})
+
+    def _slow_ensure(persona: str, **kwargs: Any) -> str:
+        # 並行 exec が ensure の途中で成功し、新しい時刻を書いた状況の再現。
+        sm._last_used[persona] = now + 1.0
+        return "boom"
+
+    monkeypatch.setattr(sm, "_ensure", _slow_ensure)
+
+    body = client.post("/exec", json={"persona": "alice", "command": "id"}).json()
+
+    assert body["status"] == "error"
+    assert sm._last_used["alice"] == now + 1.0  # 0.0 で上書きされない
 
 
 def test_exec_rejects_a_flag_like_image(client, fake) -> None:
@@ -680,7 +1013,6 @@ def test_exec_rejects_a_network_outside_the_allowlist(client, fake, monkeypatch)
 def test_exec_wraps_the_command_in_timeout(client, fake) -> None:
     fake.by_subcommand["inspect"] = (0, "true 1", "")
     client.post("/exec", json={"persona": "alice", "command": "sleep 999", "timeout_seconds": 7})
-    # _fix_home も exec を打つので、timeout ラッパーを含む exec を選ぶ。
     exec_call = next(c for c in fake.calls if c[0] == "exec" and "timeout" in c)
     assert exec_call[exec_call.index("-k") + 1] == "5"
     assert tuple(exec_call[exec_call.index("timeout") + 1 :])[:4] == ("-k", "5", "7", "bash")
@@ -698,66 +1030,38 @@ def test_load_existing_starts_the_idle_clock_after_a_grace(fake, monkeypatch) ->
     assert last <= before - sm._idle_minutes() * 60.0 + sm.RESTART_GRACE_SECONDS + 2
 
 
-def test_fix_home_chowns_home_and_agents_as_root(fake, monkeypatch) -> None:
-    """$HOME はイメージ側で root 所有になり得る（WORKDIR が useradd より先）。
-
-    実機で `ls -ld /home/agent` が root:root 0755 になり、$HOME に書けなかった。
-    run / start の後に uid へ寄せ直す（manager は cap_drop: ALL で chown できない）。
-    """
-    monkeypatch.setattr(sm, "_home_fixed", set())
-    monkeypatch.setenv("SANDBOX_UID", "1026")
-    monkeypatch.setenv("SANDBOX_GID", "100")
-
-    sm._fix_home("alice-sandbox")
-
-    assert fake.calls == [
-        ("exec", "-u", "0", "alice-sandbox", "chown", "1026:100", "/home/agent"),
-        ("exec", "-u", "0", "alice-sandbox", "chown", "1026:100", "/home/agent/.agents"),
-    ]
-
-
-def test_fix_home_uses_configured_uid(fake, monkeypatch) -> None:
-    """SANDBOX_UID を変えている環境では、その uid に合わせる（1026 決め打ちにしない）。"""
-    monkeypatch.setattr(sm, "_home_fixed", set())
-    monkeypatch.setenv("SANDBOX_UID", "1000")
-    monkeypatch.setenv("SANDBOX_GID", "1000")
-
-    sm._fix_home("alice-sandbox")
-
-    assert fake.calls[0][-2] == "1000:1000"
-
-
-def test_ensure_fixes_home_on_existing_container(fake, tmp_path: Path, monkeypatch) -> None:
-    """running の経路（毎 exec）でも HOME を直す。start 済みだと run の chmod を通らない。"""
+def test_old_non_root_container_warns_once(fake, monkeypatch) -> None:
+    """旧 uid 運用（1026:100）のコンテナは root 前提の操作で書けない場所がある。"""
+    warnings: list[str] = []
+    monkeypatch.setattr(sm.logger, "warning", lambda fmt, *a: warnings.append(fmt % a))
     monkeypatch.setenv("SANDBOX_DNS_CHECK", "0")
+    fake.by_subcommand["inspect"] = (0, "true 1 1026:100\n", "")
 
     assert sm._ensure("alice") is None
-
-    assert ("exec", "-u", "0", "alice-sandbox", "chown", "1026:100", "/home/agent") in fake.calls
-
-
-def test_fix_home_prefers_container_user(fake, monkeypatch) -> None:
-    """chown 先は env ではなく既存コンテナの .Config.User を信じる。
-
-    SANDBOX_UID を後から変えたとき、動いていない uid へ $HOME を寄せると
-    二度と書けないコンテナになる。
-    """
-    monkeypatch.setenv("SANDBOX_UID", "1026")
-    monkeypatch.setenv("SANDBOX_GID", "100")
-    monkeypatch.setenv("SANDBOX_DNS_CHECK", "0")
-    fake.by_subcommand["inspect"] = (0, "true 1 1000:1000\n", "")
-
     assert sm._ensure("alice") is None
 
-    assert ("exec", "-u", "0", "alice-sandbox", "chown", "1000:1000", "/home/agent") in fake.calls
-    assert ("exec", "-u", "0", "alice-sandbox", "chown", "1026:100", "/home/agent") not in fake.calls
+    assert len(warnings) == 1 and "1026:100" in warnings[0]
 
 
-def test_write_log_is_writable_by_persona(fake, tmp_path: Path, monkeypatch) -> None:
-    """ログは root 所有で置かれるので、ペルソナが消せる/書き換えられる状態にする。"""
+def test_root_container_does_not_warn(fake, monkeypatch) -> None:
+    warnings: list[str] = []
+    monkeypatch.setattr(sm.logger, "warning", lambda fmt, *a: warnings.append(fmt % a))
+    monkeypatch.setenv("SANDBOX_DNS_CHECK", "0")
+    fake.by_subcommand["inspect"] = (0, "true 1 0:0\n", "")
+
+    assert sm._ensure("alice") is None
+    assert warnings == []
+
+
+def test_write_log_is_left_at_the_default_mode(fake, monkeypatch, tmp_path: Path) -> None:
+    """sandbox は root なので 0644 のまま読める。chmod は呼ばない。"""
+    chmods: list[tuple] = []
+    monkeypatch.setattr(sm.os, "chmod", lambda *a, **k: chmods.append(a))
+
     rel = sm._write_log("alice", "id", "out", "err")
 
     assert rel is not None
+    assert chmods == []
     log = tmp_path / "container" / "persona" / "alice" / "workspace" / rel.split("/workspace/", 1)[1]
-    assert stat.S_IMODE(log.stat().st_mode) == 0o666
-    assert stat.S_IMODE(log.parent.stat().st_mode) == 0o777
+    assert log.is_file()
+    assert os.access(log, os.R_OK) and os.access(log.parent, os.R_OK)
