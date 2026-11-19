@@ -961,6 +961,8 @@ class SearchEngine:
         """Fallback for tag-only retrieval (empty text + tags): fetch via get_by_tags."""
         from nous.domain.shared.errors import SearchError
 
+        if self._memory_repo is None:
+            return Failure(SearchError("memory repo not configured"))
         result = self._memory_repo.get_by_tags(query.tags)
         if isinstance(result, Failure):
             return Failure(SearchError(str(result.error)))
@@ -1283,11 +1285,12 @@ class SearchEngine:
         if self._semantic is not None:
             self._semantic.persona = persona
 
-    def fetch_mot_thoughts(self, query_text: str, limit: int = 3) -> list[MotThought]:
+    def fetch_mot_thoughts(self, query_text: str, limit: int | None = None) -> list[MotThought]:
         """Fetch MoT high-confidence thoughts in a separate slot (F5).
 
         Never touches fact-recall scores — callers render these as their
         own prompt block. Corrosion + TTL are applied inside.
+        limit=None は Settings.mot_top_k に従う（既定 3）。
         """
         try:
             db = getattr(self._memory_repo, "_db", None)

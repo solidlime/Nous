@@ -129,7 +129,7 @@ class LLMConfig(BaseModel):
     base_url: str = "https://openrouter.ai/api/v1"
     # openai_compat のリクエストタイムアウト。低速プロバイダで詰まる筆頭（D2-4）。
     timeout_seconds: int = Field(default=60, gt=0)
-    # 画像入力可能判定のモデル名プレフィックス（openai_compat の _VISION_MODEL_PREFIXES）。
+    # 画像入力可能判定のモデル名リスト（旧 openai_compat._VISION_MODEL_PREFIXES の Settings 外部化。正はここ）。
     vision_models: list[str] = Field(
         default_factory=lambda: ["gpt-4o", "gpt-4-turbo", "gpt-4-vision", "o1", "o3", "o4-mini"]
     )
@@ -237,7 +237,7 @@ class IrodoriConfig(BaseModel):
     """音声生成失敗時のリトライ回数（voice/irodori.py の固定値 → 設定化）。"""
 
     health_timeout_seconds: int = 5
-    """GET /v1/models 疎通確認の httpx タイムアウト（irodori.py:150 と tts.py:729 の重複統一）。"""
+    """GET /v1/models 疎通確認の httpx タイムアウト（旧 irodori.py/tts.py の二重実装をこの1キーへ統一）。"""
 
     advanced: IrodoriAdvancedParams = IrodoriAdvancedParams()
 
