@@ -230,11 +230,20 @@ function closeMediaViewer() {
   }
 }
 
+/* #107: staged-attachment clear, owned here (single source for state +
+   badge area). Badges are class-rendered with no id, so wipe the area itself. */
+function clearStagedAttachments() {
+  CHAT.attachments = [];
+  var area = document.getElementById("chat-attachments");
+  if (area) area.textContent = "";
+}
+
 N.Chat.attachments = {
   upload: uploadAttachment,
   openViewer: openMediaViewer,
   closeViewer: closeMediaViewer,
   trigger: triggerFileAttach,
+  clear: clearStagedAttachments,
 };
 
 function triggerFileAttach() {

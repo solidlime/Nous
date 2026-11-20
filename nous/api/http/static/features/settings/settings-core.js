@@ -27,7 +27,6 @@ async function loadSettings() {
         S.settingsData = settingsData;
         S.settingsReloadStatus = status;
         N.Features.Settings.renderSettings(el, settingsData, status);
-        N.Core.updateLastTime();
     } catch (e) {
         console.error('settings load failed:', e);
         safeSetHTML(el, N.Components.skeleton.errorCard('Failed to load settings', function(){ loadSettings(); }));

@@ -263,12 +263,10 @@ async function loadMemories(page) {
         }
         if (!memories || memories.length === 0) {
             safeSetHTML(el, N.Components.skeleton.emptyState('file-text', '記憶がありません', '検索条件を変えるか、新しい記憶を作成してください。'));
-            N.Core.updateLastTime();
             return;
         }
         N.Features.Memories.renderMemoryList(el, memories, tagOptions, totalPages, totalCount, isSearch, allKnownTags);
         bindMemoryEvents();
-        N.Core.updateLastTime();
     } catch (e) {
         console.error('memories load failed:', e);
         safeSetHTML(el, N.Components.skeleton.errorCard('Failed to load memories', function(){ loadMemories(); }));

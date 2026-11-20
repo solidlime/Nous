@@ -147,22 +147,6 @@ function loadTab(tab) {
 
 
 /* =================================================================
-   LAST UPDATE TIMESTAMP
-   ================================================================= */
-function updateLastTime() {
-  const el = document.getElementById("last-update");
-  if (el)
-    el.textContent =
-      "Last: " +
-      new Date().toLocaleTimeString("ja-JP", {
-        hour: "2-digit",
-        minute: "2-digit",
-        second: "2-digit",
-      });
-}
-N.Core.updateLastTime = updateLastTime;
-
-/* =================================================================
    PAGE CLEANUP (beforeunload)
    ================================================================= */
 window.addEventListener("beforeunload", function cleanupBeforeUnload() {

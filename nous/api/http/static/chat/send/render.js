@@ -158,11 +158,7 @@ function removeTypingIndicator() {
 // Find chat log container / scroll to bottom
 // ------------------------------------------------------------------
 function findChatLogContainer() {
-  const chatLog = document.getElementById("chat-messages");
-  if (chatLog) {
-    return chatLog;
-  }
-  return document.getElementById("chat-log");
+  return document.getElementById("chat-messages");
 }
 
 function scrollToBottom(container) {

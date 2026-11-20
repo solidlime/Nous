@@ -113,9 +113,7 @@ function _attemptSend(payload) {
     inputEl.value = "";
     inputEl.style.height = "auto";
   }
-  CHAT.attachments = [];
-  var attArea = document.getElementById("chat-attachments");
-  if (attArea) attArea.textContent = "";
+  N.Chat.attachments.clear();
   N.Chat.ui.append("user", payload.display, new Date().toLocaleTimeString("ja-JP", {
     hour: "2-digit",
     minute: "2-digit",

@@ -57,7 +57,7 @@ beforeAll(() => {
     core: { debug: vi.fn(), loadCommitments: vi.fn() },
     equipment: { update: vi.fn() },
     tts: { play: vi.fn(), autoPlay: vi.fn() },
-    attachments: { openViewer: vi.fn() },
+    attachments: { openViewer: vi.fn(), clear: vi.fn() },
     showCharacterFlag: vi.fn(),
   };
   // chat-send.js split into send/*.js — load chunks in order
@@ -83,6 +83,7 @@ beforeEach(() => {
   N.Core.api.mockReset();
   N.Core.toast.mockClear();
   N.Chat.history.restore.mockClear();
+  N.Chat.attachments.clear.mockClear();
   // End any turn session leaked by a previous test (module-level _turn)
   N.Chat.cancel();
   vi.stubGlobal('EventSource', class {
@@ -131,6 +132,8 @@ describe('chat hub — send flow', () => {
     const body = JSON.parse(N.Core.api.mock.calls[0][1].body);
     expect(body.message).toBe('こんにちは');
     expect(body.session_id).toBe('main');
+    // sending clears staged attachments (send/pending.js)
+    expect(N.Chat.attachments.clear).toHaveBeenCalledTimes(1);
     // turn_started dedupes against the locally rendered user bubble
     es.emit('message', JSON.stringify({ type: 'turn_started', user_message: 'こんにちは', session_id: 'main' }), '1');
     expect(userBubbles().length).toBe(1);

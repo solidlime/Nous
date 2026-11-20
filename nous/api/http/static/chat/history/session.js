@@ -7,14 +7,11 @@
    guard), chat-attachments.js.
    ================================================================= */
 ;(function(N) {
-var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
-var showConfirm = C.showConfirm, showAlert = C.showAlert;
-var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
-var fmtStamp = C.fmtStamp;
-var safeMarkdown = N.Chat.markdown && N.Chat.markdown.render;
-var appendChatMessage = N.Chat.ui && N.Chat.ui.append;
 "use strict";
+var C = N.Core;
+var api = C.api, toast = C.toast, safeSetHTML = C.safeSetHTML;
+var showConfirm = C.showConfirm;
+var safeMarkdown = N.Chat.markdown && N.Chat.markdown.render;
 var S = window.S;
 
 var CHAT = N.Chat.state;
@@ -39,6 +36,10 @@ function resetToWelcome() {
   N.Core.refreshIcons();
 }
 
+/* #107: attachment clear runs at both exits — the empty-history early
+   return (badge-only state) and after a confirmed reset — never before
+   confirm, so cancelling keeps staged files (and their File refs) intact. */
+
 async function clearChatHistory() {
   // Abort any active stream before clearing
   if (CHAT.abortController) {
@@ -47,15 +48,14 @@ async function clearChatHistory() {
   }
   if (typeof _endSession === "function") _endSession("rollback");
   if (CHAT.messages.length === 0) {
+    N.Chat.attachments && N.Chat.attachments.clear();
     resetToWelcome();
     return;
   }
   const ok = await showConfirm("会話をリセットしますか？現在の会話履歴がすべて削除されます。");
-  if (!ok) return;
+  if (!ok) return; // cancel = no-op: staged files must survive
+  N.Chat.attachments && N.Chat.attachments.clear();
   CHAT.messages = [];
-  CHAT.attachments = [];
-  const badge = document.getElementById('chat-attach-badge');
-  if (badge) badge.style.display = 'none';
   resetToWelcome();
   // Delete server-side session (F3) - AWAITED, not fire-and-forget
   const oldSid = getChatSessionId();
