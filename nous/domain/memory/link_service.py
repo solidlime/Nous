@@ -74,7 +74,9 @@ class MemoryLinkService:
         if isinstance(episodic_time, str) and len(episodic_time) >= 10:
             return episodic_time[:10]
         created = getattr(memory, "created_at", None)
-        return created.strftime("%Y-%m-%d") if hasattr(created, "strftime") else ""
+        if created is None or not hasattr(created, "strftime"):
+            return ""
+        return str(created.strftime("%Y-%m-%d"))
 
     @classmethod
     def _temporal_bonus(cls, m1: Memory, m2: Memory) -> float:
