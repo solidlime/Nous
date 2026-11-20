@@ -67,8 +67,7 @@ function checkComfyUIHealth() {
   status.style.color = 'var(--text-secondary)';
   var controller = new AbortController();
   var timeoutId = setTimeout(function() { controller.abort(); }, 10000);
-  fetch('/api/image-gen/health?url=' + encodeURIComponent(url), { signal: controller.signal })
-    .then(function(r) { return r.json(); })
+  N.Core.api('/api/image-gen/health?url=' + encodeURIComponent(url), { signal: controller.signal, suppressErrorToast: true })
     .then(function(d) {
       clearTimeout(timeoutId);
       if (d.healthy) {

@@ -174,7 +174,7 @@ async function rollbackChat(fromId, shouldResend) {
     // TTSキャッシュ削除
     ttsCacheUrls.forEach(function(url) {
       var filename = url.split("/").pop();
-      fetch("/api/tts/" + encodeURIComponent(S.persona) + "/cache/" + encodeURIComponent(filename), { method: "DELETE" }).catch(function() {});
+      N.Core.api.rawFetch("/api/tts/" + encodeURIComponent(S.persona) + "/cache/" + encodeURIComponent(filename), { method: "DELETE" }).catch(function() {});
     });
     // DOM完全再構築: server response の remaining_messages から再描画
     const container = document.getElementById("chat-messages");
@@ -403,7 +403,7 @@ async function deleteChatMessage(msgId) {
     // TTSキャッシュ削除
     ttsCacheUrls.forEach(function(url) {
       var filename = url.split("/").pop();
-      fetch("/api/tts/" + encodeURIComponent(S.persona) + "/cache/" + encodeURIComponent(filename), { method: "DELETE" }).catch(function() {});
+      N.Core.api.rawFetch("/api/tts/" + encodeURIComponent(S.persona) + "/cache/" + encodeURIComponent(filename), { method: "DELETE" }).catch(function() {});
     });
     // DOM完全再構築
     container.textContent = "";

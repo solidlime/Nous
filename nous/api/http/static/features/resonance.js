@@ -90,8 +90,7 @@ window.addEventListener("resize", function() { resize(); reflowSpine(); });
 function loadGraph() {
   if (graphAbort) graphAbort.abort();
   graphAbort = new AbortController();
-  return fetch("/api/graph/" + encodeURIComponent(persona), { signal: graphAbort.signal })
-    .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error("graph " + r.status)); })
+  return N.Core.api("/api/graph/" + encodeURIComponent(persona), { signal: graphAbort.signal, suppressErrorToast: true })
     .then(function(d) {
       graph = {};
       adj = {};
@@ -292,10 +291,9 @@ function runSearch(q) {
   resetScene();
   setPhase("RECALL");
 
-  fetch("/api/search/" + encodeURIComponent(persona) +
+  N.Core.api("/api/search/" + encodeURIComponent(persona) +
         "?q=" + encodeURIComponent(q) + "&limit=" + SEARCH_LIMIT,
-        { signal: searchAbort.signal })
-    .then(function(r) { return r.ok ? r.json() : Promise.reject(new Error("search " + r.status)); })
+        { signal: searchAbort.signal, suppressErrorToast: true })
     .then(function(d) {
       if (token !== runToken) return;
       var hits = parseResults(d).slice(0, SEARCH_LIMIT);

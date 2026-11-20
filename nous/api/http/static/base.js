@@ -404,9 +404,9 @@ async function init() {
     var d = e.detail;
     if (!d) return;
     var known = C.toastAction || null;
-    if (typeof known === "function") {
+        if (typeof known === "function") {
       known(d.message || "API error", "error", "再試行", function() {
-        fetch(d.path, { method: "GET" }).then(function(r) {
+        N.Core.api.rawFetch(d.path).then(function(r) {
           if (r.ok) { C.toast("再試行成功", "success"); }
         }).catch(function() {});
       });

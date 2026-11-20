@@ -185,9 +185,7 @@ async function fetchEmotionAndApply() {
   try {
     // 既存ペルソナ状態API（dashboard集約の context.emotion）から感情を取得
     const p = encodeURIComponent(persona());
-    const res = await fetch(`/api/dashboard/${p}`);
-    if (!res.ok) return;
-    const json = await res.json();
+    const json = await window.Nous.Core.api(`/api/dashboard/${p}`, { suppressErrorToast: true });
     const raw = String((json.context && json.context.emotion) || 'neutral');
     applyEmotion(raw, 0.7);
   } catch (e) {
@@ -202,9 +200,7 @@ async function refreshModelList() {
   if (!select) return;
   try {
     const p = encodeURIComponent(persona());
-    const res = await fetch(`/api/chat/${p}/avatar/models`);
-    if (!res.ok) return;
-    const json = await res.json();
+    const json = await window.Nous.Core.api(`/api/chat/${p}/avatar/models`, { suppressErrorToast: true });
     const models = Array.isArray(json.models) ? json.models : [];
     const defaultName = (json && json.default) || 'sample.vrm';
     select.innerHTML = '';
@@ -245,7 +241,7 @@ async function onUpload(file) {
     const p = encodeURIComponent(persona());
     const form = new FormData();
     form.append('file', file, file.name);
-    const res = await fetch(`/api/chat/${p}/avatar/model`, { method: 'POST', body: form });
+    const res = await window.Nous.Core.api.rawFetch(`/api/chat/${p}/avatar/model`, { method: 'POST', body: form });
     if (!res.ok) {
       const err = await res.json().catch(() => ({}));
       window.Nous?.Core?.toast?.(err.error || 'アップロードに失敗しました', 'error');

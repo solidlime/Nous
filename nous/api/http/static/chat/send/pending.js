@@ -219,7 +219,7 @@ async function chatSend(retry) {
       const isText = TEXT_EXTS.has(ext);
       if (isText) {
         try {
-          const res = await fetch(att.url);
+          const res = await N.Core.api.rawFetch(att.url);
           const content = await res.text();
           attachParts.push(
             "\n\n--- 添付: " + att.filename + " ---\n" + content + "\n---",

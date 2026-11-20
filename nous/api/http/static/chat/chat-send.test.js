@@ -36,6 +36,9 @@ beforeAll(() => {
   N.Core.toast = vi.fn();
   // api is captured at module load — stub before chat-send.js loads
   N.Core.api = vi.fn();
+  // rawFetch passes through to the (fetchMock-stubbed) global fetch so
+  // attachment text reads keep working through the api wrapper (#123)
+  N.Core.api.rawFetch = vi.fn((path, opts) => fetch(path, opts));
   N.Chat = {
     state: { messages: [], streaming: false, attachments: [] },
     // 整形結果を検知できるよう、素のテキストとは違う HTML を返す

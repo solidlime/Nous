@@ -38,9 +38,12 @@
     <aside id="resonance-results" class="glass" aria-live="polite" aria-label="検索結果"></aside>
   </div>
 
-  <!-- #103: api_key 運用で 401 全滅しないように認証経路を足す（namespace.js が window.Nous を生やす）。
-       fetch は auth.js のグローバルラップが自動で拾い、SSE は resonance.js 側で sign する。 -->
+  <!-- #103: api_key 運用で 401 全全滅しないように認証経路を足す（namespace.js が window.Nous を生やす）。
+       #123: N.Core.api を使うので core/api.js も読む（namespace→api→auth の順。api() は auth.js の
+       グローバルラップが拾うため auth.js より先でよいが、defer の文書順で N.Core.api が定義される）。
+       SSE は resonance.js 側で sign する。 -->
   <script src="/static/core/namespace.js" defer></script>
+  <script src="/static/core/api.js" defer></script>
   <script src="/static/core/auth.js" defer></script>
   <script src="/static/features/resonance.js" defer></script>
 </body>

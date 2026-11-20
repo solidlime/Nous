@@ -37,6 +37,18 @@ beforeEach(async () => {
     <select id="chat-avatar-model-select"></select>
   `;
   window.S = { persona: 'p1' };
+  // chat-mode.js talks to the api wrapper (#123) — hand it a Core.api that
+  // delegates straight to the (fetchMock-stubbed) global fetch so the
+  // existing per-test fetch assertions keep observing the same calls.
+  window.Nous = window.Nous || {};
+  window.Nous.Core = window.Nous.Core || {};
+  window.Nous.Core.api = vi.fn(async (path) => {
+    // #123: the suppressErrorToast contract is asserted at the call site —
+    // see the nous:chat-sse done test (toHaveBeenCalledWith below) and core/api.test.js.
+    const r = await fetch(path);
+    return r.json();
+  });
+  window.Nous.Core.api.rawFetch = vi.fn((path, opts) => fetch(path, opts));
   chatMode = await import('./avatar/chat-mode.js');
 });
 
@@ -106,6 +118,7 @@ describe('nous:chat-sse CustomEvent consumption', () => {
     vi.stubGlobal('fetch', fetchMock);
     document.dispatchEvent(new CustomEvent('nous:chat-sse', { detail: { type: 'done', data: {} } }));
     await vi.waitFor(() => {
+      expect(window.Nous.Core.api).toHaveBeenCalledWith('/api/dashboard/p1', { suppressErrorToast: true });
       expect(fetchMock).toHaveBeenCalledWith('/api/dashboard/p1');
       expect(fakeAvatar.setExpression).toHaveBeenCalledWith('happy', 0.7);
     });
