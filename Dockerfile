@@ -8,7 +8,7 @@ WORKDIR /build
 # For ARM64, install gcc/g++ if sudachipy fails to build:
 #   RUN apt-get update && apt-get install -y --no-install-recommends gcc g++
 
-# Copy requirements (production-only — dev deps are in requirements-dev.txt)
+# Copy requirements (production-only — dev tools live in pyproject.toml [dependency-groups].dev)
 COPY requirements-prod.txt ./
 
 # Install Python dependencies (ONNX Runtime replaces PyTorch — no torch needed)

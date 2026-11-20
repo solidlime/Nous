@@ -96,16 +96,15 @@ curl -s http://localhost:26262/health
 
 ### Compose を使わずに動かす
 
-Python 3.12 以上と、どこかで動いている Qdrant が必要です（Qdrant だけ Docker で立てるのが早いです）。
+Python 3.12 以上と [uv](https://docs.astral.sh/uv/)、どこかで動いている Qdrant が必要です（Qdrant だけ Docker で立てるのが早いです）。依存は全て `pyproject.toml` で宣言されており、`uv sync --all-extras` で本番 + 開発依存が入ります（テストは `uv run pytest`）。
 
 ```bash
-python -m venv .venv && . .venv/bin/activate
-pip install -e .
+uv sync --all-extras
 docker run -d -p 6333:6333 -v "$PWD/qdrant:/qdrant/storage" qdrant/qdrant:v1.19.0
 
 export NOUS_DATA_ROOT="$PWD/data"
 export NOUS_QDRANT__URL="http://localhost:6333"
-python -m nous.main
+uv run python -m nous.main
 ```
 
 `NOUS_SERVER__PORT` で待ち受けポートを変えられます（既定 26262）。
@@ -329,7 +328,7 @@ python -m nous.cli auto-import --import-dir ./incoming
 make lint          # ruff check + format check
 make test          # ユニットテスト
 make test-all      # 契約テストを除く全テスト
-make typecheck     # mypy nous/
+make typecheck     # mypy + baseline フィルタ（新規違反ゼロで通る）
 make contract      # コンシューマ契約テスト
 make coverage      # カバレッジ計測
 make docs-drift    # 実装と docs/ の突き合わせ

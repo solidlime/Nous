@@ -100,3 +100,17 @@ def test_doc_reference_checks_detect_breakage(tmp_path, monkeypatch):
 def test_current_repo_has_no_live_doc_drift():
     drift = _load("check_docs_drift")
     assert drift.check_doc_references()[0] == []
+
+
+def test_requirements_prod_check_detects_drift(tmp_path, monkeypatch):
+    drift = _load("check_docs_drift")
+    (tmp_path / "pyproject.toml").write_text('[project]\ndependencies = ["a>=1", "z>=9"]\n', encoding="utf-8")
+    (tmp_path / "requirements-prod.txt").write_text("a>=1\nb>=2  # not declared\n", encoding="utf-8")
+    monkeypatch.setattr(drift, "REPO_ROOT", tmp_path)
+
+    errors = drift.check_requirements_prod()
+
+    assert sorted(errors) == [
+        "requirements-prod.txt missing: z>=9",
+        "requirements-prod.txt not in pyproject: b>=2",
+    ]

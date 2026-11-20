@@ -94,10 +94,8 @@ class SQLiteBlockMixin:
         """Return ``{"me": {...}, "user": {...}}`` for the blocks that exist."""
         listed = self.list_blocks(persona)
         if not listed.is_ok:
-            return Failure(listed.error)  # type: ignore[union-attr]
-        return Success(
-            {row["block_name"]: row for row in listed.value if row["block_name"] in PROFILE_BLOCK_NAMES}  # type: ignore[union-attr]
-        )
+            return Failure(listed.error)
+        return Success({row["block_name"]: row for row in listed.value if row["block_name"] in PROFILE_BLOCK_NAMES})
 
     def upsert_profile_block(self, persona: str, name: str, content: str) -> Result[None, RepositoryError]:
         """Upsert a profile block (``block_type='profile'``, 全体リライト型)."""

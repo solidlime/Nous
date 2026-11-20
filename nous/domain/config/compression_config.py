@@ -32,9 +32,7 @@ class CompressionConfig(BaseModel):
     summarize_message_max_chars: int = Field(
         default=500, ge=50, le=2000, description="要約プロンプトに載せる1メッセージの最大文字数。"
     )
-    summarize_target_chars: int = Field(
-        default=300, ge=50, le=2000, description="LLMに依頼する要約の目標文字数。"
-    )
+    summarize_target_chars: int = Field(default=300, ge=50, le=2000, description="LLMに依頼する要約の目標文字数。")
 
     @field_validator("context_compression_threshold")
     @classmethod

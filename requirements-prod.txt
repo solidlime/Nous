@@ -1,8 +1,12 @@
 # ==========================================
-# Nous v3 — 本番用依存関係
+# Nous — 本番イメージ用依存関係（Docker ビルド専用）
 # ==========================================
-# Dockerfile はこのファイルを使用。
-# 開発/テスト用依存は requirements-dev.txt を参照。
+# 【真実の源は pyproject.toml [project.dependencies]】
+# 依存を追加/変更するときは pyproject.toml を先に更新し、
+# このファイルに同じ内容を転記すること（uv.lock もセットで更新）。
+# 開発/テスト用依存は pyproject.toml [dependency-groups] dev に入れてある
+# （ローカルも CI も `uv sync --all-extras` で入る）。
+# Dockerfile はこのファイルを使い続ける（SBOM は requirements-prod.txt 前提）。
 
 # Embedding & Reranker (ONNX Runtime — PyTorch-free)
 onnxruntime>=1.18.0,<2
@@ -19,8 +23,6 @@ sentencepiece>=0.1.99,<1  # Required for cl-nagoya/ruri-v3-30m tokenizer
 mcp>=2.0.0,<3
 fastapi>=0.139.0,<1
 uvicorn>=0.51.0,<1
-
-# Async SQLite
 
 # Data Validation & Settings
 pydantic>=2.0.0,<3.0.0
@@ -39,9 +41,14 @@ numpy>=1.24.0,<3
 # openai 2.x と 3.x は http_client 引数周りの型定義が異なる。全文検証済み統一版は 2.54.0 (mypy-baseline もこれで生成)。
 openai>=1.50.0,<3
 httpx>=0.28,<0.29  # openai SDK 依存。2.54.0 と共に型検証済。
+httpx2>=2.16.2,<3  # direct import in nous/infrastructure/mcp_client/http_client.py (Docker image needs it for MCP client)
 
 # Japanese NER (entity extraction)
 # sudachidict_core is no longer installed via pip — downloaded at runtime to NOUS_DATA_ROOT/sudachi/
 sudachipy>=0.6.0,<0.7.0
 
-# PDF/Document Parsing (read_pdf tool)
+# Language Detection (function-level import; falls back to "ja" if missing)
+langdetect>=1.0.9
+
+# NOTE: tiktoken is intentionally NOT declared anywhere (optional) —
+# token_counter.py falls back to a heuristic count when the import fails.

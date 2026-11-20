@@ -56,6 +56,10 @@ class PersonaRepository(Protocol):
         self, persona: str, limit: int = 20
     ) -> Result[list[BodyStateRecord], RepositoryError]: ...
 
+    def get_body_state_history_by_days(
+        self, persona: str, days: int = 7
+    ) -> Result[list[BodyStateRecord], RepositoryError]: ...
+
     # ------------------------------------------------------------------
     # User / Persona info
     # ------------------------------------------------------------------

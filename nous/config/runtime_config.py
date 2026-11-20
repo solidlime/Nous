@@ -129,7 +129,10 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "topics_per_cycle": {"hot_reload": True, "description": "Topics compiled per cycle"},
         "journal_enabled": {"hot_reload": True, "description": "Enable journal (diary) generation"},
         "journal_max_sources": {"hot_reload": True, "description": "Max sources per journal page"},
-        "journal_activity_max_events": {"hot_reload": True, "description": "Max session events per type for activity material"},
+        "journal_activity_max_events": {
+            "hot_reload": True,
+            "description": "Max session events per type for activity material",
+        },
         "journal_activity_chars": {"hot_reload": True, "description": "Max total chars for activity material"},
         "journal_apply_state": {"hot_reload": True, "description": "Reflect journal events to persona state"},
         "journal_include_activity": {"hot_reload": True, "description": "Include persona activities in journal"},
@@ -137,7 +140,10 @@ SETTINGS_META: dict[str, dict[str, dict]] = {
         "journal_tomorrow_max": {"hot_reload": True, "description": "Max tomorrow tasks"},
         "life_enabled": {"hot_reload": True, "description": "Enable persona life simulation (non-chat living)"},
         "life_events_per_day": {"hot_reload": True, "description": "Life events generated per day"},
-        "conflict_check_enabled": {"hot_reload": True, "description": "Request conflicts/questions in compilation prompt"},
+        "conflict_check_enabled": {
+            "hot_reload": True,
+            "description": "Request conflicts/questions in compilation prompt",
+        },
         "max_open_questions": {"hot_reload": True, "description": "Max unresolved open questions"},
         "research_enabled": {"hot_reload": True, "description": "Enable research during compilation"},
         "max_research_per_cycle": {"hot_reload": True, "description": "Questions researched per cycle"},
@@ -293,6 +299,9 @@ class RuntimeConfigManager:
 
     _instance: RuntimeConfigManager | None = None
     _lock = threading.Lock()
+    # クラス属性として宣言しないと mypy が __init__ 内の _initialized 参照の型を決定できない
+    # （__new__ での生代入を mypy は辿れないため has-type エラーになる）
+    _initialized: bool = False
 
     def __new__(cls) -> RuntimeConfigManager:
         with cls._lock:
@@ -511,9 +520,7 @@ class RuntimeConfigManager:
                     applied += 1
                 except ValidationError as exc:
                     skipped += 1
-                    logger.warning(
-                        "Skipped invalid config override %s.%s=%r: %s", category, key, value, exc
-                    )
+                    logger.warning("Skipped invalid config override %s.%s=%r: %s", category, key, value, exc)
         if applied or skipped:
             logger.info("Applied %d config override(s) to Settings (%d skipped)", applied, skipped)
         return applied, skipped

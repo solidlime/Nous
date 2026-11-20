@@ -1,36 +1,38 @@
-.PHONY: lint test test-all typecheck coverage coverage-fail bandit ci docs-drift search-quality-smoke
+.PHONY: lint test test-all contract typecheck coverage coverage-fail bandit ci docs-sync docs-drift search-quality-smoke
 
 lint:
-	ruff check . && ruff format --check .
+	uv run ruff check . && uv run ruff format --check .
 
 test:
-	pytest tests/unit/ -q
+	uv run pytest tests/unit/ -q
 
 test-all:
-	pytest -q --ignore=tests/contracts
+	uv run pytest -q --ignore=tests/contracts
 
 contract:
-	pytest tests/contracts/consumer -q
+	uv run --extra contract pytest tests/contracts/consumer -q
 
 docs-sync:
-	! grep -rn "run_tests\.py" CLAUDE.md README.md docs/http_api_reference.md docs/architecture.md
+	@grep -rn "run_tests\.py" AGENTS.md README.md docs/http_api_reference.md docs/architecture.md; test $$? -eq 1
 
 docs-drift:
-	python scripts/check_docs_drift.py
+	uv run python scripts/check_docs_drift.py
 
 search-quality-smoke:
-	python scripts/search_quality_smoke.py --out output/search_quality_smoke
+	uv run python scripts/search_quality_smoke.py --out output/search_quality_smoke
 
 typecheck:
-	mypy nous/
+	f=$$(mktemp); uv run mypy nous/ > $$f 2>&1; rc=$$?; \
+	  if [ $$rc -gt 1 ]; then cat $$f; rm -f $$f; exit 1; fi; \
+	  uv run mypy-baseline filter < $$f; r=$$?; rm -f $$f; exit $$r
 
 coverage:
-	pytest --cov=nous --cov-report=term
+	uv run pytest --cov=nous --cov-report=term --ignore=tests/contracts
 
 coverage-fail:
-	pytest --cov=nous --cov-fail-under=70 --cov-report=term
+	uv run pytest --cov=nous --cov-fail-under=70 --cov-report=term --ignore=tests/contracts
 
 bandit:
-	bandit -r nous/ -ll
+	uv run bandit -r nous/ -ll
 
 ci: lint typecheck test-all contract bandit coverage-fail docs-sync docs-drift search-quality-smoke

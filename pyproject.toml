@@ -4,10 +4,46 @@ version = "4.0.1"
 description = "Persistent memory server for LLM agents via MCP"
 requires-python = ">=3.12"
 dependencies = [
+    # Embedding & Reranker (ONNX Runtime — PyTorch-free)
+    "onnxruntime>=1.18.0,<2",
+    "tokenizers>=0.21.0,<1",
+    "huggingface_hub>=0.20,<2",
+    "sentencepiece>=0.1.99,<1",  # cl-nagoya/ruri-v3-30m tokenizer 用
+
+    # MCP Server Framework (mcp>=2: v2 MCPServer API. FastMCP renamed to MCPServer)
+    # NOTE: server code imports `mcp` (MCPServer) only. External MCP clients
+    # connect via the MCP protocol (HTTP/stdio) and do not require the fastmcp
+    # package (arch decision 2026-09-06: fastmcp 3.4.x is unresolvable with
+    # mcp>=2 via its fastmcp-slim[client,server] -> mcp<2.0 chain, and is
+    # imported nowhere).
+    "mcp>=2.0.0,<3",
+    "fastapi>=0.139.0,<1",
+    "uvicorn>=0.51.0,<1",
+
+    # Data Validation & Settings
+    "pydantic>=2.0.0,<3.0.0",
+    "pydantic-settings>=2.0.0,<3",
+
+    # Timezone database (required on Windows — no system tzdb; ignored on Linux)
+    "tzdata>=2024.1,<2030",
+
+    # Vector Store
+    "qdrant-client>=1.8.2,<2",
+
+    # Numerical
+    "numpy>=1.24.0,<3",
+
+    # LLM Providers (Chat feature — all connections via OpenAI-compatible API)
+    # openai 2.x と 3.x は http_client 引数周りの型定義が異なる。全文検証済み統一版は 2.54.0 (mypy-baseline もこれで生成)。
+    "openai>=1.50.0,<3",
+    "httpx>=0.28,<0.29",  # openai SDK 依存。2.54.0 と共に型検証済。
+    "httpx2>=2.16.2,<3",  # direct import in nous/infrastructure/mcp_client/http_client.py
+
+    # Japanese NER (entity extraction)
+    # sudachidict_core は pip で入れない — 実行時に NOUS_DATA_ROOT/sudachi/ へ DL
     "sudachipy>=0.6.0,<0.7.0",
-    "sudachidict_core>=20240716",
-    "fastapi>=0.139.0",
-    "uvicorn>=0.51.0",
+
+    # Language detection (nous/domain/language.py)
     "langdetect>=1.0.9",
 ]
 
@@ -17,10 +53,28 @@ contract = [
     "requests>=2.31.0",
 ]
 
-[tool.setuptools]
-# flat-layout auto-discovery が data/ と prototype/ を拾って
-# `pip install ".[contract]"` が失敗するため、配布パッケージを明示する
-packages = ["nous"]
+[dependency-groups]
+dev = [
+    # Testing
+    "pytest>=8.0.0",
+    "pytest-asyncio>=0.24.0",
+    "pytest-cov>=5.0.0",
+    "pytest-timeout>=2.3.0",
+
+    # E2E Testing (Playwright)
+    "playwright>=1.40.0",
+
+    # Benchmarking
+    "pytest-benchmark>=4.0",
+
+    # Static Analysis & Linting
+    # NOTE: exact pins — CI とローカルのツールドリフトを防ぐ。
+    # バージョンを上げるときは mypy-baseline.txt の再生成もセットで行うこと。
+    "ruff==0.16.4",
+    "mypy==2.3.1",
+    "mypy-baseline==0.7.4",
+    "bandit==1.9.4",
+]
 
 [tool.ruff]
 target-version = "py312"
@@ -46,8 +100,6 @@ markers = [
     "unit: Unit tests (no external dependencies)",
     "integration: Integration tests (requires DB)",
     "slow: Slow tests (embedding model loading etc)",
-    "benchmark: Performance benchmark tests",
-    "ui: Visual regression tests (requires running server & Playwright)",
     "contract: Contract tests using Pact (consumer-driven contract testing)",
     "provider_verify: Provider verification tests (requires running server)",
 ]
@@ -55,12 +107,6 @@ markers = [
 [tool.coverage.run]
 source = ["nous"]
 omit = ["tests/*", "*/migration/*"]
-
-[tool.mypy-baseline]
-baseline_path = "mypy-baseline.txt"
-# ベースラインより減った分（fixed）で落とさない。ゲートは「new == 0」だけ。
-# これを false のままだと、型エラーを直す PR がベースライン同期なしで赤になる。
-allow_unsynced = true
 
 [tool.coverage.report]
 show_missing = true
@@ -77,3 +123,9 @@ no_implicit_optional = true
 strict_optional = true
 ignore_missing_imports = true
 exclude = ["tests/", "migrations/"]
+
+[tool.mypy-baseline]
+baseline_path = "mypy-baseline.txt"
+# ベースラインより減った分（fixed）で落とさない。ゲートは「new == 0」だけ。
+# これを false のままだと、型エラーを直す PR がベースライン同期なしで赤になる。
+allow_unsynced = true

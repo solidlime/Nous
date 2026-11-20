@@ -194,7 +194,7 @@ class SQLiteEquipmentRepository(SQLiteRepository):
         """Get current equipment state for all slots."""
         try:
             rows = self._db.execute("SELECT slot, item_name FROM equipment_slots").fetchall()
-            equipment = {slot: None for slot in VALID_SLOTS}
+            equipment: dict[str, str | None] = {slot: None for slot in VALID_SLOTS}
             for row in rows:
                 equipment[row["slot"]] = row["item_name"]
             return Success(equipment)

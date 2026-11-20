@@ -338,9 +338,7 @@ def test_settings_meta_keys_exist_in_settings(tmp_data_dir: Path):
         for key in keys:
             # general.persona_dir 等の派生 property は model_fields に載らないが、
             # RCM の _get_settings_value は getattr で読むため実効がある → 許容。
-            assert key in fields or hasattr(obj, key), (
-                f"SETTINGS_META key '{category}.{key}' has no Settings field"
-            )
+            assert key in fields or hasattr(obj, key), f"SETTINGS_META key '{category}.{key}' has no Settings field"
 
 
 def test_get_all_masked_values(tmp_data_dir: Path):

@@ -28,9 +28,9 @@ class InMemoryEquipmentRepository:
         self._slots: dict[str, str | None] = {}
         self._history: list[EquipmentHistory] = []
 
-    def add_item(self, item: Item) -> Result[Item, RepositoryError]:
+    def add_item(self, item: Item) -> Result[int, RepositoryError]:
         self._items[item.name] = item
-        return Success(item)
+        return Success(len(self._items))
 
     def find_item_by_name(self, name: str) -> Result[Item | None, RepositoryError]:
         return Success(self._items.get(name))
@@ -107,6 +107,7 @@ class TestAddItem:
     def test_add_new_item(self, service: EquipmentService, repo: InMemoryEquipmentRepository):
         result = service.add_item("白いドレス", category="clothing")
         assert result.is_ok
+        assert result.value.name == "白いドレス"
         assert "白いドレス" in repo._items
 
     def test_add_increments_quantity(self, service: EquipmentService, repo: InMemoryEquipmentRepository):

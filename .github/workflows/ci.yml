@@ -31,16 +31,28 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install tools (pinned via requirements-dev.txt)
-        run: pip install -r requirements-dev.txt
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          # setup-python が置いた 3.12 を使う（managed python の DL を防ぐ）
+          python-preference: only-system
+
+      # pyproject.toml と uv.lock の乖離を機械検�出（sync 前に落とす）
+      - name: Check uv.lock is up to date
+        run: uv lock --check
+
+      # pyproject.toml [project] + [dependency-groups] dev から同期
+      # （CI とローカルで同じコマンド: uv sync --all-extras）
+      - name: Sync dependencies
+        run: uv sync --all-extras --frozen
 
       # ruff check — lint rules (E, F, W, I, N, UP, B, A, SIM, TCH)
       - name: Run ruff check
-        run: ruff check .
+        run: uv run ruff check .
 
       # ruff format — formatting compliance (dry-run)
       - name: Run ruff format check
-        run: ruff format --check .
+        run: uv run ruff format --check .
 
   # ------------------------------------------------------------------
   # Test: unit tests with pytest
@@ -58,15 +70,18 @@ jobs:
         with:
           python-version: "3.12"
 
-      # Install both prod and dev dependencies
-      - name: Install dependencies
-        run: |
-          pip install -r requirements-prod.txt -r requirements-dev.txt
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-preference: only-system
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --frozen
 
       # Qdrant client is needed even for unit tests (some fixtures import it)
       # Unit tests should not require a running Qdrant instance
       - name: Run unit tests
-        run: pytest tests/unit/ -q --timeout=60
+        run: uv run pytest tests/unit/ -q --timeout=60
 
   # ------------------------------------------------------------------
   # Typecheck: mypy static analysis
@@ -84,18 +99,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements-prod.txt -r requirements-dev.txt
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-preference: only-system
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --frozen
 
       - name: Run mypy (delta-gated against mypy-baseline.txt)
-        shell: bash
-        # GH Actions forces `-eo pipefail` on bash, so pipelines would propagate
-        # mypy's exit 1 (baseline errors) even when filter reports new=0.
-        # Route output through a file; the gate is filter's exit code (new errors only).
-        run: |
-          mypy nous/ > /tmp/mypy_out.txt || true
-          mypy-baseline filter < /tmp/mypy_out.txt
+        run: make typecheck
 
   # ------------------------------------------------------------------
   # Integration tests: ASGI transport based integration tests
@@ -114,12 +127,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements-prod.txt -r requirements-dev.txt
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-preference: only-system
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --frozen
 
       - name: Run integration tests
-        run: pytest tests/integration/ -q --timeout=60
+        run: uv run pytest tests/integration/ -q --timeout=60
 
   # ------------------------------------------------------------------
   # Coverage: test coverage with threshold enforcement
@@ -138,13 +155,18 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements-prod.txt -r requirements-dev.txt
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-preference: only-system
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --frozen
 
       - name: Run coverage
-        # tests/contracts requires the optional [contract] extra (pact-python), not installed here
-        run: pytest --cov=nous --cov-fail-under=70 --cov-report=term --ignore=tests/contracts
+        # tests/contracts runs in the dedicated contract job (--all-extras incl. pact-python);
+        # skipped here to keep this job's runtime and coverage surface focused
+        run: uv run pytest --cov=nous --cov-fail-under=70 --cov-report=term --ignore=tests/contracts
 
   # ------------------------------------------------------------------
   # Contract: Pact consumer tests (needs [contract] extra, no server required)
@@ -164,13 +186,17 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies with contract extra
-        run: |
-          pip install -r requirements-prod.txt -r requirements-dev.txt
-          pip install ".[contract]"
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-preference: only-system
+
+      # --all-extras で [contract] extra も入る — ローカルと同コマンド
+      - name: Sync dependencies
+        run: uv sync --all-extras --frozen
 
       - name: Run consumer contract tests
-        run: pytest tests/contracts/consumer -q --timeout=60
+        run: uv run pytest tests/contracts/consumer -q --timeout=60
 
   # ------------------------------------------------------------------
   # Frontend: vitest + JS syntax lint (stylelint runs via lint:css locally;
@@ -223,11 +249,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install tools (pinned via requirements-dev.txt)
-        run: pip install -r requirements-dev.txt
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-preference: only-system
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --frozen
 
       - name: Run bandit
-        run: bandit -r nous/ -ll
+        run: uv run bandit -r nous/ -ll
 
   # ------------------------------------------------------------------
   # Search quality smoke: fixed small corpus + threshold gate on the
@@ -248,12 +279,16 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies
-        run: |
-          pip install -r requirements-prod.txt -r requirements-dev.txt
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-preference: only-system
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --frozen
 
       - name: Run search quality smoke (offline keyword path)
-        run: python scripts/search_quality_smoke.py --out output/search_quality_smoke
+        run: uv run python scripts/search_quality_smoke.py --out output/search_quality_smoke
 
       - name: Upload search quality artifact
         if: always()
@@ -283,8 +318,13 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install dependencies (Settings import)
-        run: pip install -r requirements-prod.txt
+      - name: Install uv
+        uses: astral-sh/setup-uv@v6
+        with:
+          python-preference: only-system
+
+      - name: Sync dependencies
+        run: uv sync --all-extras --frozen
 
       - name: Check docs/implementation drift
-        run: python scripts/check_docs_drift.py
+        run: uv run python scripts/check_docs_drift.py

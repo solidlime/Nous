@@ -243,9 +243,7 @@ class TestIntervalFromSettings:
     def test_interval_is_reread_every_cycle(self, monkeypatch) -> None:
         """設定は起動時コピーではなく毎サイクル読む（変更が次サイクルに反映される）。"""
         workers_cfg = SimpleNamespace(proactive_interval_seconds=1800)
-        monkeypatch.setattr(
-            proactive_worker, "get_settings", lambda: SimpleNamespace(workers=workers_cfg)
-        )
+        monkeypatch.setattr(proactive_worker, "get_settings", lambda: SimpleNamespace(workers=workers_cfg))
 
         worker = proactive_worker.ProactiveWorker()
         waits: list[float] = []

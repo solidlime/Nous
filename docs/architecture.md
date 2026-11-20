@@ -232,4 +232,4 @@ MCP として公開しないチャット組み込みツール（`move` / `invoke
 
 ### ドリフト検知
 
-- `scripts/check_docs_drift.py`（`make docs-drift`）: `@_tool("...")` ↔ `docs/architecture.md` の MCP ツール表、`custom_route(...)` ↔ `docs/http_api_reference.md` のエンドポイント、`Settings` ↔ ドキュメントの `NOUS_*` を突き合わせる。ドキュメントにあるが実装に無いものは error、実装にあるが未記載の HTTP は `scripts/docs_drift_baseline.json` に既知分を記録し新規だけ error。
+- `scripts/check_docs_drift.py`（`make docs-drift`）: `@_tool("...")` ↔ `docs/architecture.md` の MCP ツール表、`custom_route(...)` ↔ `docs/http_api_reference.md` のエンドポイント、`Settings` ↔ ドキュメントの `NOUS_*` を突き合わせる。ドキュメントにあるが実装に無いものは error、実装にあるが未記載の HTTP は `scripts/docs_drift_baseline.json` に既知分を記録し新規だけ error。加えて `requirements-prod.txt` が `pyproject.toml` の `[project.dependencies]` の転記と完全一致するか（双方向、行末コメントは除外）も検査する。

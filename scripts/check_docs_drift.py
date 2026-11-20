@@ -111,8 +111,8 @@ def settings_env_keys() -> set[str]:
         sys.path.insert(0, str(REPO_ROOT))
     try:
         from nous.config.settings import Settings
-    except ImportError as e:  # pragma: no cover - CI installs requirements-prod
-        raise SystemExit(f"cannot import Settings (install requirements-prod): {e}") from e
+    except ImportError as e:  # pragma: no cover - CI syncs deps via uv (pyproject.toml)
+        raise SystemExit(f"cannot import Settings (run: uv sync --all-extras): {e}") from e
     from pydantic import BaseModel
 
     keys = {"NOUS_DATA_ROOT"}  # main.py / fts_tokenize.py が Settings より先に読む
@@ -236,6 +236,32 @@ def check_doc_references() -> tuple[list[str], int, int]:
     return errors, checked_refs, checked_links
 
 
+def check_requirements_prod() -> list[str]:
+    """pyproject [project.dependencies] と requirements-prod.txt の突き合わせ.
+
+    requirements-prod.txt は手作業転記のため drift が起きうる唯一の場所。
+    仕様文字列完全一致で比較する（転記ミスこそ検出したい）。
+    """
+    import tomllib
+
+    req = REPO_ROOT / "requirements-prod.txt"
+    if not req.exists():
+        return ["requirements-prod.txt not found"]
+    with (REPO_ROOT / "pyproject.toml").open("rb") as f:
+        declared = set(tomllib.load(f)["project"]["dependencies"])
+    actual: set[str] = set()
+    for line in req.read_text(encoding="utf-8").splitlines():
+        line = line.split(" #")[0].strip()  # end-of-line comments stripped for comparison
+        if line and not line.startswith("#"):
+            actual.add(line)
+    errors: list[str] = []
+    if missing := sorted(declared - actual):
+        errors.append("requirements-prod.txt missing: " + ", ".join(missing))
+    if extra := sorted(actual - declared):
+        errors.append("requirements-prod.txt not in pyproject: " + ", ".join(extra))
+    return errors
+
+
 def main() -> None:
     ap = argparse.ArgumentParser(description="Docs / 実装ドリフト検知")
     ap.add_argument("--verbose", action="store_true", help="既知の未記載エンドポイントも表示")
@@ -285,6 +311,9 @@ def main() -> None:
     docs = live_docs()
     doc_errors, doc_refs, doc_links = check_doc_references()
     errors.extend(doc_errors)
+
+    # 5. requirements-prod.txt = pyproject [project.dependencies] の転記であること
+    errors.extend(check_requirements_prod())
 
     if args.verbose:
         print(f"live docs: {len(docs)}")

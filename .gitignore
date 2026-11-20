@@ -11,9 +11,6 @@ venv*/
 env/
 ENV/
 
-# uv lockfile (this project uses requirements.txt)
-uv.lock
-
 # IDE
 .vscode/
 .idea/

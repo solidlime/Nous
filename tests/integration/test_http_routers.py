@@ -24,7 +24,7 @@ import pytest
 
 from nous.application.use_cases import AppContextRegistry
 from nous.config.runtime_config import RuntimeConfigManager
-from nous.config.settings import Settings
+from nous.config.settings import get_settings
 from nous.main import create_app
 
 # ---------------------------------------------------------------------------
@@ -340,7 +340,7 @@ class TestPersonaCRUD:
         with patch("nous.application.use_cases.AppContext", side_effect=RuntimeError("boom")):
             resp = await client.post("/api/personas", json={"name": "half_born"})
         assert resp.status_code == 500
-        assert not (Path(Settings().persona_dir) / "half_born").exists()
+        assert not (Path(get_settings().persona_dir) / "half_born").exists()
 
     async def test_cleanup_runs_inside_creating_interval(self, client):
         """後始末の rmtree は作成区間の内側（他要求の get() を締め出したまま消す）。"""
@@ -373,7 +373,7 @@ class TestPersonaCRUD:
 
     async def test_delete_during_create_returns_409(self, client):
         """作成区間中の delete は 409（後始末 rmtree のディレクトリを消させない）。"""
-        persona_dir = Path(Settings().persona_dir) / "busy_create3"
+        persona_dir = Path(get_settings().persona_dir) / "busy_create3"
         persona_dir.mkdir(parents=True, exist_ok=True)
         try:
             with AppContextRegistry.creating("busy_create3"):

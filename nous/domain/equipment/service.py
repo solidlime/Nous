@@ -2,6 +2,9 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
+if TYPE_CHECKING:
+    from collections.abc import Mapping
+
 from nous.domain.equipment.entities import (
     VALID_SLOTS,
     EquipmentHistory,
@@ -86,8 +89,8 @@ class EquipmentService:
             created_at=now,
             updated_at=now,
         )
-        result = self._repo.add_item(item)
-        if isinstance(result, Success):
+        add_result = self._repo.add_item(item)
+        if isinstance(add_result, Success):
             self._repo.add_history(
                 EquipmentHistory(
                     action="add",
@@ -96,7 +99,8 @@ class EquipmentService:
                     details=f"new item (quantity: {quantity})",
                 )
             )
-        return result
+            return Success(item)
+        return Failure(add_result.error)
 
     def remove_item(self, name: str) -> Result[None, DomainError]:
         """Remove an item and unequip from any slot."""
@@ -148,7 +152,7 @@ class EquipmentService:
             )
         return result
 
-    def build_appearance(self, equipment: dict[str, str]) -> str:
+    def build_appearance(self, equipment: Mapping[str, str | None]) -> str:
         """Synthesize an appearance string from equipment slots.
 
         Comma-joined, ordered by VALID_SLOTS. Uses each item's ``visual_desc``

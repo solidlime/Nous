@@ -80,7 +80,10 @@ class MemoryEvolutionService:
             from nous.domain.search.engine import SearchQuery
 
             # Semantically search for similar existing memories
-            similar = await self._search_engine.search(
+            engine = self._search_engine
+            if engine is None:
+                return  # engine not ready — best-effort enrichment only
+            similar = await engine.search(
                 SearchQuery(
                     text=content,
                     top_k=max_related,
@@ -93,14 +96,14 @@ class MemoryEvolutionService:
 
             # --- audit M1: interference (+1 on the *existing* side) ---
             # Reuses the search above — no second semantic search per write.
-            similar_items = similar.value  # type: ignore[union-attr]
+            similar_items = similar.value
             self._note_interference(similar_items, new_memory_key, persona)
 
             # --- HiMem-style 3-op contradiction classification ---
             invalidated_keys: set[str] = set()
 
             if self._enricher is not None:
-                candidates = [
+                candidates: list[dict[str, str | float]] = [
                     {
                         "key": r.memory.key,
                         "content": r.memory.content,
@@ -142,8 +145,8 @@ class MemoryEvolutionService:
                             if updates:
                                 # 事前に既存記憶を取得し、更新前スナップショットを保存
                                 existing_mem = self._repo.find_by_key(result.existing_memory_key)
-                                if existing_mem.is_ok and existing_mem.value is not None:  # type: ignore[union-attr]
-                                    old = existing_mem.value  # type: ignore[union-attr]
+                                if existing_mem.is_ok and existing_mem.value is not None:
+                                    old = existing_mem.value
                                     snapshot = {
                                         "content": old.content,
                                         "importance": old.importance,
@@ -238,9 +241,9 @@ class MemoryEvolutionService:
         clamped to [0, 1]. Never blocks the caller and never feeds ranking."""
         try:
             res = self._repo.find_by_key(memory_key)
-            if not res.is_ok or res.value is None:  # type: ignore[union-attr]
+            if not res.is_ok or res.value is None:
                 return
-            current = res.value.confidence  # type: ignore[union-attr]
+            current = res.value.confidence
             new_value = min(1.0, max(0.0, current * factor + delta))
             if new_value != current:
                 self._repo.update(memory_key, confidence=new_value)
@@ -259,8 +262,8 @@ class MemoryEvolutionService:
             new_res = self._repo.find_by_key(new_key)
             if not old_res.is_ok or not new_res.is_ok:
                 return
-            old = old_res.value  # type: ignore[union-attr]
-            new = new_res.value  # type: ignore[union-attr]
+            old = old_res.value
+            new = new_res.value
             if old is None or new is None:
                 return
             if old.lifecycle_status == "tombstoned" or old.valid_until is not None:

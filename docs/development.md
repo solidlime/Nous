@@ -9,7 +9,7 @@
 判断は必ず次の2つで行う（2026-11-19 に3通りで確認済み）。
 
 ```
-.venv/bin/mypy nous/ > /tmp/mypy_out.txt 2>&1; .venv/bin/mypy-baseline filter < /tmp/mypy_out.txt
+make typecheck
 .venv/bin/mypy nous/application/chat/pipeline/inference.py   # → Success: no issues found
 ```
 

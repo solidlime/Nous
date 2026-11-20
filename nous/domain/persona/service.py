@@ -67,11 +67,11 @@ class PersonaService:
 
         result = self._repo.update_state(persona, "emotion", normalized_name)
         if not result.is_ok:
-            return Failure(result.error)  # type: ignore[union-attr]
+            return Failure(result.error)
 
         result = self._repo.update_state(persona, "emotion_intensity", str(clamped))
         if not result.is_ok:
-            return Failure(result.error)  # type: ignore[union-attr]
+            return Failure(result.error)
 
         # Record last state update timestamp (for memory auto-snapshot)
         now = get_now()
@@ -230,7 +230,7 @@ class PersonaService:
         # Get existing active goals for duplicate avoidance
         try:
             existing = self._memory_service.get_by_tags(["goal", "active"])
-            existing_contents = [m.content for m in (existing.value or [])]
+            existing_contents = [m.content for m in existing.value] if existing.is_ok else []
         except Exception:
             existing_contents = []
 
@@ -338,7 +338,7 @@ class PersonaService:
         state_result = self.get_context(persona)
         if not state_result.is_ok:
             return "neutral", 0.0, None, None
-        state = state_result.value  # type: ignore[union-attr]
+        state = state_result.value
 
         emotion = state.emotion or "neutral"
         intensity = state.emotion_intensity or 0.0
