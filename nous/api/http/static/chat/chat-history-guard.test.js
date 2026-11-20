@@ -292,6 +292,7 @@ describe('TTS session cleanup on history mutation (#120)', () => {
       T.startStream('test-persona');
       T.stop();
       await expect(T.finish('こんにちは', null)).resolves.toBeNull();
+      // posts.length が唯一の識別アサーション（stub に body が無いため toBeNull はガード有無で両方通る）
       expect(posts.length).toBe(0); // clear後の合成 POST が無い
     } finally {
       window.Nous.Core.api.rawFetch = orig;

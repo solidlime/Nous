@@ -91,6 +91,9 @@ function _startSeekBar(audio, bar) {
 
 /* ── Session cleanup — single entry point ── */
 function _endSession(reason) {
+  if (reason && typeof console !== "undefined") console.debug("[TTS] end:", reason);
+  // Abort any in-flight auto-play request so it cannot resolve into a cleared session
+  if (_autoTtsAbort) { try { _autoTtsAbort.abort(); } catch (e) {} _autoTtsAbort = null; }
   var session = _playbackSession;
   if (!session) return;
   if (session.interval) { clearInterval(session.interval); session.interval = null; }
@@ -296,6 +299,7 @@ function autoPlayTts(text) {
       }
     })
     .catch(function (e) {
+      if (e && e.name === "AbortError") return; // session cleanup aborts are expected
       console.warn("[AutoTTS] Request failed:", e.message);
     });
 }

@@ -42,7 +42,7 @@ T.startStream = function(persona) {
 };
 T.finish = function(allText, msgEl) {
   var stream = _stream;
-  if (!stream) return Promise.resolve(null);
+  if (!stream || stream.stopped) return Promise.resolve(null); // cleared session: skip synthesis
   var text = _strip(allText);
   if (!text) return Promise.resolve(null);
   var ctrl = (typeof AbortController !== "undefined") ? new AbortController() : null;
