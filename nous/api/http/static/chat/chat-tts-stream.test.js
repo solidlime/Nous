@@ -1,7 +1,8 @@
 /* =================================================================
    Blob URL lifecycle (#122): every URL.createObjectURL'd chunk must be
-   revoked at least once — on natural end (onended), on element error,
-   and on T.stop (queued URLs + the playing audio's src). A late handler
+   revoked at least once — on natural end (onended), on element error, on
+   play() rejection or synchronous throw, and on T.stop (queued URLs +
+   the playing audio's src). A late handler
    on a superseded element may revoke the same URL twice; that is
    harmless (revoke is idempotent) and allowed. Long sessions otherwise
    accumulate blob: URLs (memory leak flagged in #120 review).
@@ -51,6 +52,7 @@ describe('TTS stream Blob URL lifecycle (#122)', () => {
     expect(stream.queue).toEqual([]);
     expect(stream.audio).toBe(null);
     expect(stream.stopped).toBe(true);
+    expect(stream.playing).toBe(false); // stopped stream never claims to play
   });
 
   it('T.stop is safe with an empty queue and no audio', () => {
@@ -172,5 +174,45 @@ describe('TTS stream Blob URL lifecycle (#122)', () => {
     expect(() => T.stop()).not.toThrow();
     expect(revoked).toEqual(['blob:http://localhost:8789/abc']);
     expect(stream.audio).toBe(null);
+  });
+
+  it('every created chunk URL is revoked once the turn is stopped (synchronous-throw path)', async () => {
+    // play() throws synchronously — the one settle path not covered above.
+    // Aggregate invariant: after T.stop, no created URL may remain un-revoked.
+    const enc = new TextEncoder();
+    const lines = [
+      enc.encode('data: {"type":"tts_chunk","audio_base64":"AAAA"}\n\n'),
+      enc.encode('data: {"type":"tts_chunk","audio_base64":"BBBB"}\n\n'),
+    ];
+    let i = 0;
+    const reader = {
+      read: () =>
+        i < lines.length
+          ? Promise.resolve({ done: false, value: lines[i++] })
+          : Promise.resolve({ done: true }),
+    };
+    const orig = window.Nous.Core.api.rawFetch;
+    window.Nous.Core.api.rawFetch = () =>
+      Promise.resolve({ ok: true, body: { getReader: () => reader } });
+    const origAudio = window.Audio;
+    window.Audio = function FakeAudio(src) {
+      this.src = src;
+    };
+    window.Audio.prototype.play = function () {
+      throw new Error('blocked'); // synchronous throw settle path
+    };
+    try {
+      const T = window.Nous.Chat.ttsStream;
+      const stream = T.startStream('p');
+      await T.finish('こんにちは', null);
+      expect(created.length).toBe(2);
+      expect(created.every((u) => revoked.includes(u))).toBe(true);
+      T.stop();
+      expect(created.every((u) => revoked.includes(u))).toBe(true);
+      expect(stream.playing).toBe(false);
+    } finally {
+      window.Audio = origAudio;
+      window.Nous.Core.api.rawFetch = orig;
+    }
   });
 });

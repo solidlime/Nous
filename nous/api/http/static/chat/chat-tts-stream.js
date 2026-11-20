@@ -119,5 +119,6 @@ T.stop = function() {
   try { if (stream.audio) stream.audio.pause(); } catch (_e) {}
   _revokeUrl(stream.audio && stream.audio.src);
   stream.audio = null;
+  stream.playing = false;
 };
 })(window.Nous);
