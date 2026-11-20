@@ -38,7 +38,6 @@ function testImageGen() {
   
   N.Core.api.rawFetch('/api/chat/' + (S.persona || '') + '/image-gen/test', {
     method: 'POST',
-    headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload)
   })
   .then(function(r) { return r.json(); })

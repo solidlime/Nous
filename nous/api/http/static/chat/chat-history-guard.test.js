@@ -15,6 +15,7 @@ let confirmAnswer = true;
 let confirmCalls = 0;
 let toastCalls = [];
 let apiCalls = [];
+let rawFetchCalls = [];
 
 beforeAll(() => {
   loadCore();
@@ -62,9 +63,15 @@ beforeAll(() => {
     total: 2,
     });
   };
-  // #106: session.js DELETE goes through api.rawFetch — route it to the same
-  // window.fetch stub so the clear path keeps exercising the real code shape.
-  window.Nous.Core.api.rawFetch = (url, opts) => window.fetch(url, opts);
+  // #106: session.js DELETE goes through api.rawFetch — record the calls and
+  // route them to the window.fetch stub so the clear path keeps exercising
+  // the real code shape. NOTE: rawFetch is a property of the api function, so
+  // replacing window.Nous.Core.api (as the stub above does) silently removes
+  // rawFetch too — keep this assignment after the api stub, never before.
+  window.Nous.Core.api.rawFetch = (url, opts) => {
+    rawFetchCalls.push({ url, opts });
+    return window.fetch(url, opts);
+  };
   // chat-history.js split into history/*.js — load chunks in order
   // (reader path only; test logic unchanged).
   // #107: clear() delegates to the real attachments.clear — load the owner
@@ -78,6 +85,9 @@ beforeAll(() => {
 beforeEach(() => {
   confirmAnswer = true;
   confirmCalls = 0;
+  apiCalls = [];
+  rawFetchCalls = [];
+  toastCalls = [];
   document.body.innerHTML =
     '<div id="chat-messages"></div><div id="chat-status"></div>';
   window.Nous.Chat.state.messages = [];
@@ -136,6 +146,11 @@ describe('clear() attachment badge cleanup (#107)', () => {
     expect(document.getElementById('chat-attachments').children.length).toBe(0);
     expect(window.Nous.Chat.state.attachments.length).toBe(0);
     expect(window.Nous.Chat.state.messages.length).toBe(0);
+    // #106: the DELETE must go through api.rawFetch — a regression back to a
+    // bare fetch() would leave rawFetchCalls empty and fail here.
+    expect(rawFetchCalls.length).toBe(1);
+    expect(rawFetchCalls[0].url).toBe('/api/chat/test-persona/sessions/main');
+    expect(rawFetchCalls[0].opts.method).toBe('DELETE');
     // DOMPurify is absent here, so safeSetHTML falls back to textContent — a
     // non-empty text means resetToWelcome actually rendered.
     expect(document.getElementById('chat-messages').textContent).not.toBe('');
@@ -177,11 +192,6 @@ describe('numeric-index guard toasts (#105)', () => {
     return d;
   };
 
-  beforeEach(() => {
-    apiCalls = [];
-    toastCalls = [];
-  });
-
   it('missing element reports 見つかりません, not 応答処理中, and skips the API', async () => {
     await window.Nous.Chat.history.rollback(0, false);
     expect(toastCalls.length).toBe(1);
@@ -219,6 +229,7 @@ describe('numeric-index guard toasts (#105)', () => {
    ================================================================= */
 describe('TTS session cleanup on history mutation (#120)', () => {
   let endSessionCalls;
+  let stopCalls;
 
   beforeEach(() => {
     document.body.innerHTML =
@@ -228,18 +239,26 @@ describe('TTS session cleanup on history mutation (#120)', () => {
     window.Nous.Chat.state.attachments = [];
     confirmAnswer = true;
     endSessionCalls = 0;
+    stopCalls = 0;
     window.Nous.Chat.tts = {
       endSession: () => {
         endSessionCalls++;
       },
     };
+    // #120 invariants: history mutation must stop BOTH TTS sources.
+    // ttsStream.stop() kills streaming playback that _endSession cannot reach.
+    window.Nous.Chat.ttsStream = {
+      stop: () => {
+        stopCalls++;
+      },
+    };
   });
 
-  // The spy pollutes the shared window across describes: #105's rollback
-  // test was written against a bare `N.Chat.tts` (undefined) and its toast
-  // expectations flip when our stub survives. Drop it after each test.
+  // Invariant, not a reproduction of a past failure: this describe must not
+  // leak its tts/ttsStream stubs into other describes in this shared jsdom window.
   afterEach(() => {
     delete window.Nous.Chat.tts;
+    delete window.Nous.Chat.ttsStream;
   });
 
   it('exports endSession on N.Chat.tts (the old code never did)', () => {
@@ -249,7 +268,8 @@ describe('TTS session cleanup on history mutation (#120)', () => {
 
   it('clear() stops TTS playback via N.Chat.tts.endSession', async () => {
     await window.Nous.Chat.history.clear();
-    expect(endSessionCalls).toBeGreaterThan(0);
+    expect(endSessionCalls).toBe(1);
+    expect(stopCalls).toBe(1);
   });
 
   it('rollback() stops TTS playback before DOM rebuild', async () => {
@@ -259,6 +279,43 @@ describe('TTS session cleanup on history mutation (#120)', () => {
     d.dataset.msgId = 'uuid-1';
     document.getElementById('chat-messages').appendChild(d);
     await window.Nous.Chat.history.rollback(0, false);
-    expect(endSessionCalls).toBeGreaterThan(0);
+    expect(endSessionCalls).toBe(1);
+    expect(stopCalls).toBe(1);
+  });
+
+  it('delete() stops TTS playback before message removal', async () => {
+    const d = document.createElement('div');
+    d.className = 'chat-msg assistant';
+    d.dataset.msgIndex = '0';
+    d.dataset.msgId = 'uuid-1';
+    document.getElementById('chat-messages').appendChild(d);
+    await window.Nous.Chat.history.delete('uuid-1');
+    expect(endSessionCalls).toBe(1);
+    expect(stopCalls).toBe(1);
+  });
+
+  it('clear() leaves TTS untouched when the user cancels the confirm', async () => {
+    confirmAnswer = false;
+    await window.Nous.Chat.history.clear();
+    expect(endSessionCalls).toBe(0);
+    expect(stopCalls).toBe(0);
+  });
+
+  it('delete() is a no-op for TTS when the user cancels the confirm', async () => {
+    confirmAnswer = false;
+    const d = document.createElement('div');
+    d.className = 'chat-msg assistant';
+    d.dataset.msgIndex = '0';
+    d.dataset.msgId = 'uuid-1';
+    document.getElementById('chat-messages').appendChild(d);
+    await window.Nous.Chat.history.delete('uuid-1');
+    expect(endSessionCalls).toBe(0);
+    expect(stopCalls).toBe(0);
+  });
+
+  it('clear() is safe when the TTS modules are not loaded (load-order independent)', async () => {
+    delete window.Nous.Chat.tts;
+    delete window.Nous.Chat.ttsStream;
+    await expect(window.Nous.Chat.history.clear()).resolves.toBeUndefined();
   });
 });

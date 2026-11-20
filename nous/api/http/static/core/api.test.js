@@ -179,7 +179,30 @@ describe('N.Core.api.rawFetch()', () => {
     }));
   });
 
-  it('keeps custom headers untouched (no double trace of a default timeout object)', async () => {
+  it('does not add an implicit timeout signal when the caller passes none', async () => {
+    fetch.mockResolvedValue({ ok: true });
+
+    await N.api.rawFetch('/tts/x/stream', { method: 'POST', body: '{}' });
+    expect(fetch.mock.calls[0][1].signal).toBeUndefined();
+  });
+
+  it('never injects Content-Type on non-string bodies (null / typed array)', async () => {
+    fetch.mockResolvedValue({ ok: true });
+
+    await N.api.rawFetch('/api/chat/herta/sessions/main', { method: 'DELETE' });
+    expect(fetch.mock.calls[0][1].headers).toEqual({});
+
+    await N.api.rawFetch('/api/chat/herta/sessions/main', { method: 'POST', body: null });
+    expect(fetch.mock.calls[1][1].headers).toEqual({});
+
+    // Truthy non-.append body — the case the old shape-check rule missed
+    // (it typed Blob/ArrayBuffer bodies as JSON).
+    const bin = new Uint8Array([1, 2, 3]);
+    await N.api.rawFetch('/api/chat/herta/attachment/upload', { method: 'POST', body: bin });
+    expect(fetch.mock.calls[2][1].headers).toEqual({});
+  });
+
+  it('keeps custom headers untouched', async () => {
     fetch.mockResolvedValue({ ok: true });
 
     await N.api.rawFetch('/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });

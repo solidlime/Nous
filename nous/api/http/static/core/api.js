@@ -78,15 +78,13 @@ N.Core.api.rawFetch = function rawFetch(path, opts) {
   opts = opts || {};
   var headers = Object.assign({}, opts.headers || {});
   var method = (opts.method || "GET").toUpperCase();
-  /* Same rule as api(): only body-carrying requests get a JSON Content-Type,
-     and FormData never does (the browser must set its own multipart boundary
-     — a preset Content-Type breaks the upload). Shape-checked, not
-     instanceof: FormData can cross realms. */
-  if (method !== "GET" && method !== "HEAD" && opts.body !== undefined &&
-      !headers["Content-Type"] && !headers["content-type"] &&
-      !(opts.body && typeof opts.body.append === "function")) {
+  /* Unlike api() (which injects on every non-GET/HEAD), rawFetch types only
+     string bodies — streaming/blob/null bodies pass through untouched. */
+  if (method !== "GET" && method !== "HEAD" && typeof opts.body === "string" &&
+      !headers["Content-Type"] && !headers["content-type"]) {
     headers["Content-Type"] = "application/json";
   }
+  /* Forwards exactly headers / method / body / signal — nothing else. */
   return fetch(path, {
     headers: headers,
     method: opts.method,

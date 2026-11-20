@@ -433,7 +433,7 @@ async function deleteChatMessage(msgId) {
       resetToWelcome();
     }
 
-    toast("�️ メッセージを削除しました", "success");
+    toast("🗑️ メッセージを削除しました", "success");
   } catch (e) {
     toast("削除失敗: " + e.message, "error");
   }
