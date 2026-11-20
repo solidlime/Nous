@@ -373,7 +373,7 @@ def _render_setup_page() -> str:
       Allowed: letters, numbers, underscores, hyphens (1-50 chars)
     </p>
 
-    <div id="error-msg" style="color:#ef4444;font-size:0.85rem;margin-top:10px;display:none"></div>
+    <div id="error-msg" style="color:var(--accent-red);font-size:0.85rem;margin-top:10px;display:none"></div>
 
     <button type="submit" id="create-btn" class="glass-btn btn-primary"
       style="width:100%;margin-top:20px;padding:12px;font-size:1rem;font-weight:600">
