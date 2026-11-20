@@ -9,7 +9,7 @@
 # Dockerfile はこのファイルを使い続ける（SBOM は requirements-prod.txt 前提）。
 
 # Embedding & Reranker (ONNX Runtime — PyTorch-free)
-onnxruntime>=1.18.0,<2
+onnxruntime>=1.29.0,<2
 tokenizers>=0.21.0,<1
 huggingface_hub>=0.20,<2
 sentencepiece>=0.1.99,<1  # Required for cl-nagoya/ruri-v3-30m tokenizer
