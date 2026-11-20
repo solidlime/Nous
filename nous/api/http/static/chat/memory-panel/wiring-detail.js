@@ -141,7 +141,6 @@ function closeWiringDetail() {
 
 // CSP delegation moved to core/delegation.js:
 //   click  [data-wiring-open]        → openWiringDetail (edge modal)
-//   click  [data-action=wiring-open-memory] → N.Components.memModal.open
 //   click  [data-action=wiring-close] → closeWiringDetail
 //   keydown Escape (overlay open)    → closeWiringDetail
 //   keydown Enter/Space on rows      → openWiringDetail
