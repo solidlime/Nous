@@ -3,8 +3,8 @@
    inline edit, delete + rebuild
    Chunk 2/3 of chat-history.js. Namespace: N.Chat.history.*
    Depends on: history/render.js (N.Chat._history.appendSegments),
-   send/render.js (N.Chat.ui.append), chat-tts.js (_endSession noop
-   guard), chat-attachments.js.
+   send/render.js (N.Chat.ui.append), chat-tts.js (N.Chat.tts.endSession),
+   chat-attachments.js.
    ================================================================= */
 ;(function(N) {
 "use strict";
@@ -46,7 +46,7 @@ async function clearChatHistory() {
     CHAT.abortController.abort();
     CHAT.abortController = null;
   }
-  if (typeof _endSession === "function") _endSession("rollback");
+  if (N.Chat.tts && N.Chat.tts.endSession) N.Chat.tts.endSession("rollback");
   if (CHAT.messages.length === 0) {
     N.Chat.attachments && N.Chat.attachments.clear();
     resetToWelcome();
@@ -86,20 +86,41 @@ function getChatSessionId() {
   return "main";
 }
 
+// Numeric msg-index (DOM position) → UUID resolution, shared by
+// rollback/edit/delete. Three outcomes:
+//   { ok: true, id }            — resolved to the element's data-msg-id
+//   { ok: false, reason: "missing" } — element not in DOM (e.g. after re-render)
+//   { ok: false, reason: "pending" } — element exists but data-msg-id is empty
+//                                 (response still streaming, id not yet assigned)
+function resolveMsgIndex(num) {
+  var c = document.getElementById("chat-messages");
+  var el = c ? c.querySelector('.chat-msg[data-msg-index="' + num + '"]') : null;
+  if (el && el.dataset.msgId) return { ok: true, id: el.dataset.msgId };
+  return { ok: false, reason: el ? "pending" : "missing" };
+}
+
+// Resolve a numeric index to its UUID, or explain via toast why we cannot
+// and return null (caller must return). Keeps the three guard messages in
+// one place — "missing" vs "pending" used to collapse into a single
+// misleading "応答処理中" toast (#105).
+function requireMsgId(num) {
+  var r = resolveMsgIndex(num);
+  if (r.ok) return r.id;
+  if (r.reason === "missing") {
+    toast("対象メッセージが見つかりません。一覧を再読み込みしてから操作してください。", "warning");
+  } else {
+    toast("応答処理中のため操作できません。しばらくお待ちください。", "warning");
+  }
+  return null;
+}
+
 async function rollbackChat(fromId, shouldResend) {
   if (!S.persona) return;
-  // Resolve numeric index to UUID (streaming messages may not have msgId yet)
+  // Resolve numeric index to UUID, or bail with the precise reason (#105)
   if (typeof fromId === "number") {
-    var c = document.getElementById("chat-messages");
-    if (c) {
-      var el = c.querySelector('.chat-msg[data-msg-index="' + fromId + '"]');
-      if (el && el.dataset.msgId) fromId = el.dataset.msgId;
-    }
-  }
-  // 応答処理中でmsgIdが空文字列のままの場合 → 操作不能
-  if (typeof fromId === "number") {
-    toast("応答処理中のため操作できません。しばらくお待ちください。", "warning");
-    return;
+    var rid = requireMsgId(fromId);
+    if (rid === null) return;
+    fromId = rid;
   }
   const sid = getChatSessionId();
 
@@ -143,7 +164,7 @@ async function rollbackChat(fromId, shouldResend) {
     );
 
     // TTS session cleanup before DOM rebuild
-    if (typeof _endSession === "function") _endSession("rollback");
+    if (N.Chat.tts && N.Chat.tts.endSession) N.Chat.tts.endSession("rollback");
     // TTSキャッシュ削除
     ttsCacheUrls.forEach(function(url) {
       var filename = url.split("/").pop();
@@ -200,18 +221,11 @@ async function rollbackChat(fromId, shouldResend) {
 // ------------------------------------------------------------------
 async function editChatMessage(msgId) {
   if (!S.persona) return;
-  // Resolve numeric index to UUID (streaming messages may not have msgId yet)
+  // Resolve numeric index to UUID, or bail with the precise reason (#105)
   if (typeof msgId === "number") {
-    var c = document.getElementById("chat-messages");
-    if (c) {
-      var el = c.querySelector('.chat-msg[data-msg-index="' + msgId + '"]');
-      if (el && el.dataset.msgId) msgId = el.dataset.msgId;
-    }
-  }
-  // 応答処理中でmsgIdが空文字列のままの場合 → 操作不能
-  if (typeof msgId === "number") {
-    toast("応答処理中のため操作できません。しばらくお待ちください。", "warning");
-    return;
+    var eid = requireMsgId(msgId);
+    if (eid === null) return;
+    msgId = eid;
   }
   let msgDiv;
   if (typeof msgId === "number") {
@@ -333,18 +347,11 @@ async function editChatMessage(msgId) {
 // prepend=false: DOM リセット後に末尾へ append（初期ロード）
 async function deleteChatMessage(msgId) {
   if (!S.persona) return;
-  // Resolve numeric index to UUID (streaming messages may not have msgId yet)
+  // Resolve numeric index to UUID, or bail with the precise reason (#105)
   if (typeof msgId === "number") {
-    var c = document.getElementById("chat-messages");
-    if (c) {
-      var el = c.querySelector('.chat-msg[data-msg-index="' + msgId + '"]');
-      if (el && el.dataset.msgId) msgId = el.dataset.msgId;
-    }
-  }
-  // 応答処理中でmsgIdが空文字列のままの場合 → 操作不能
-  if (typeof msgId === "number") {
-    toast("応答処理中のため操作できません。しばらくお待ちください。", "warning");
-    return;
+    var did = requireMsgId(msgId);
+    if (did === null) return;
+    msgId = did;
   }
 
   const container = document.getElementById("chat-messages");
@@ -404,7 +411,7 @@ async function deleteChatMessage(msgId) {
     );
 
     // TTS session cleanup before DOM rebuild
-    if (typeof _endSession === "function") _endSession("rollback");
+    if (N.Chat.tts && N.Chat.tts.endSession) N.Chat.tts.endSession("rollback");
     // TTSキャッシュ削除
     ttsCacheUrls.forEach(function(url) {
       var filename = url.split("/").pop();

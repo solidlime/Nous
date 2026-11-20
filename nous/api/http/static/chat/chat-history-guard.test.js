@@ -13,6 +13,8 @@ import { loadCore, loadFile } from '../core/load-core.js';
    cancel (caught in review round 2). */
 let confirmAnswer = true;
 let confirmCalls = 0;
+let toastCalls = [];
+let apiCalls = [];
 
 beforeAll(() => {
   loadCore();
@@ -26,7 +28,7 @@ beforeAll(() => {
     confirmCalls++;
     return confirmAnswer;
   };
-  window.Nous.Core.toast = () => {}; // captured as var toast = C.toast
+  window.Nous.Core.toast = (msg, kind) => { toastCalls.push({ msg, kind }); }; // captured as var toast = C.toast
   // getChatSessionId() returns fixed "main" → clear() always DELETEs; stub it.
   window.fetch = async () => ({ ok: true });
   window.Nous.Chat.markdown = { render: (s) => String(s) };
@@ -47,7 +49,9 @@ beforeAll(() => {
     },
   };
   // Stub API before chat-history.js captures the reference at load.
-  window.Nous.Core.api = async () => ({
+  window.Nous.Core.api = async (url, opts) => {
+    apiCalls.push({ url, opts });
+    return ({
     messages: [
       {
         role: 'assistant', id: 'm1', time: 'now',
@@ -56,7 +60,8 @@ beforeAll(() => {
       { role: 'user', id: 'm2', time: 'now', content: 'hello' },
     ],
     total: 2,
-  });
+    });
+  };
   // chat-history.js split into history/*.js — load chunks in order
   // (reader path only; test logic unchanged).
   // #107: clear() delegates to the real attachments.clear — load the owner
@@ -148,5 +153,109 @@ describe('clear() attachment badge cleanup (#107)', () => {
     // Guard the view too: resetToWelcome must not run on cancel (same
     // textContent fallback trick as the confirmed-clear test above).
     expect(document.getElementById('chat-messages').textContent).toBe('');
+  });
+});
+
+/* =================================================================
+   Regression (#105): the numeric-index guard used one misleading
+   「応答処理中」 toast for two distinct failure modes. An element that is
+   gone from the DOM (e.g. after a list re-render) must report
+   「見つかりません」; only a present element with an empty data-msg-id
+   (response still streaming, id not yet assigned) may say 「応答処理中」.
+   A present element with a msgId must resolve to the UUID and reach the API.
+   ================================================================= */
+describe('numeric-index guard toasts (#105)', () => {
+  const msgDiv = (index, id) => {
+    const d = document.createElement('div');
+    d.className = 'chat-msg assistant';
+    d.dataset.msgIndex = String(index);
+    if (id !== undefined) d.dataset.msgId = id;
+    document.getElementById('chat-messages').appendChild(d);
+    return d;
+  };
+
+  beforeEach(() => {
+    apiCalls = [];
+    toastCalls = [];
+  });
+
+  it('missing element reports 見つかりません, not 応答処理中, and skips the API', async () => {
+    await window.Nous.Chat.history.rollback(0, false);
+    expect(toastCalls.length).toBe(1);
+    expect(toastCalls[0].msg).toContain('見つかりません');
+    expect(apiCalls.length).toBe(0);
+  });
+
+  it('present element with empty msgId (streaming) keeps the 応答処理中 toast', async () => {
+    msgDiv(0, '');
+    await window.Nous.Chat.history.rollback(0, false);
+    expect(toastCalls.length).toBe(1);
+    expect(toastCalls[0].msg).toContain('応答処理中');
+    expect(apiCalls.length).toBe(0);
+  });
+
+  it('present element with msgId resolves to the UUID and reaches the rollback API', async () => {
+    msgDiv(0, 'uuid-abc');
+    await window.Nous.Chat.history.rollback(0, false);
+    expect(toastCalls.length).toBe(1);
+    expect(toastCalls[0].msg).toContain('ロールバックしました');
+    expect(toastCalls[0].kind).toBe('info');
+    expect(apiCalls.length).toBe(1);
+    expect(apiCalls[0].url).toContain('/rollback');
+    expect(apiCalls[0].url).toContain('/rollback');
+    expect(JSON.parse(apiCalls[0].opts.body).from_id).toBe('uuid-abc');
+  });
+});
+
+/* =================================================================
+   Regression (#120): history-mutation cleanup called a module-local
+   `_endSession` via `typeof _endSession === "function"` — always
+   undefined from session.js, and N.Chat.tts never exported it either,
+   so TTS playback kept running after clear/rollback/delete. Fixed by
+   exporting endSession on N.Chat.tts and calling through the namespace.
+   ================================================================= */
+describe('TTS session cleanup on history mutation (#120)', () => {
+  let endSessionCalls;
+
+  beforeEach(() => {
+    document.body.innerHTML =
+      '<div id="chat-messages"></div><div id="chat-status"></div>' +
+      '<div id="chat-attachments"></div>';
+    window.Nous.Chat.state.messages = [{ role: 'user', content: 'x' }];
+    window.Nous.Chat.state.attachments = [];
+    confirmAnswer = true;
+    endSessionCalls = 0;
+    window.Nous.Chat.tts = {
+      endSession: () => {
+        endSessionCalls++;
+      },
+    };
+  });
+
+  // The spy pollutes the shared window across describes: #105's rollback
+  // test was written against a bare `N.Chat.tts` (undefined) and its toast
+  // expectations flip when our stub survives. Drop it after each test.
+  afterEach(() => {
+    delete window.Nous.Chat.tts;
+  });
+
+  it('exports endSession on N.Chat.tts (the old code never did)', () => {
+    loadFile('../chat/chat-tts.js');
+    expect(typeof window.Nous.Chat.tts.endSession).toBe('function');
+  });
+
+  it('clear() stops TTS playback via N.Chat.tts.endSession', async () => {
+    await window.Nous.Chat.history.clear();
+    expect(endSessionCalls).toBeGreaterThan(0);
+  });
+
+  it('rollback() stops TTS playback before DOM rebuild', async () => {
+    const d = document.createElement('div');
+    d.className = 'chat-msg assistant';
+    d.dataset.msgIndex = '0';
+    d.dataset.msgId = 'uuid-1';
+    document.getElementById('chat-messages').appendChild(d);
+    await window.Nous.Chat.history.rollback(0, false);
+    expect(endSessionCalls).toBeGreaterThan(0);
   });
 });
