@@ -207,7 +207,9 @@ class TestIngestTurnCompletedHook:
                 json=body,
                 headers=headers or {"Authorization": "Bearer secr3t"},
             )
-            client.portal.call(asyncio.sleep, 0.05)
+            portal = client.portal
+            assert portal is not None  # with client: 中は常に有効
+            portal.call(asyncio.sleep, 0.05)
         return resp, mock_hook
 
     def test_turn_completed_triggers_hook(self):
@@ -216,7 +218,9 @@ class TestIngestTurnCompletedHook:
         resp, mock_hook = self._post(body)
         assert resp.status_code == 200
         assert mock_hook.await_count == 1
-        assert mock_hook.await_args.args[1] == "herta"
+        await_args = mock_hook.await_args
+        assert await_args is not None
+        assert await_args.args[1] == "herta"
 
     def test_without_turn_completed_skips(self):
         """turn.completed も session.stopped も無い → 何も起動しない。"""

@@ -48,7 +48,7 @@ class SQLiteKeywordSearch:
 
     def search(self, query: str, limit: int = 10, date_from=None, date_to=None, tags=None):
         result = self.repo.search_keyword(query, limit, date_from=date_from, date_to=date_to, tags=tags)
-        if result.is_ok:
+        if isinstance(result, Success):
             return Success(result.value)
         return Failure(SearchError(str(result.error)))
 
@@ -65,7 +65,7 @@ class QdrantSemanticSearch:
         # Fetch extra results to compensate for date post-filtering
         fetch_limit = limit * 3 if (date_from or date_to) else limit
         result = await self.vector_store.search(self.persona, query, fetch_limit)
-        if not result.is_ok:
+        if isinstance(result, Failure):
             return Failure(SearchError(str(result.error)))
 
         search_results: list[tuple] = []
@@ -80,7 +80,7 @@ class QdrantSemanticSearch:
         if not memory_map:  # 旧 fake repos（find_by_keys 未実装）への後方互換
             for key, _ in vector_hits:
                 single = self.memory_repo.find_by_key(key)
-                if single.is_ok and single.value:
+                if isinstance(single, Success) and single.value:
                     memory_map[key] = single.value
 
         for key, score in vector_hits:
