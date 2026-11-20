@@ -633,10 +633,6 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
         min-width: 100% !important;
         margin-bottom: 8px;
     }
-    .mem-toolbar {
-        flex-wrap: wrap;
-        gap: 6px;
-    }
     .mem-toolbar .glass-btn,
     .mem-toolbar .glass-input {
         min-height: 44px;
@@ -647,19 +643,9 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
         min-width: 44px;
         padding: 8px 12px;
     }
-    /* Adv search panel mobile */
-    .adv-search-row {
-        flex-direction: column;
-        align-items: stretch;
-        gap: 6px;
-    }
-    .adv-search-row .glass-input {
-        width: 100%;
-    }
-    .adv-search-label {
-        min-width: auto;
-        font-size: 0.75rem;
-    }
+    /* Adv search mobile degradation moved to sections.css (kanban #114):
+       these rules were shadowed here by equal-specificity memories rules
+       loaded later, so they never applied. */
 }
 
 /* ============================================================

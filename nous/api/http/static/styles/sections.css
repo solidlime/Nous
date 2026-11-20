@@ -289,6 +289,21 @@ html.light .mem-tag-chip { color: hsla(var(--chip-hue), 70%, 35%, 1); }
     background: linear-gradient(90deg, var(--accent-purple), var(--accent-pink));
 }
 
+/* ── Mobile degradation (max-width 767px) ──
+   Must live here, not components.css: sections.css is the last stylesheet,
+   so these win by order over the equal-specificity base rules above
+   (`.adv-search-row` gap 12px, `.adv-search-label` min-width 80px,
+   `.mem-toolbar` gap 8px). The former components.css copies at equal
+   specificity lost on link order and never applied once (kanban #114). */
+@media (max-width: 767px) {
+    .adv-search-row { flex-direction: column; align-items: stretch; gap: 6px; }
+    .adv-search-row > .mode-btn-group { align-self: flex-start; max-width: 100%; flex-wrap: wrap; }
+    .adv-search-row > .range-value { align-self: flex-start; }
+    .adv-search-row .glass-input { width: 100%; }
+    .adv-search-label { min-width: auto; font-size: 0.75rem; }
+    .mem-toolbar { gap: 6px; }
+}
+
 /* ── Edit/Create modal overlay ── */
 .mem-edit-overlay {
     position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1100;
