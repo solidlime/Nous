@@ -17,7 +17,7 @@ dependencies = [
     # mcp>=2 via its fastmcp-slim[client,server] -> mcp<2.0 chain, and is
     # imported nowhere).
     "mcp>=2.0.0,<3",
-    "fastapi>=0.139.0,<1",
+    "fastapi>=0.163.2,<1",
     "uvicorn>=0.51.0,<1",
 
     # Data Validation & Settings
