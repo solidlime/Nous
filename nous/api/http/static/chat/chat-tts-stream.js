@@ -50,7 +50,7 @@ T.finish = function(allText, msgEl) {
   var body = { text: text };
   var v = _voiceInput();
   if (v) body.voice = v;
-  return fetch("/api/tts/" + encodeURIComponent(stream.persona) + "/stream", {
+  return N.Core.api.rawFetch("/api/tts/" + encodeURIComponent(stream.persona) + "/stream", {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),

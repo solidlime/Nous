@@ -121,3 +121,70 @@ describe('N.Core.api()', () => {
     }));
   });
 });
+
+/* =================================================================
+   #106: rawFetch is the thin surface for calls api() cannot serve —
+   streaming bodies (TTS), FormData uploads, non-JSON responses.
+   It must NOT add api()'s error policy: no implicit timeout, no ok
+   check, no JSON parsing. Its only job is the Content-Type rule and
+   single-source fetch access (auth wrap / future cookie migration).
+   ================================================================= */
+describe('N.Core.api.rawFetch()', () => {
+  beforeEach(() => {
+    vi.stubGlobal('fetch', vi.fn());
+  });
+
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  it('returns the raw Response without an ok check or JSON parsing', async () => {
+    const raw = { ok: false, status: 404 };
+    fetch.mockResolvedValue(raw);
+
+    const result = await N.api.rawFetch('/missing', { method: 'DELETE' });
+    expect(result).toBe(raw);
+    expect(fetch).toHaveBeenCalledWith('/missing', expect.objectContaining({
+      method: 'DELETE',
+    }));
+  });
+
+  it('injects Content-Type: application/json for body-carrying POSTs', async () => {
+    fetch.mockResolvedValue({ ok: true });
+
+    await N.api.rawFetch('/tts/x/stream', { method: 'POST', body: '{}' });
+    expect(fetch).toHaveBeenCalledWith('/tts/x/stream', expect.objectContaining({
+      headers: { 'Content-Type': 'application/json' },
+    }));
+  });
+
+  it('never sets Content-Type on FormData (browser owns the multipart boundary)', async () => {
+    fetch.mockResolvedValue({ ok: true });
+    const fd = new FormData();
+    fd.append('file', 'x');
+
+    await N.api.rawFetch('/api/chat/p/attachment/upload', { method: 'POST', body: fd });
+    expect(fetch).toHaveBeenCalledWith('/api/chat/p/attachment/upload', expect.objectContaining({
+      headers: {},
+    }));
+  });
+
+  it('passes the caller signal through with no implicit timeout', async () => {
+    fetch.mockResolvedValue({ ok: true });
+    const ctrl = new AbortController();
+
+    await N.api.rawFetch('/tts/x/stream', { method: 'POST', body: '{}', signal: ctrl.signal });
+    expect(fetch).toHaveBeenCalledWith('/tts/x/stream', expect.objectContaining({
+      signal: ctrl.signal,
+    }));
+  });
+
+  it('keeps custom headers untouched (no double trace of a default timeout object)', async () => {
+    fetch.mockResolvedValue({ ok: true });
+
+    await N.api.rawFetch('/test', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' });
+    expect(fetch).toHaveBeenCalledWith('/test', expect.objectContaining({
+      headers: { 'Content-Type': 'application/json' },
+    }));
+  });
+});

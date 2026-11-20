@@ -36,7 +36,7 @@ function testImageGen() {
     negative_prompt: document.getElementById('chat-image-gen-negative-prompt')?.value || '',
   };
   
-  fetch('/api/chat/' + (S.persona || '') + '/image-gen/test', {
+  N.Core.api.rawFetch('/api/chat/' + (S.persona || '') + '/image-gen/test', {
     method: 'POST',
     headers: {'Content-Type': 'application/json'},
     body: JSON.stringify(payload)

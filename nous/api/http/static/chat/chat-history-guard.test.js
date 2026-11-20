@@ -62,6 +62,9 @@ beforeAll(() => {
     total: 2,
     });
   };
+  // #106: session.js DELETE goes through api.rawFetch — route it to the same
+  // window.fetch stub so the clear path keeps exercising the real code shape.
+  window.Nous.Core.api.rawFetch = (url, opts) => window.fetch(url, opts);
   // chat-history.js split into history/*.js — load chunks in order
   // (reader path only; test logic unchanged).
   // #107: clear() delegates to the real attachments.clear — load the owner

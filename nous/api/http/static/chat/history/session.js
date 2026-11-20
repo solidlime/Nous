@@ -61,7 +61,7 @@ async function clearChatHistory() {
   const oldSid = getChatSessionId();
   if (S.persona && oldSid) {
     try {
-      const res = await fetch(
+      const res = await N.Core.api.rawFetch(
         "/api/chat/" +
           encodeURIComponent(S.persona) +
           "/sessions/" +

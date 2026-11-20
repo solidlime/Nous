@@ -31,7 +31,7 @@ async function uploadAttachment(file) {
   const formData = new FormData();
   formData.append("file", file);
   try {
-    const res = await fetch(
+    const res = await N.Core.api.rawFetch(
       "/api/chat/" + encodeURIComponent(S.persona) + "/attachment/upload",
       {
         method: "POST",

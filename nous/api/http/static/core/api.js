@@ -68,4 +68,31 @@ N.Core.api = async function api(path, opts) {
 /* Default error hook */
 N.Core.api._onError = null;
 
+/* Thin fetch surface for calls that cannot use api(): streaming bodies,
+   FormData uploads, non-JSON responses (#106). Header injection only —
+   resp.ok checks, JSON parsing and the api:error dispatch stay with the
+   caller (their UX is bespoke by design). Authorization is added by the
+   global auth.js fetch wrap, not here. Centralized so future auth changes
+   (e.g. cookie migration) touch one function, not four raw fetches. */
+N.Core.api.rawFetch = function rawFetch(path, opts) {
+  opts = opts || {};
+  var headers = Object.assign({}, opts.headers || {});
+  var method = (opts.method || "GET").toUpperCase();
+  /* Same rule as api(): only body-carrying requests get a JSON Content-Type,
+     and FormData never does (the browser must set its own multipart boundary
+     — a preset Content-Type breaks the upload). Shape-checked, not
+     instanceof: FormData can cross realms. */
+  if (method !== "GET" && method !== "HEAD" && opts.body !== undefined &&
+      !headers["Content-Type"] && !headers["content-type"] &&
+      !(opts.body && typeof opts.body.append === "function")) {
+    headers["Content-Type"] = "application/json";
+  }
+  return fetch(path, {
+    headers: headers,
+    method: opts.method,
+    body: opts.body,
+    signal: opts.signal,
+  });
+};
+
 })(window.Nous);
