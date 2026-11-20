@@ -7,7 +7,7 @@ dependencies = [
     # Embedding & Reranker (ONNX Runtime — PyTorch-free)
     "onnxruntime>=1.18.0,<2",
     "tokenizers>=0.21.0,<1",
-    "huggingface_hub>=0.20,<2",
+    "huggingface_hub>=2.4.0,<3",
     "sentencepiece>=0.1.99,<1",  # cl-nagoya/ruri-v3-30m tokenizer 用
 
     # MCP Server Framework (mcp>=2: v2 MCPServer API. FastMCP renamed to MCPServer)
