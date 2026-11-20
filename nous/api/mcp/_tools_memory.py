@@ -89,7 +89,7 @@ async def _tool_memory_create(
         skip_duplicate_check=skip_duplicate_check,
         session_id=getattr(ctx, "session_id", None),
     )
-    if result.is_ok:
+    if isinstance(result, Success):
         m = result.value
         ctx.record_memory_access(m.key)
         await ctx.event_bus.publish(
@@ -127,7 +127,7 @@ async def _tool_memory_read(
     """Read a memory by key, or list most recent if key omitted. Use limit/offset for pagination."""
     if memory_key:
         result = ctx.memory_service.get_memory(memory_key)
-        if result.is_ok:
+        if isinstance(result, Success):
             m = result.value
             ctx.record_memory_access(m.key)
             emotion_line = f"Emotion: {m.emotion}"
@@ -167,10 +167,10 @@ async def _tool_memory_read(
         )
     else:
         memories_result = ctx.memory_service.get_recent(limit=limit + offset)
-        if memories_result.is_ok:
+        if isinstance(memories_result, Success):
             items = memories_result.value[offset : offset + limit]
             count_result = ctx.memory_service.count_memories()
-            total_count = count_result.value if count_result.is_ok else len(items)
+            total_count = count_result.value if isinstance(count_result, Success) else len(items)
             return tool_ok(
                 {
                     "memories": [
@@ -224,7 +224,7 @@ async def _tool_memory_update(
     # query から key を解決（builtin互換・audit:M6: threshold-guarded）
     if query and not memory_key:
         search_result = await ctx.search_engine.search(SearchQuery(text=query, top_k=1))
-        if not search_result.is_ok or not search_result.value:
+        if isinstance(search_result, Failure) or not search_result.value:
             return _err(f"No memory found for query: {query}")
         item = search_result.value[0]
         mem = item[0] if isinstance(item, tuple) else item
@@ -308,7 +308,7 @@ async def _tool_memory_update(
         return _err("no fields to update")
 
     result = ctx.memory_service.update_memory(memory_key, **updates)
-    if result.is_ok:
+    if isinstance(result, Success):
         await ctx.event_bus.publish(
             "memory.updated",
             {
@@ -335,7 +335,7 @@ async def _tool_memory_delete(
     content_preview = "..."
     if not key and query:
         search_result = await ctx.search_engine.search(SearchQuery(text=query, top_k=3))
-        if not search_result.is_ok or not search_result.value:
+        if isinstance(search_result, Failure) or not search_result.value:
             return tool_error(ToolErrorCode.NOT_FOUND, f"No memory found for query: {query}")
         top = search_result.value[0]
         score = getattr(top, "score", None)
@@ -354,15 +354,19 @@ async def _tool_memory_delete(
         snippet = f"\nContent: 「{m.content[:80]}{'...' if len(m.content) > 80 else ''}」"
     else:
         snippet = ""
+        # Unreachable (entry guard + query resolution above), but it keeps
+        # `key` narrowed to str for get_memory/delete_memory.
+        if not key:
+            return tool_error(ToolErrorCode.NOT_FOUND, "No memory found")
         pre_fetch = ctx.memory_service.get_memory(key)
-        if pre_fetch.is_ok:
+        if isinstance(pre_fetch, Success):
             content_preview = pre_fetch.value.content[:100]
             snippet = (
                 f"\nContent: 「{pre_fetch.value.content[:80]}{'...' if len(pre_fetch.value.content) > 80 else ''}」"
             )
 
     result = ctx.memory_service.delete_memory(key)
-    if result.is_ok:
+    if isinstance(result, Success):
         await ctx.event_bus.publish(
             "memory.deleted",
             {
@@ -479,7 +483,7 @@ async def _tool_memory_search(
         search_query.decision_time_weight = float(decision_cfg["time_weight"])
     ctx.search_engine.set_persona(persona)
     result = await ctx.search_engine.search(search_query)
-    if not result.is_ok:
+    if isinstance(result, Failure):
         await ctx.event_bus.publish(
             "tool.called",
             {
@@ -505,7 +509,7 @@ async def _tool_memory_search(
             },
         )
         count_result = ctx.memory_service.count_memories()
-        total_count = count_result.value if count_result.is_ok else 0
+        total_count = count_result.value if isinstance(count_result, Success) else 0
         # audit M3 — metamemory: an empty hit is “I don't find this”, which is
         # distinct from returning something irrelevant. stored_total lets the
         # caller tell “nothing stored at all” from “not in what I know”.
@@ -557,7 +561,7 @@ async def _tool_memory_search(
         },
     )
     count_result = ctx.memory_service.count_memories()
-    total_count = count_result.value if count_result.is_ok else len(result.value)
+    total_count = count_result.value if isinstance(count_result, Success) else len(result.value)
     # wiki は別ファミリ（wiki_ls/wiki_read/wiki_grep）の責務 — ここには混ぜない。
     return tool_ok({"memories": memories, "total_count": total_count})
 
@@ -565,7 +569,7 @@ async def _tool_memory_search(
 async def _tool_memory_stats(ctx: AppContext, persona: str, top_n: int = 20) -> str:
     """Get memory statistics."""
     result = ctx.memory_service.get_stats(top_n=top_n)
-    if result.is_ok:
+    if isinstance(result, Success):
         result_text = tool_ok(result.value)
         await ctx.event_bus.publish(
             "tool.called",

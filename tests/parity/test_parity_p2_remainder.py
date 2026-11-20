@@ -6,7 +6,7 @@ import inspect
 import json
 from unittest.mock import AsyncMock, MagicMock, patch
 
-from nous.domain.shared.result import Success
+from nous.domain.shared.result import Failure, Success
 
 
 async def test_session_begin_is_registered_and_owns_side_effects():
@@ -59,6 +59,27 @@ async def test_item_unequip_on_mcp_surface_rebuilds_appearance():
         return await _tools_item._tool_item_unequip(ctx, "p", slots=[])
 
     assert "Error" in await _no_slots()
+
+
+async def test_item_unequip_failure_skips_appearance_rebuild():
+    """The failure branch must not recompute appearance (kanban #113).
+
+    ``not result.is_ok`` became ``isinstance(result, Failure)``; the success
+    path above would still pass if that polarity flipped, so pin the failure
+    side: no recompute, and the error reaches the caller.
+    """
+    from nous.api.mcp import _tools_item
+    from nous.domain.shared.errors import DomainError
+
+    ctx = MagicMock()
+    ctx.equipment_service.unequip.return_value = Failure(DomainError("db down"))
+    ctx.event_bus = AsyncMock()
+
+    out = await _tools_item._tool_item_unequip(ctx, "p", slots=["top"])
+
+    assert "Error" in out
+    assert "db down" in out
+    ctx.equipment_service.recompute_appearance.assert_not_called()
 
 
 async def test_extractor_honors_fact_kind():

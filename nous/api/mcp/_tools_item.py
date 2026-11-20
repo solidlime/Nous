@@ -5,7 +5,7 @@ from __future__ import annotations
 import logging
 from typing import TYPE_CHECKING
 
-from nous.domain.shared.result import Failure
+from nous.domain.shared.result import Failure, Success
 
 logger = logging.getLogger(__name__)
 
@@ -29,7 +29,7 @@ async def _tool_item_add(
     result = ctx.equipment_service.add_item(
         item_name, category=category, description=description, quantity=quantity, tags=tags
     )
-    if result.is_ok:
+    if isinstance(result, Success):
         await ctx.event_bus.publish(
             "tool.called",
             {
@@ -67,7 +67,7 @@ async def _tool_item_equip(ctx: AppContext, persona: str, equipment: dict | None
     if not equipment:
         return 'Error: equipment dict required (e.g. {"top": "白いドレス"})'
     result = ctx.equipment_service.equip(equipment, auto_add)
-    if result.is_ok:
+    if isinstance(result, Success):
         # 装備スロットから appearance を自動合成して persona state に反映する
         # (audit C2: 再計算は Service 層の単一経路に集約)
         ctx.equipment_service.recompute_appearance(ctx.persona_service, persona)
@@ -136,7 +136,7 @@ async def _tool_item_search(
     ctx: AppContext, persona: str, query: str | None = None, category: str | None = None
 ) -> str:
     result = ctx.equipment_service.search_items(query, category)
-    if result.is_ok:
+    if isinstance(result, Success):
         items = result.value
         if not items:
             await ctx.event_bus.publish(
