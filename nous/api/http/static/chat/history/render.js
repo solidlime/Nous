@@ -7,15 +7,12 @@
    chat-tools.js, chat-attachments.js.
    ================================================================= */
 ;(function(N) {
+"use strict";
 var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
-var showConfirm = C.showConfirm, showAlert = C.showAlert;
-var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
+var esc = C.esc, safeSetHTML = C.safeSetHTML;
 var fmtStamp = C.fmtStamp;
 var safeMarkdown = N.Chat.markdown && N.Chat.markdown.render;
 var appendChatMessage = N.Chat.ui && N.Chat.ui.append;
-"use strict";
-var S = window.S;
 
 function _appendSegmentsToBubble(msg, msgDiv) {
   // Graceful degradation: callers pass container.querySelector(".chat-msg:last-child"),

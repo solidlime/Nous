@@ -6,12 +6,9 @@
    history/session.js (N.Chat.history.reset/getSessionId).
    ================================================================= */
 ;(function(N) {
-var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
-var showConfirm = C.showConfirm, showAlert = C.showAlert;
-var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
-var fmtStamp = C.fmtStamp;
 "use strict";
+var C = N.Core;
+var api = C.api, toast = C.toast, safeSetHTML = C.safeSetHTML;
 var S = window.S;
 
 var CHAT = N.Chat.state;

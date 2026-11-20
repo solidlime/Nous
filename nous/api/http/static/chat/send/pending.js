@@ -6,13 +6,9 @@
    send/turn.js (N.Chat._send.begin/endTurnSession + els).
    ================================================================= */
 ;(function(N) {
-var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
-var showConfirm = C.showConfirm, showAlert = C.showAlert;
-var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate;
-var fmtStamp = C.fmtStamp;
-var safeMarkdown = N.Chat.markdown && N.Chat.markdown.render;
 "use strict";
+var C = N.Core;
+var api = C.api, toast = C.toast;
 var S = window.S;
 
 var CHAT = N.Chat.state;
