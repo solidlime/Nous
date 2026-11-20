@@ -41,7 +41,6 @@
 
     /* Accent colors (Apple-inspired) */
     --accent-blue: #007aff;
-    --accent-purple: #bf5af2;
     --accent-pink: #ff375f;
     --accent-green: #30d158;
     --accent-yellow: #ffd60a;
@@ -52,7 +51,6 @@
 
     /* Accent RGB triples (for rgba(var(--...-rgb), alpha) usage) */
     --accent-blue-rgb: 0, 122, 255;
-    --accent-purple-rgb: 191, 90, 242;
     --accent-pink-rgb: 255, 55, 95;
     --accent-green-rgb: 48, 209, 88;
     --accent-yellow-rgb: 255, 214, 10;
@@ -61,7 +59,9 @@
     --accent-teal-rgb: 100, 210, 255;
     --accent-indigo-rgb: 88, 86, 214;
 
-    /* Legacy aliases (mapped to Apple equivalents) */
+    /* Legacy aliases (mapped to Apple equivalents). #125: the dead :root
+       declarations they shadowed (old purple hex + rgb triple) were removed —
+       grep audits for those literals now only hit intentional direct rgba() uses. */
     --accent-purple: var(--accent-indigo);
     --accent-purple-rgb: var(--accent-indigo-rgb);
 

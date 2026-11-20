@@ -341,7 +341,7 @@ def _render_setup_page() -> str:
     border: none;
     color: white;
   }
-  .btn-primary:hover { background: var(--accent-purple); filter: brightness(0.85); }
+  .btn-primary:hover { filter: brightness(0.85); }
   .text-muted { color: rgba(255,255,255,0.5); font-size: 0.85rem; }
 </style>
 </head>
