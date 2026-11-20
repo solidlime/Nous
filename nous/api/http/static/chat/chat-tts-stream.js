@@ -16,10 +16,13 @@ function _strip(text) {
   if (!/[\p{L}\p{N}]/u.test(t)) return "";
   return t;
 }
+function _revokeUrl(u) {
+  try { if (u) URL.revokeObjectURL(u); } catch (_e) {}
+}
 function _playNext(stream) {
-  if (!stream || stream.stopped || stream.playing) return;
+  if (!stream || stream !== _stream || stream.stopped || stream.playing) return;
   var url = stream.queue.shift();
-  if (!url || stream !== _stream) return;
+  if (!url) return;
   stream.playing = true;
   var a = new Audio(url);
   try {
@@ -27,12 +30,19 @@ function _playNext(stream) {
     a.volume = (typeof g === "function") ? g() : 1.0;
   } catch (_e) {}
   stream.audio = a;
-  a.onended = function() { stream.playing = false; _playNext(stream); };
-  a.onerror = function() { stream.playing = false; _playNext(stream); };
+  function _settled() {
+    _revokeUrl(a.src);
+    if (stream.audio !== a) return; // superseded element: revoke only, never touch newer state
+    stream.audio = null;
+    stream.playing = false;
+    _playNext(stream);
+  }
+  a.onended = _settled;
+  a.onerror = _settled;
   try {
     var p = a.play();
-    if (p && p.catch) p.catch(function() { stream.playing = false; _playNext(stream); });
-  } catch (_e2) { stream.playing = false; _playNext(stream); }
+    if (p && p.catch) p.catch(_settled);
+  } catch (_e2) { _settled(); }
 }
 T.startStream = function(persona) {
   if (N.Chat.tts && N.Chat.tts.endSession) { try { N.Chat.tts.endSession("stream-start"); } catch (e) {} }
@@ -103,8 +113,11 @@ T.stop = function() {
   var stream = _stream;
   if (!stream) return;
   stream.stopped = true;
+  (stream.queue || []).forEach(_revokeUrl);
   stream.queue = [];
   try { if (stream.ctrl) stream.ctrl.abort(); } catch (e) {}
   try { if (stream.audio) stream.audio.pause(); } catch (_e) {}
+  _revokeUrl(stream.audio && stream.audio.src);
+  stream.audio = null;
 };
 })(window.Nous);
