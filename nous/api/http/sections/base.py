@@ -177,6 +177,15 @@ def render_layout_shell(nav_html: str, tab_contents: str) -> str:
     Uses string concatenation (NOT f-strings) because tab HTML strings
     rely on ``${}`` template literals.
     """
+    # Rail logo — prepended here (not in render_nav) so render_nav's emitted
+    # attribute format stays byte-identical (test_wiki_router.py contract).
+    marker = '<nav class="tab-bar" role="tablist">'
+    if marker in nav_html:
+        nav_html = nav_html.replace(
+            marker,
+            marker + '\n        <div class="tab-bar-logo" aria-hidden="true">N</div>',
+            1,
+        )
     return (
         "<!DOCTYPE html>\n"
         '<html lang="ja" class="dark">\n' + render_head() + "\n<body>\n"
@@ -204,10 +213,12 @@ def render_layout_shell(nav_html: str, tab_contents: str) -> str:
         '            <button id="dark-toggle" class="glass-btn" title="Toggle theme"><i data-lucide="moon"></i></button>\n'
         "        </div>\n"
         "    </header>\n"
-        "\n" + nav_html + "\n"
+        "\n"
+        '    <div class="app-body">\n' + nav_html + "\n"
         "\n"
         '    <main id="main-content" class="main-content" tabindex="-1">\n' + tab_contents + "\n"
         "    </main>\n"
+        "    </div>\n"
         "\n"
         "    <!-- Media viewer overlay — global layer (shared by Chat + Overview,\n"
         "         must stay OUTSIDE tab panels: it is opened cross-tab via\n"
@@ -240,6 +251,11 @@ def render_layout_shell(nav_html: str, tab_contents: str) -> str:
         "\n"
         "    <!-- Toast container -->\n"
         '    <div id="toast-container" class="toast-container" role="status" aria-live="polite" aria-atomic="true"></div>\n'
+        "\n"
+        "    <!-- Quick command bar (⌘K target). Global layer: must stay OUTSIDE\n"
+        "         .tab-panel — layout.css `contain: paint` would break the fixed\n"
+        "         positioning and make it scroll with the panel. -->\n"
+        '    <div class="md-cmdbar"><b aria-hidden="true">›</b><input id="md-cmdbar-input" placeholder="ask ..." aria-label="クイックコマンド"><kbd>⌘K</kbd></div>\n'
         "</body>\n"
         "</html>"
     )

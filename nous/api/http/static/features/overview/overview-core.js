@@ -1,7 +1,7 @@
 /* =================================================================
    OVERVIEW CORE — Main loader, modals, charts, namespace registration
    Namespace: N.Features.Overview.*
-   Depends on: N.Core.* (esc, toast, api, truncate, relativeTime, fmtDate)
+   Depends on: N.Core.* (esc, api, truncate, relativeTime, fmtDate)
                overview-blocks.js (Block CRUD)
                overview-inventory.js (Inventory CRUD)
                window.* (safeSetHTML, Chart, lucide, destroyChart, chartOpts)
@@ -10,7 +10,7 @@ N.Features.Overview = N.Features.Overview || {};
 
 ;(function() {
 var S = window.S;
-var { esc, toast, api, truncate, relativeTime, fmtDate, safeSetHTML } = window.Nous.Core;
+var { esc, api, truncate, relativeTime, fmtDate, safeSetHTML } = window.Nous.Core;
 var BAR_COLORS = window.Nous.Core;
 var EMOTION_BAR_COLORS = BAR_COLORS.EMOTION_BAR_COLORS || {};
 var BODY_BAR_COLORS = BAR_COLORS.BODY_BAR_COLORS || {};
@@ -18,6 +18,10 @@ var BODY_BAR_COLORS = BAR_COLORS.BODY_BAR_COLORS || {};
 async function loadOverview() {
     const el = document.getElementById('overview-content');
     N.Components.skeleton.show('overview');
+    // KPI 用の wiki 一覧 — 並行取得。失敗しても Overview 全体は落とさない
+    const wikiPromise = api('/api/wiki/' + encodeURIComponent(S.persona), { suppressErrorToast: true })
+        .then(w => (w && Array.isArray(w.pages) ? w.pages : null))
+        .catch(() => null);
     try {
         const data = await api('/api/dashboard/' + encodeURIComponent(S.persona));
         if (!data || Object.keys(data).length === 0) {
@@ -57,6 +61,7 @@ async function loadOverview() {
             genImagesHtml += '</div>';
         }
         S.dashCache = data;
+        const wikiPages = await wikiPromise;
         const stats = data.stats || {};
         const ctx = data.context || {};
         const equip = data.equipment || {};
@@ -116,59 +121,124 @@ async function loadOverview() {
             invHtml += '</div>';
         }
 
+        // --- Mission Deck: md-* blocks (
+        //     bars use data-fill/data-color — safeSetHTML strips style=) ---
+        const personaInitial = String(S.persona || '?').charAt(0).toUpperCase();
+        const relText = String(personaInfo.nickname || '') || ctx.relationship_status || ctx.relationship_type || '';
+        const emoPct = Math.round((ctx.emotion_intensity || 0) * 100);
+        const emoColor = EMOTION_BAR_COLORS[ctx.emotion] || EMOTION_BAR_COLORS.neutral || '';
+
+        const barRow = (label, p, color, note) => '<div class="md-bar-row"><div class="md-bar-label"><span>'
+            + esc(label) + (note ? ' (' + esc(note) + ')' : '') + '</span><b>' + p + '%</b></div>'
+            + '<div class="md-bar"><div class="md-bar-fill" data-fill="' + p + '"'
+            + (color ? ' data-color="' + esc(color) + '"' : '') + '></div></div></div>';
+
+        const MINIS = [['fatigue', '疲労'], ['warmth', 'あたたかさ'], ['arousal', '覚醒'], ['heart_rate', '心拍']];
+        const minisHtml = MINIS.map(([k, label]) => (
+            stats[k] == null ? '' : barRow(label, Math.round(stats[k] * 100), BODY_BAR_COLORS[k] || '')
+        )).join('');
+
+        const placeHtml = stats.environment
+            ? '<div class="md-ploc">現在地 — <b>' + esc(stats.environment) + '</b>'
+                + (stats.place_since ? '　' + esc(relativeTime(stats.place_since)) + ' から' : '') + '</div>'
+            : '';
+        const lastConvHtml = ctx.last_conversation_time
+            ? '<div class="md-ploc">最終会話 ' + esc(relativeTime(ctx.last_conversation_time)) + '</div>'
+            : '';
+
+        const kpi = (value, label) => '<div class="md-kpi"><div class="md-kpi-value">' + esc(value)
+            + '</div><div class="md-kpi-label">' + esc(label) + '</div></div>';
+        const num = v => (v == null || !Number.isFinite(Number(v))) ? '--' : Number(v).toLocaleString();
+        const projectCount = wikiPages
+            ? new Set(wikiPages.map(p => String(p.project || '').trim()).filter(Boolean)).size
+            : null;
+        const linkedPct = stats.linked_ratio == null ? '--' : (Math.round(stats.linked_ratio * 1000) / 10) + '%';
+
+        const eventsHtml = (data.recent || []).slice(0, 5).map(m => '<div class="md-event"><b>'
+            + esc(relativeTime(m.created_at)) + '</b><span class="md-tag">'
+            + esc((m.tags && m.tags.length) ? m.tags[0] : 'memory') + '</span><span>'
+            + esc(truncate(m.content || '', 90)) + '</span></div>').join('');
+
+        const goals = data.goals || [];
+        const activeGoals = goals.filter(g => (g.status || 'active') === 'active').length;
+        const capacityRows = [];
+        if (stats.linked_ratio != null) {
+            capacityRows.push(barRow('想起カバレッジ', Math.round(stats.linked_ratio * 100), 'var(--accent-green)'));
+        }
+        if (goals.length > 0) {
+            capacityRows.push(barRow('進行中の目標', Math.round((activeGoals / goals.length) * 100),
+                'var(--accent-blue)', activeGoals + '/' + goals.length));
+        }
+        if (projectCount != null && wikiPages.length > 0) {
+            capacityRows.push(barRow('Wiki のプロジェクト紐付け',
+                Math.round((projectCount / wikiPages.length) * 100), 'var(--accent-purple)'));
+        }
+        const capacityHtml = capacityRows.length > 0 ? capacityRows.join('') : '<div class="md-ploc">--</div>';
+
+        const readingHtml = (wikiPages || []).slice(0, 5).map(p => '<div class="md-event"><b>'
+            + esc(fmtDate(p.updated)) + '</b><span>'
+            + esc(truncate(p.title || p.slug, 80)) + '</span></div>').join('');
+
         // --- Render ---
         safeSetHTML(el, `
-        <!-- Hero: portrait + status panel -->
-        <div class="ov-hero">
-            <div id="hero-portrait-slot"></div>
-            <div class="ov-status-panel">
-                <!-- 1. Profile & Relationship -->
-                <div class="glass p-4">
-                    <div class="ov-section-title"><i data-lucide="user-circle"></i> Profile &amp; Relationship</div>
-                    ${Object.entries(userInfo).length ? Object.entries(userInfo).map(([k,v]) => '<div class="ov-quick-row ov-quick-tight"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value">' + esc(String(v)) + '</span></div>').join('') : '<span class="ov-muted">No user info</span>'}
-                    ${(() => { const _GK = new Set(['goals','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GK.has(k)); return filtered.length ? filtered.map(([k,v]) => '<div class="ov-quick-row ov-quick-tight"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value ov-accent-purple">' + esc(String(v)) + '</span></div>').join('') : ''; })()}
-                    <div class="ov-quick-row"><span class="ov-quick-label">Relationship</span><span class="ov-quick-value ov-accent-pink">${esc(relStatus)}</span></div>
-                    ${ctx.last_conversation_time ? '<div class="ov-quick-row"><span class="ov-quick-label"><i data-lucide="clock"></i> Last</span><span class="ov-quick-value">' + relativeTime(ctx.last_conversation_time) + '</span></div>' : ''}
-                    <div class="ov-quick-row"><span class="ov-quick-label">Physical</span><span class="ov-quick-value">${esc(physicalContent || '--')}</span></div>
-                    <div class="ov-quick-row"><span class="ov-quick-label">Mental</span><span class="ov-quick-value">${esc(mentalContent || '--')}</span></div>
-                    ${stats.environment ? '<div class="ov-quick-row"><span class="ov-quick-label"><i data-lucide="map-pin"></i> Place</span><span class="ov-quick-value"><span class="badge badge-blue">' + esc(stats.environment) + '</span>' + (stats.place_since ? ' <span class="ov-muted">' + esc(relativeTime(stats.place_since)) + ' から</span>' : '') + '</span></div>' : ''}
-                </div>
+        <div class="md-crumbs"><b>OVERVIEW</b> / 記憶の健康状態を一目で</div>
 
-                <!-- 2. Status (Emotion + Body) -->
-                <div class="glass p-4">
-                    <div class="ov-section-title"><i data-lucide="activity"></i> Status</div>
-                    ${(function(){
-                        var pct = Math.round((ctx.emotion_intensity || 0) * 100);
-                        var color = EMOTION_BAR_COLORS[ctx.emotion] || EMOTION_BAR_COLORS.neutral || '';
-                        return '<div class="ov-emotion-section">'
-                            + '<div class="ov-emotion-head">'
-                            + '<span class="ov-emotion-name">' + esc(ctx.emotion || 'neutral') + '</span>'
-                            + '<span class="ov-emotion-pct">' + pct + '%</span>'
-                            + '</div>'
-                            + '<div class="ov-emotion-bar-wrap"><div class="ov-emotion-bar-fill" data-fill="' + pct + '"' + (color ? ' data-color="' + color + '"' : '') + '></div></div>'
-                            + '</div>';
-                    })()}
-                    <div class="ov-body-grid">
-                        ${(['fatigue','warmth','arousal','heart_rate','pain']).map(k => {
-                            var val = stats[k];
-                            var label = N.Core.BODY_LABELS[k] || k;
-                            if (val != null) {
-                                var pct = Math.round(val * 100);
-                                var color = BODY_BAR_COLORS[k] || '';
-                                return '<div class="ov-body-item">'
-                                    + '<div class="ov-body-row">'
-                                    + '<span class="ov-body-label">' + label + '</span>'
-                                    + '<span class="ov-body-value">' + pct + '%</span>'
-                                    + '</div>'
-                                    + '<div class="ov-body-bar"><div class="ov-body-bar-fill" data-fill="' + pct + '"' + (color ? ' data-color="' + color + '"' : '') + '></div></div></div>';
-                            } else {
-                                return '<div class="ov-body-item ov-body-idle"><span class="ov-body-label">' + label + '</span> <span class="ov-body-label ov-body-value">--</span></div>';
-                            }
-                        }).join('')}
-                    </div>
+        <!-- Persona status band -->
+        <div class="md-persona">
+            <div class="md-persona-id">
+                <div id="hero-portrait-slot"></div>
+                <div class="md-avatar md-avatar-h">${esc(personaInitial)}</div>
+                <div>
+                    <h2>${esc(S.persona || '--')}</h2>
+                    ${relText ? '<div class="md-rel">' + esc(relText) + '</div>' : ''}
                 </div>
-
             </div>
+            <div>
+                ${barRow('気分 — ' + (ctx.emotion || 'neutral'), emoPct, emoColor)}
+                ${placeHtml}
+                ${lastConvHtml}
+            </div>
+            <div class="md-minis">${minisHtml}</div>
+        </div>
+
+        <!-- KPI row (delta は API に差分情報が無いため出さない) -->
+        <div class="md-kpis">
+            ${kpi(num(stats.total_count), 'Memories')}
+            ${kpi(num(wikiPages ? wikiPages.length : null), 'Wiki pages')}
+            ${kpi(num(projectCount), 'Projects')}
+            ${kpi(linkedPct, 'Linked')}
+        </div>
+
+        <div class="md-grid2">
+            <div class="md-pane">
+                <h4>ACTIVITY <a href="#" data-ov-tab="timeline">Timeline →</a></h4>
+                ${eventsHtml}
+            </div>
+            <div class="md-pane">
+                <h4>CAPACITY</h4>
+                ${capacityHtml}
+            </div>
+        </div>
+
+        <div class="md-grid2">
+            <div class="md-pane md-chat-pane">
+                <h4>CHARA CHAT — ${esc(S.persona || '')} <a href="#" data-ov-tab="chat">Chat →</a></h4>
+                <div class="md-ploc">直近の会話は Chat タブで。</div>
+            </div>
+            <div class="md-pane">
+                <h4>TODAY'S READING <a href="#" data-ov-tab="wiki">Wiki →</a></h4>
+                ${readingHtml || '<div class="md-ploc">--</div>'}
+            </div>
+        </div>
+
+        <!-- Profile & Relationship -->
+        <div class="glass p-4 mb-6">
+            <div class="ov-section-title"><i data-lucide="user-circle"></i> Profile &amp; Relationship</div>
+            ${Object.entries(userInfo).length ? Object.entries(userInfo).map(([k,v]) => '<div class="ov-quick-row ov-quick-tight"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value">' + esc(String(v)) + '</span></div>').join('') : '<span class="ov-muted">No user info</span>'}
+            ${(() => { const _GK = new Set(['goals','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GK.has(k)); return filtered.length ? filtered.map(([k,v]) => '<div class="ov-quick-row ov-quick-tight"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value ov-accent-purple">' + esc(String(v)) + '</span></div>').join('') : ''; })()}
+            <div class="ov-quick-row"><span class="ov-quick-label">Relationship</span><span class="ov-quick-value ov-accent-pink">${esc(relStatus)}</span></div>
+            <div class="ov-quick-row"><span class="ov-quick-label">Physical</span><span class="ov-quick-value">${esc(physicalContent || '--')}</span></div>
+            <div class="ov-quick-row"><span class="ov-quick-label">Mental</span><span class="ov-quick-value">${esc(mentalContent || '--')}</span></div>
         </div>
 
         <!-- Equipment -->
@@ -287,6 +357,12 @@ Object.assign(N.Features.Overview, {
 if (typeof document !== "undefined" && !loadOverview._delegated) {
     loadOverview._delegated = true;
     document.addEventListener("click", function (e) {
+        var tabLink = e.target && e.target.closest ? e.target.closest("[data-ov-tab]") : null;
+        if (tabLink) {
+            e.preventDefault();
+            N.Core.switchTab(tabLink.getAttribute("data-ov-tab"));
+            return;
+        }
         var btn = e.target && e.target.closest ? e.target.closest("[data-ov-action]") : null;
         if (!btn) return;
         var action = btn.getAttribute("data-ov-action");

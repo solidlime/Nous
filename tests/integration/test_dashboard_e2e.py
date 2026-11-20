@@ -208,8 +208,8 @@ async def test_dashboard_html_loads(client):
     assert "Nous" in html
     # Chart.js reference
     assert "chart.js" in html.lower() or "Chart" in html
-    # Tailwind reference
-    assert "tailwindcss" in html.lower() or "tailwind" in html.lower()
+    # Stylesheet links (Tailwind CDN was removed in #100)
+    assert "/static/styles/" in html
     # 5 tabs
     for tab in ("Overview", "Memories", "Settings", "Chat", "Activity"):
         assert tab in html, f"Tab '{tab}' not found in dashboard HTML"

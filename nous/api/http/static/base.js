@@ -446,6 +446,25 @@ async function init() {
       switchTab(tabBtns[nextIdx].dataset.tab);
     }
   });
+
+  // ⌘K / Ctrl+K → focus the quick command bar; Enter jumps to Chat.
+  document.addEventListener("keydown", (e) => {
+    if (e.isComposing) return;
+    if (!(e.metaKey || e.ctrlKey) || e.key.toLowerCase() !== "k") return;
+    var cmdInput = document.getElementById("md-cmdbar-input");
+    if (!cmdInput) return;
+    e.preventDefault();
+    cmdInput.focus();
+  });
+  var cmdBarInput = document.getElementById("md-cmdbar-input");
+  if (cmdBarInput) {
+    cmdBarInput.addEventListener("keydown", (e) => {
+      if (e.key !== "Enter" || e.isComposing) return;
+      e.preventDefault();
+      switchTab("chat");
+      cmdBarInput.blur();
+    });
+  }
 }
 
 /* =================================================================
@@ -561,6 +580,7 @@ document.addEventListener("DOMContentLoaded", function () {
   document.querySelectorAll(".tab-btn").forEach(function (btn) {
     btn.setAttribute("role", "tab");
     btn.setAttribute("aria-label", btn.textContent.trim());
+    btn.title = btn.textContent.trim();
     btn.setAttribute("tabindex", "0");
   });
   document.querySelectorAll(".tab-panel").forEach(function (tab) {
