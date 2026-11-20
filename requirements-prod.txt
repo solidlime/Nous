@@ -45,7 +45,7 @@ httpx2>=2.16.2,<3  # direct import in nous/infrastructure/mcp_client/http_client
 
 # Japanese NER (entity extraction)
 # sudachidict_core is no longer installed via pip — downloaded at runtime to NOUS_DATA_ROOT/sudachi/
-sudachipy>=0.6.0,<0.7.0
+sudachipy>=0.7.0,<0.8.0
 
 # Language Detection (function-level import; falls back to "ja" if missing)
 langdetect>=1.0.9
