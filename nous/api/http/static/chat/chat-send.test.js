@@ -57,7 +57,7 @@ beforeAll(() => {
     core: { debug: vi.fn(), loadCommitments: vi.fn() },
     equipment: { update: vi.fn() },
     tts: { play: vi.fn(), autoPlay: vi.fn() },
-    attachments: { openViewer: vi.fn(), clear: vi.fn() },
+    attachments: { openViewer: vi.fn(), clear: vi.fn(() => { N.Chat.state.attachments = []; }) },
     showCharacterFlag: vi.fn(),
   };
   // chat-send.js split into send/*.js — load chunks in order
@@ -124,13 +124,21 @@ describe('chat hub — send flow', () => {
   it('POST registers the turn and the persistent chat-events stream carries it', async () => {
     const es = chatStream();
     expect(es).toBeTruthy();
+    // Stage an attachment: the payload must be built BEFORE clear() wipes
+    // the staged list — if clear ran first the attachment block would
+    // silently vanish from the outgoing message (#106 review round 3).
+    N.Chat.state.attachments = [
+      { filename: 'a.txt', url: '/a.txt', workspace_path: 'a.txt', mime_type: 'text/plain' },
+    ];
     await sendTurn('こんにちは');
     expect(N.Core.api).toHaveBeenCalledWith(
       '/api/chat/p1',
       expect.objectContaining({ method: 'POST' }),
     );
     const body = JSON.parse(N.Core.api.mock.calls[0][1].body);
-    expect(body.message).toBe('こんにちは');
+    expect(body.message).toContain('こんにちは');
+    expect(body.message).toContain('[添付ファイル: a.txt]');
+    expect(N.Chat.state.attachments.length).toBe(0); // clear did run
     expect(body.session_id).toBe('main');
     // sending clears staged attachments (send/pending.js)
     expect(N.Chat.attachments.clear).toHaveBeenCalledTimes(1);

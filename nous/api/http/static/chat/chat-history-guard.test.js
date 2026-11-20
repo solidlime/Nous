@@ -172,6 +172,15 @@ describe('clear() attachment badge cleanup (#107)', () => {
     // textContent fallback trick as the confirmed-clear test above).
     expect(document.getElementById('chat-messages').textContent).toBe('');
   });
+
+  /* Review round 3 (#107): pending.js guarded its attachments.clear() call
+     but clearChatHistory only used `N.Chat.attachments &&` — if the module
+     is absent the short-circuit leaves `N.Chat.attachments.clear()` to
+     throw. Load-order independence must hold on this path too. */
+  it('clear() resolves without N.Chat.attachments (load-order independent)', async () => {
+    delete window.Nous.Chat.attachments;
+    await expect(window.Nous.Chat.history.clear()).resolves.toBeUndefined();
+  });
 });
 
 /* =================================================================
@@ -199,6 +208,14 @@ describe('numeric-index guard toasts (#105)', () => {
     expect(apiCalls.length).toBe(0);
   });
 
+  /* requireMsgId is shared by rollback/edit/delete — the two toast wordings
+     must survive on the delete path too, not just the rollback path. */
+  it('delete(0) shares the missing-element toast through the same resolver', async () => {
+    await window.Nous.Chat.history.delete(0);
+    expect(toastCalls[0].msg).toContain('見つかりません');
+    expect(apiCalls.length).toBe(0);
+  });
+
   it('present element with empty msgId (streaming) keeps the 応答処理中 toast', async () => {
     msgDiv(0, '');
     await window.Nous.Chat.history.rollback(0, false);
@@ -214,7 +231,6 @@ describe('numeric-index guard toasts (#105)', () => {
     expect(toastCalls[0].msg).toContain('ロールバックしました');
     expect(toastCalls[0].kind).toBe('info');
     expect(apiCalls.length).toBe(1);
-    expect(apiCalls[0].url).toContain('/rollback');
     expect(apiCalls[0].url).toContain('/rollback');
     expect(JSON.parse(apiCalls[0].opts.body).from_id).toBe('uuid-abc');
   });
@@ -264,6 +280,22 @@ describe('TTS session cleanup on history mutation (#120)', () => {
   it('exports endSession on N.Chat.tts (the old code never did)', () => {
     loadFile('../chat/chat-tts.js');
     expect(typeof window.Nous.Chat.tts.endSession).toBe('function');
+  });
+
+  it('finish() skips synthesis once the stream was stopped (cleared session)', async () => {
+    loadFile('../chat/chat-tts-stream.js'); // real module: replace the counting stub
+    const posts = [];
+    const orig = window.Nous.Core.api.rawFetch;
+    window.Nous.Core.api.rawFetch = (url) => { posts.push(url); return Promise.resolve({ ok: true }); };
+    try {
+      const T = window.Nous.Chat.ttsStream;
+      T.startStream('test-persona');
+      T.stop();
+      await expect(T.finish('こんにちは', null)).resolves.toBeNull();
+      expect(posts.length).toBe(0); // clear後の合成 POST が無い
+    } finally {
+      window.Nous.Core.api.rawFetch = orig;
+    }
   });
 
   it('clear() stops TTS playback via N.Chat.tts.endSession', async () => {

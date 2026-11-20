@@ -4,7 +4,7 @@
    Chunk 2/3 of chat-history.js. Namespace: N.Chat.history.*
    Depends on: history/render.js (N.Chat._history.appendSegments),
    send/render.js (N.Chat.ui.append), chat-tts.js (N.Chat.tts.endSession),
-   chat-attachments.js.
+   chat-tts-stream.js (N.Chat.ttsStream.stop), chat-attachments.js.
    ================================================================= */
 ;(function(N) {
 "use strict";
@@ -15,6 +15,14 @@ var safeMarkdown = N.Chat.markdown && N.Chat.markdown.render;
 var S = window.S;
 
 var CHAT = N.Chat.state;
+
+// Stop every TTS source the chat owns — single-shot (tts) and streaming (ttsStream).
+// Both modules are optional at call time (load order / test stubs), and a broken
+// TTS stub must never abort the history operation that is already committed server-side.
+function _stopTts(reason) {
+  try { if (N.Chat.tts && N.Chat.tts.endSession) N.Chat.tts.endSession(reason); } catch (e) {}
+  try { if (N.Chat.ttsStream && N.Chat.ttsStream.stop) N.Chat.ttsStream.stop(); } catch (e) {}
+}
 
 function resetToWelcome() {
   const container = document.getElementById("chat-messages");
@@ -40,21 +48,29 @@ function resetToWelcome() {
    return (badge-only state) and after a confirmed reset — never before
    confirm, so cancelling keeps staged files (and their File refs) intact. */
 
-async function clearChatHistory() {
-  // Abort any active stream before clearing
+// F4 placeholder: CHAT.abortController has no writer yet — this is a
+// no-op guard until streaming cancel is wired (#121). Called AFTER the
+// confirm so a cancelled reset never kills a live stream.
+function _abortActiveStream() {
   if (CHAT.abortController) {
     CHAT.abortController.abort();
     CHAT.abortController = null;
   }
-  if (N.Chat.tts && N.Chat.tts.endSession) N.Chat.tts.endSession("rollback");
+}
+
+async function clearChatHistory() {
   if (CHAT.messages.length === 0) {
-    N.Chat.attachments && N.Chat.attachments.clear();
+    _abortActiveStream();
+    _stopTts("clear"); // empty-history path: no confirm dialog, reset is immediate
+    if (N.Chat.attachments && N.Chat.attachments.clear) N.Chat.attachments.clear();
     resetToWelcome();
     return;
   }
   const ok = await showConfirm("会話をリセットしますか？現在の会話履歴がすべて削除されます。");
-  if (!ok) return; // cancel = no-op: staged files must survive
-  N.Chat.attachments && N.Chat.attachments.clear();
+  if (!ok) return; // cancel = no-op: staged files AND audio must survive
+  _abortActiveStream();
+  _stopTts("clear"); // confirmed path: stop TTS only after the user commits
+  if (N.Chat.attachments && N.Chat.attachments.clear) N.Chat.attachments.clear();
   CHAT.messages = [];
   resetToWelcome();
   // Delete server-side session (F3) - AWAITED, not fire-and-forget
@@ -129,24 +145,14 @@ async function rollbackChat(fromId, shouldResend) {
     var ttsCacheUrls = [];
     var cc = document.getElementById("chat-messages");
     var allMsgs = cc.querySelectorAll(".chat-msg.assistant");
-    if (typeof fromId === "number") {
-      for (var i = 0; i < allMsgs.length; i++) {
-        var idx = parseInt(allMsgs[i].dataset.msgIndex);
-        var exclusive = !!shouldResend;
-        if ((exclusive && idx >= fromId) || (!exclusive && idx > fromId)) {
-          if (allMsgs[i].dataset.ttsCacheUrl) {
-            ttsCacheUrls.push(allMsgs[i].dataset.ttsCacheUrl);
-          }
-        }
+    // fromId is always a UUID string here — requireMsgId already converted
+    // any numeric index before we got here.
+    var found = false;
+    for (var j = 0; j < allMsgs.length; j++) {
+      if (found && allMsgs[j].dataset.ttsCacheUrl) {
+        ttsCacheUrls.push(allMsgs[j].dataset.ttsCacheUrl);
       }
-    } else {
-      var found = false;
-      for (var j = 0; j < allMsgs.length; j++) {
-        if (found && allMsgs[j].dataset.ttsCacheUrl) {
-          ttsCacheUrls.push(allMsgs[j].dataset.ttsCacheUrl);
-        }
-        if (allMsgs[j].dataset.msgId === String(fromId)) found = true;
-      }
+      if (allMsgs[j].dataset.msgId === String(fromId)) found = true;
     }
 
     const body = { from_id: String(fromId), exclusive: !!shouldResend };
@@ -164,7 +170,7 @@ async function rollbackChat(fromId, shouldResend) {
     );
 
     // TTS session cleanup before DOM rebuild
-    if (N.Chat.tts && N.Chat.tts.endSession) N.Chat.tts.endSession("rollback");
+    _stopTts("rollback");
     // TTSキャッシュ削除
     ttsCacheUrls.forEach(function(url) {
       var filename = url.split("/").pop();
@@ -227,12 +233,9 @@ async function editChatMessage(msgId) {
     if (eid === null) return;
     msgId = eid;
   }
-  let msgDiv;
-  if (typeof msgId === "number") {
-    msgDiv = document.querySelector('.chat-msg.user[data-msg-index="' + msgId + '"]');
-  } else {
-    msgDiv = document.querySelector('.chat-msg.user[data-msg-id="' + msgId + '"]');
-  }
+  // msgId is always a UUID string here — requireMsgId already converted
+  // any numeric index before we got here.
+  let msgDiv = document.querySelector('.chat-msg.user[data-msg-id="' + msgId + '"]');
   if (!msgDiv) return;
   const bubble = msgDiv.querySelector(".chat-bubble");
   if (!bubble) return;
@@ -286,9 +289,7 @@ async function editChatMessage(msgId) {
 
         // 編集後に後続メッセージがあれば自動再生成
         const container = document.getElementById("chat-messages");
-        const currentMsgEl = typeof msgId === "number"
-          ? container.querySelector('.chat-msg.user[data-msg-index="' + msgId + '"]')
-          : container.querySelector('.chat-msg.user[data-msg-id="' + msgId + '"]');
+        const currentMsgEl = container.querySelector('.chat-msg.user[data-msg-id="' + msgId + '"]');
         const allMsgEls = container.querySelectorAll(".chat-msg");
         const allMsgs = Array.from(allMsgEls);
         const currentIdx = allMsgs.indexOf(currentMsgEl);
@@ -362,11 +363,8 @@ async function deleteChatMessage(msgId) {
   let found = false;
   for (const msg of allMsgs) {
     if (found) { subsequentCount++; continue; }
-    if (typeof msgId === "number") {
-      if (parseInt(msg.dataset.msgIndex) === msgId) found = true;
-    } else {
-      if (msg.dataset.msgId === msgId) found = true;
-    }
+    // msgId is always a UUID string here (requireMsgId converted it)
+    if (msg.dataset.msgId === msgId) found = true;
   }
 
   const confirmed = await showConfirm(
@@ -379,23 +377,13 @@ async function deleteChatMessage(msgId) {
     var ttsCacheUrls = [];
     var container2 = document.getElementById("chat-messages");
     var allMsgs2 = container2.querySelectorAll(".chat-msg.assistant");
-    if (typeof msgId === "number") {
-      for (var k = 0; k < allMsgs2.length; k++) {
-        var idx2 = parseInt(allMsgs2[k].dataset.msgIndex);
-        if (idx2 >= msgId) {
-          if (allMsgs2[k].dataset.ttsCacheUrl) {
-            ttsCacheUrls.push(allMsgs2[k].dataset.ttsCacheUrl);
-          }
-        }
+    // msgId is always a UUID string here (requireMsgId converted it)
+    var found2 = false;
+    for (var m = 0; m < allMsgs2.length; m++) {
+      if (found2 && allMsgs2[m].dataset.ttsCacheUrl) {
+        ttsCacheUrls.push(allMsgs2[m].dataset.ttsCacheUrl);
       }
-    } else {
-      var found2 = false;
-      for (var m = 0; m < allMsgs2.length; m++) {
-        if (found2 && allMsgs2[m].dataset.ttsCacheUrl) {
-          ttsCacheUrls.push(allMsgs2[m].dataset.ttsCacheUrl);
-        }
-        if (allMsgs2[m].dataset.msgId === String(msgId)) found2 = true;
-      }
+      if (allMsgs2[m].dataset.msgId === String(msgId)) found2 = true;
     }
 
     const body = { from_id: String(msgId), exclusive: true };
@@ -411,7 +399,7 @@ async function deleteChatMessage(msgId) {
     );
 
     // TTS session cleanup before DOM rebuild
-    if (N.Chat.tts && N.Chat.tts.endSession) N.Chat.tts.endSession("rollback");
+    _stopTts("delete");
     // TTSキャッシュ削除
     ttsCacheUrls.forEach(function(url) {
       var filename = url.split("/").pop();
