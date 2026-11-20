@@ -41,7 +41,7 @@ dependencies = [
 
     # Japanese NER (entity extraction)
     # sudachidict_core は pip で入れない — 実行時に NOUS_DATA_ROOT/sudachi/ へ DL
-    "sudachipy>=0.6.0,<0.7.0",
+    "sudachipy>=0.7.0,<0.8.0",
 
     # Language detection (nous/domain/language.py)
     "langdetect>=1.0.9",
