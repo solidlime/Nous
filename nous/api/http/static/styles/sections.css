@@ -11,8 +11,8 @@
 #act-toolbar {
     display:flex; flex-wrap:wrap; gap:10px; align-items:flex-end;
     margin-bottom:16px; padding:10px 14px;
-    background:var(--veil-faint); border:1px solid var(--glass-border);
-    border-radius:10px;
+    background:var(--glass-bg); border:1px solid var(--glass-border);
+    border-radius:var(--radius-md);
 }
 #act-toolbar label {
     font-size:0.72rem; color:var(--text-muted);
@@ -39,17 +39,18 @@
 .act-event.type-events\.ingested { --act-color: var(--text-muted); }
 /* Session card */
 .act-session {
-    border:1px solid var(--glass-border); border-radius:10px;
+    border:1px solid var(--glass-border); border-radius:var(--radius-md);
     margin-bottom:10px; overflow:hidden;
-    background:var(--veil-faint);
+    background:var(--glass-bg);
 }
 .act-session-header {
     display:flex; align-items:center; gap:10px;
     padding:10px 14px; cursor:pointer;
-    background:var(--veil-subtle);
+    background:transparent;
+    border-bottom:1px solid var(--separator-non-opaque);
     transition:background 0.15s;
 }
-.act-session-header:hover { background:var(--veil); }
+.act-session-header:hover { background:var(--glass-bg-subtle); }
 .act-session-header .act-session-id {
     font-family:monospace; font-size:0.8rem; color:var(--accent-purple);
     flex:1; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
@@ -69,10 +70,10 @@
 /* Individual event row */
 .act-event {
     display:flex; align-items:flex-start; gap:10px;
-    padding:8px 14px 8px 10px; border-left:3px solid var(--act-color);
+    padding:8px 14px 8px 10px; border-left:1px solid var(--act-color);
     margin-left:10px; transition:background 0.12s;
 }
-.act-event:hover { background:var(--veil-faint); }
+.act-event:hover { background:var(--glass-bg-subtle); }
 .act-event .act-event-icon {
     font-size:0.9rem; width:20px; text-align:center; flex-shrink:0;
     margin-top:1px;
@@ -104,7 +105,7 @@
 /* Tool calls timeline (table) */
 .act-tool-wrap {
     overflow-x:auto; border:1px solid var(--glass-border);
-    border-radius:10px; background:var(--veil-faint);
+    border-radius:var(--radius-md); background:var(--glass-bg);
 }
 .act-tool-table {
     width:100%; border-collapse:collapse; font-size:0.78rem;
@@ -116,20 +117,23 @@
     border-bottom:1px solid var(--glass-border);
     white-space:nowrap;
 }
-.act-tool-row:hover { background:var(--veil-subtle); }
+.act-tool-row:hover { background:var(--glass-bg-subtle); }
 .act-tool-table td {
     padding:7px 12px; color:var(--text-secondary);
-    border-bottom:1px solid var(--veil-subtle);
+    border-bottom:1px solid var(--separator-non-opaque);
     vertical-align:top;
 }
 .act-tool-row:last-child td { border-bottom:none; }
-.act-tool-time { white-space:nowrap; color:var(--text-muted); font-variant-numeric:tabular-nums; }
+.act-tool-time {
+    white-space:nowrap; color:var(--text-muted);
+    font-family:ui-monospace, monospace; font-variant-numeric:tabular-nums;
+}
 .act-tool-name { white-space:nowrap; color:var(--text-primary); font-weight:600; }
 .act-tool-duration, .act-tool-exit {
-    white-space:nowrap; font-family:monospace; font-variant-numeric:tabular-nums;
+    white-space:nowrap; font-family:ui-monospace, monospace; font-variant-numeric:tabular-nums;
 }
 .act-tool-command {
-    font-family:monospace; color:var(--text-muted);
+    font-family:ui-monospace, monospace; color:var(--text-muted);
     max-width:44ch; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;
 }
 @media (max-width: 640px) {
@@ -163,11 +167,13 @@
   animation: graph-spin 0.8s linear infinite;
 }
 
-/* Active state for node-limit buttons */
+/* Active state for node-limit buttons — md 選択態: 文字色+上下罫線、背景塗りはしない */
 .graph-limit-btn.active {
-  background: rgba(var(--accent-blue-rgb), 0.35);
-  border-color: var(--accent-blue);
-  box-shadow: 0 0 12px rgba(var(--accent-blue-rgb), 0.15);
+  background: transparent;
+  color: var(--accent-blue);
+  border-top: 1px solid var(--accent-blue);
+  border-bottom: 1px solid var(--accent-blue);
+  box-shadow: none;
 }
 
 /* Detail panel backdrop — visual bg is the inline rgba(0,0,0,0.3) on
@@ -220,13 +226,17 @@ html.light .mem-tag-chip { color: hsla(var(--chip-hue), 70%, 35%, 1); }
     transition: max-height 0.35s ease, padding 0.35s ease, opacity 0.35s ease;
     opacity: 0; padding: 0 16px;
 }
-.adv-search-panel.open { max-height: 600px; opacity: 1; padding: 16px; }
+.adv-search-panel.open {
+    max-height: 600px; opacity: 1; padding: 16px;
+    background: var(--glass-bg); border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+}
 .adv-search-row { display: flex; gap: 12px; flex-wrap: wrap; align-items: center; margin-bottom: 10px; }
 .adv-search-label { font-size: 0.78rem; color: var(--text-muted); min-width: 80px; }
 
 /* ── Search mode button group ── */
 .mode-btn-group {
-    display: flex; gap: 2px; border-radius: 10px; overflow: hidden;
+    display: flex; gap: 2px; border-radius: var(--radius-sm); overflow: hidden;
     border: 1px solid var(--glass-border);
 }
 .mode-btn {
@@ -234,33 +244,36 @@ html.light .mem-tag-chip { color: hsla(var(--chip-hue), 70%, 35%, 1); }
     color: var(--text-muted); cursor: pointer; transition: all 0.2s;
 }
 .mode-btn.active {
-    background: rgba(var(--accent-blue-rgb), 0.25); color: var(--accent-blue); font-weight: 600;
+    background: transparent; color: var(--accent-blue); font-weight: 600;
 }
 
 /* ── Toolbar ── */
 .mem-toolbar {
-    display: flex; gap: 8px; flex-wrap: wrap; align-items: center; padding: 10px 0;
+    display: flex; gap: 8px; flex-wrap: wrap; align-items: center;
+    padding: 10px 14px; margin-bottom: 12px;
+    background: var(--glass-bg); border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
 }
 .mem-toolbar-spacer { flex: 1; }
 
 /* ── Batch bar ── */
 .mem-batch-bar {
     display: none; gap: 8px; align-items: center; padding: 10px 16px;
-    background: rgba(var(--accent-red-rgb), 0.08); border-radius: 10px; margin-bottom: 8px;
+    background: var(--glass-bg); border-radius: var(--radius-md); margin-bottom: 8px;
     border: 1px solid rgba(var(--accent-red-rgb), 0.2);
 }
 .mem-batch-bar.active { display: flex; }
 
 /* ── View toggle ── */
 .view-toggle {
-    display: flex; gap: 2px; border-radius: 8px; overflow: hidden;
+    display: flex; gap: 2px; border-radius: var(--radius-sm); overflow: hidden;
     border: 1px solid var(--glass-border);
 }
 .view-btn {
     padding: 5px 10px; font-size: 0.8rem; border: none; background: transparent;
     color: var(--text-muted); cursor: pointer; transition: all 0.2s;
 }
-.view-btn.active { background: rgba(var(--accent-blue-rgb), 0.2); color: var(--accent-blue); }
+.view-btn.active { background: transparent; color: var(--accent-blue); }
 
 /* ── Compact list view ── */
 .memory-compact {
@@ -268,10 +281,10 @@ html.light .mem-tag-chip { color: hsla(var(--chip-hue), 70%, 35%, 1); }
     border-bottom: 1px solid var(--glass-border); font-size: 0.82rem; cursor: pointer;
     transition: background 0.2s;
 }
-.memory-compact:hover { background: rgba(var(--accent-blue-rgb), 0.05); }
+.memory-compact:hover { background: var(--glass-bg-subtle); }
 .memory-compact:last-child { border-bottom: none; }
 .mem-compact-key {
-    font-family: monospace; color: var(--accent-purple); font-size: 0.75rem;
+    font-family: ui-monospace, monospace; color: var(--accent-purple); font-size: 0.75rem;
     min-width: 120px; flex-shrink: 0; overflow: hidden;
     text-overflow: ellipsis; white-space: nowrap;
 }
@@ -306,14 +319,15 @@ html.light .mem-tag-chip { color: hsla(var(--chip-hue), 70%, 35%, 1); }
 
 /* ── Edit/Create modal overlay ── */
 .mem-edit-overlay {
-    position: fixed; inset: 0; background: rgba(0,0,0,0.6); z-index: 1100;
+    position: fixed; inset: 0; background: rgba(0,0,0,0.6);
+    z-index: calc(var(--z-modal) + 100);
     display: none; align-items: center; justify-content: center;
     padding: 20px; backdrop-filter: blur(4px);
 }
 .mem-edit-overlay.active { display: flex; }
 .mem-edit-modal {
-    background: var(--bg-secondary); border: 1px solid var(--glass-border);
-    border-radius: var(--card-radius); max-width: 640px; width: 100%;
+    background: var(--glass-bg); border: 1px solid var(--glass-border);
+    border-radius: var(--radius-lg); max-width: 640px; width: 100%;
     max-height: 85vh; overflow-y: auto; padding: 24px;
     box-shadow: 0 20px 60px rgba(0,0,0,0.4);
     animation: mem-fade-in 0.2s ease;
@@ -322,8 +336,8 @@ html.light .mem-tag-chip { color: hsla(var(--chip-hue), 70%, 35%, 1); }
 .form-group { margin-bottom: 14px; }
 .form-label { display: block; font-size: 0.78rem; color: var(--text-muted); margin-bottom: 4px; font-weight: 600; }
 .form-textarea {
-    width: 100%; min-height: 120px; background: var(--veil);
-    border: 1px solid var(--glass-border); border-radius: 10px;
+    width: 100%; min-height: 120px; background: var(--glass-bg-subtle);
+    border: 0.5px solid var(--glass-border); border-radius: var(--radius-sm);
     color: var(--text-primary); padding: 10px; font-size: 0.88rem;
     font-family: inherit; resize: vertical; outline: none;
 }
@@ -333,7 +347,8 @@ html.light .form-textarea { background: rgba(139,92,246,0.06); }
 /* ── Tags input ── */
 .tags-input-wrap {
     display: flex; flex-wrap: wrap; gap: 4px; padding: 6px 10px; min-height: 38px; align-items: center;
-    background: var(--veil); border: 1px solid var(--glass-border); border-radius: 10px;
+    background: var(--glass-bg-subtle); border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-sm);
 }
 .tags-input-wrap:focus-within { border-color: var(--accent-blue); box-shadow: 0 0 0 3px rgba(var(--accent-blue-rgb), 0.2); }
 html.light .tags-input-wrap { background: rgba(139,92,246,0.06); }
@@ -403,6 +418,7 @@ input[type="range"].glass-range::-moz-range-thumb {
 
 /* ════════ settings ════════ */
 
+/* カード本体の md-pane 相当の器（glass-bg/罫線/radius-md）は .glass が担う（settings-form.js:88）。 */
 .setting-category-card .cat-body { transition: max-height 0.3s ease; overflow: hidden; }
 .setting-diff-dot { width: 8px; height: 8px; border-radius: 50%; background: var(--accent-blue); display: inline-block; }
 .setting-reset-btn { background: rgba(96,165,250,0.1); border: 1px solid rgba(96,165,250,0.2); border-radius: 8px; color: var(--accent-blue); cursor: pointer; font-size: 0.72rem; padding: 4px 10px; transition: all 0.2s; white-space: nowrap; }
@@ -418,8 +434,8 @@ input[type="range"].glass-range::-moz-range-thumb {
 #tab-timeline .tl-toolbar {
     display: flex; flex-wrap: wrap; gap: 8px; align-items: flex-end;
     margin-bottom: 12px; padding: 10px 12px;
-    background: var(--veil-faint); border: 1px solid var(--glass-border);
-    border-radius: 10px;
+    background: var(--glass-bg); border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
 }
 #tab-timeline .tl-toolbar label {
     font-size: 0.72rem; color: var(--text-muted); display: flex;
@@ -430,12 +446,19 @@ input[type="range"].glass-range::-moz-range-thumb {
     border-radius: 6px; padding: 4px 8px; color: var(--text-primary);
     font-size: 0.75rem; font-family: inherit; outline: none; min-width: 100px;
 }
+/* id 依存の旧規則は残しつつ、#tl-tag / #tl-min-importance は glass-input 綴りでも効く。 */
+#tab-timeline .tl-toolbar input.tl-min-imp { min-width:60px; }
 #tab-timeline .tl-toolbar select:focus, #tab-timeline .tl-toolbar input:focus {
-    border-color: var(--accent-purple);
+    border-color: var(--accent-purple); 
+}
+#tab-timeline .tl-toolbar .glass-input {
+    background: var(--glass-bg-subtle); border: 0.5px solid var(--glass-border);
+    border-radius: var(--radius-sm);
+    padding: 8px 14px; font-size: 1rem;
 }
 #tl-container {
     height: 500px; border: 1px solid var(--glass-border);
-    border-radius: 10px; overflow: hidden;
+    border-radius: var(--radius-md); overflow: hidden;
     background: rgba(0,0,0,0.15);
 }
 #tl-container .vis-item {
@@ -469,11 +492,15 @@ input[type="range"].glass-range::-moz-range-thumb {
 }
 #tl-legend span { font-size: 0.68rem; color: var(--text-muted); }
 
-/* ════════ wiki ════════ */
+/* ═══════ conduit ════════ wiki ════════ */
 
-.wiki-item { display:flex; flex-direction:column; gap:2px; width:100%; text-align:left; padding:10px 12px; margin-bottom:6px; border-radius:10px; border:1px solid var(--glass-border); background:transparent; cursor:pointer; transition:background 0.15s, border-color 0.15s; }
-.wiki-item:hover { background:rgba(var(--accent-blue-rgb), 0.08); }
-.wiki-item.active { border-color:rgba(var(--accent-blue-rgb), 0.5); background:rgba(var(--accent-blue-rgb), 0.12); }
+/* safeSetHTML は style 属性を剥がすため、wiki.js の旧 inline 見出しはここで持つ（.tab-panel h2 孤児対応）。 */
+#wiki-article-head h2 { font-size:1.15rem; font-weight:700; color:var(--text-primary); margin:0 0 4px; }
+
+.wiki-item { display:flex; flex-direction:column; gap:2px; width:100%; text-align:left; padding:10px 12px; margin-bottom:0; border-radius:var(--radius-sm); border:1px solid transparent; border-bottom:1px solid var(--separator-non-opaque); background:transparent; cursor:pointer; transition:background 0.15s, border-color 0.15s; }
+.wiki-item:hover { background:var(--glass-bg-subtle); }
+.wiki-item.active { border-color:transparent; border-bottom-color:var(--separator-non-opaque); }
+.wiki-item.active .wiki-item-title { color:var(--accent-blue); }
 .wiki-item-title { font-size:0.88rem; font-weight:600; color:var(--text-primary); }
 .wiki-item-meta { font-size:0.7rem; color:var(--text-muted); }
 .wiki-cat { margin-bottom:10px; }
@@ -495,18 +522,109 @@ input[type="range"].glass-range::-moz-range-thumb {
 .wiki-edit-actions { display:flex; gap:8px; margin-top:10px; }
 #wiki-sub { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; margin-top:8px; font-size:0.72rem; color:var(--text-muted); }
 #wiki-sub:empty { display:none; }
-.wiki-chip { padding:1px 8px; border-radius:999px; font-size:0.7rem; border:1px solid var(--glass-border); background:transparent; color:var(--text-muted); cursor:pointer; }
-.wiki-chip:hover { border-color:rgba(var(--accent-blue-rgb), 0.5); color:var(--text-primary); }
+.wiki-chip { padding:1px 8px; border-radius:999px; font-size:0.7rem; border:1px solid var(--glass-border); background:transparent; color:var(--text-muted); cursor:pointer; font-family:ui-monospace, monospace; font-variant-numeric:tabular-nums; }
+.wiki-chip:hover { border-color:var(--accent-blue); color:var(--text-primary); }
 #wiki-history { margin-top:12px; }
 #wiki-history:empty { display:none; }
-.wiki-rev { display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:8px; font-size:0.76rem; border:1px solid transparent; }
-.wiki-rev:hover { border-color:var(--glass-border); }
+.wiki-rev { display:flex; align-items:center; gap:8px; padding:4px 6px; border-radius:var(--radius-sm); font-size:0.76rem; border:1px solid transparent; border-bottom:1px solid var(--separator-non-opaque); font-family:ui-monospace, monospace; font-variant-numeric:tabular-nums; }
+.wiki-rev:hover { background:var(--glass-bg-subtle); }
 .wiki-rev-meta { flex:1; color:var(--text-muted); font-size:0.72rem; }
 .wiki-panel-head { font-size:0.72rem; text-transform:uppercase; letter-spacing:0.06em; color:var(--text-muted); margin-bottom:6px; }
 .wiki-diff { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:0.76rem; line-height:1.5; padding:10px 12px; border-radius:10px; background:rgba(15,23,42,0.45); max-height:340px; overflow:auto; white-space:pre-wrap; margin-top:8px; }
 .wiki-diff .add { color:#86efac; }
 .wiki-diff .del { color:#fca5a5; }
 mark.wiki-hit { background:rgba(250,204,21,0.35); color:inherit; border-radius:3px; padding:0 1px; }
+
+/* ════════ tab heading (all tabs) ════════ */
+
+/* 見出し帯。現行の inline 実効値をここに一本化（layout.css の h2 系は #127 で削除）。
+   外側は flex + space-between: ボタン群があるタブだけ右寄せ、単一子タブは左寄せ。 */
+.tab-head {
+    margin-bottom:16px; padding-bottom:12px;
+    border-bottom:1px solid var(--glass-border);
+    display:flex; align-items:center; justify-content:space-between;
+    flex-wrap:wrap; gap:8px;
+}
+.tab-head h2 {
+    font-size:1.25rem; font-weight:700; color:var(--text-primary);
+    display:flex; align-items:center; gap:10px;
+}
+.tab-head h2 span { font-size:1.4rem; }
+/* chat 見出しのアバター（chat_layout.py の inline 40px を写す） */
+.tab-head img {
+    width:40px; height:40px; border-radius:50%; object-fit:cover; flex-shrink:0;
+}
+/* timeline の2つ目の h2（.tab-head の外）。.tab-panel h2 の flex 継承を自前で持つ。 */
+.tl-subhead {
+    display:flex; align-items:center; gap:10px;
+    font-size:1.1rem; font-weight:600; color:var(--text-primary);
+}
+.tl-head {
+    display:flex; align-items:center; justify-content:space-between;
+    margin-bottom:12px;
+}
+.tl-reload-btn {
+    background:none; border:1px solid var(--glass-border); border-radius:var(--radius-sm);
+    color:var(--text-muted); padding:4px 10px; cursor:pointer; font-size:0.75rem;
+    font-family:inherit; transition:background 0.15s;
+}
+.tl-reload-btn:hover { background:var(--glass-bg-subtle); }
+/* #tl-min-importance の旧 inline min-width:60px */
+.tl-min-imp { min-width:60px; }
+
+/* ════════ projects (tab + features/projects.js) ════════ */
+
+/* safeSetHTML は style 属性を落とすため、元 inline の見た目はクラスで持つ。 */
+.proj-form {
+    display:flex; gap:8px; align-items:center; flex-wrap:wrap;
+}
+.proj-form-label { font-size:0.8rem; color:var(--text-muted); }
+.proj-slug-input { max-width:240px; }
+.proj-status { font-size:0.78rem; color:var(--text-muted); }
+
+.proj-section-title {
+    font-size:0.72rem; font-weight:600; letter-spacing:0.05em;
+    text-transform:uppercase; color:var(--text-muted);
+    margin-bottom:10px;
+}
+.proj-section-title .proj-count { font-weight:400; }
+.proj-row {
+    display:flex; align-items:baseline; gap:6px;
+    padding:8px 0; border-top:1px solid var(--separator-non-opaque);
+}
+.proj-row:first-child { border-top:none; }
+.proj-row-text { font-size:0.85rem; white-space:pre-wrap; color:var(--text-primary); }
+.proj-row-meta {
+    font-family:ui-monospace, monospace; font-variant-numeric:tabular-nums;
+    color:var(--text-muted); font-size:0.72rem; flex-shrink:0;
+}
+.proj-row-link { font-size:0.86rem; color:var(--accent-blue); text-decoration:none; }
+.proj-row-link:hover { text-decoration:underline; text-underline-offset:2px; }
+.proj-empty { color:var(--text-muted); font-size:0.82rem; }
+.proj-badge-row {
+    display:flex; gap:18px; flex-wrap:wrap; font-size:0.82rem;
+}
+.proj-badge-row strong {
+    font-family:ui-monospace, monospace; font-variant-numeric:tabular-nums;
+    font-weight:600; color:var(--text-primary);
+}
+.proj-badge-row .proj-tag { color:var(--text-muted); }
+
+/* ════════ settings warning banner ════════ */
+
+/* settings-core.js の警告カード（旧 inline border-left は safeSetHTML で剥がれていた）。 */
+.settings-warn-card {
+    margin-bottom:16px;
+    border-left:3px solid var(--accent-orange);
+}
+.settings-warn-head {
+    font-weight:600; color:var(--accent-orange);
+}
+.settings-warn-row { margin-top:6px; }
+.settings-warn-hint {
+    color:var(--text-muted); font-size:0.78rem; margin-top:2px;
+}
+
 
 /* ============================================================
    MISSION DECK — shell (rail / app-body / command bar)
@@ -666,3 +784,37 @@ body:has(#tab-chat.active) .md-cmdbar { display: none; }
 .md-bar-label b { font-family: ui-monospace, "SF Mono", monospace; color: var(--text-primary); font-weight: 500; }
 .md-bar { height: 3px; border-radius: 2px; background: var(--separator-non-opaque); overflow: hidden; }
 .md-bar-fill { display: block; height: 100%; border-radius: 2px; width: 0; }
+
+/* ============================================================
+   Overview status panel (chat.css:2206-2280 から移設・#127)
+   Overview 専用。.character-flag はチャット部品なので移設しない。
+   ============================================================ */
+.ov-hero-portrait {
+    background: var(--glass-bg);
+    border: 1px solid var(--glass-border);
+    border-radius: var(--radius-md);
+    overflow: hidden;
+    backdrop-filter: blur(20px) saturate(180%);
+}
+.ov-hero-portrait img {
+    width: 100%; display: block; border-radius: var(--radius-md);
+}
+
+/* Quick status row */
+.ov-quick-row { display: flex; align-items: center; gap: 10px; font-size: 0.85rem; }
+.ov-quick-label {
+    min-width: 90px; font-size: 0.72rem; color: var(--text-muted); font-weight: 600;
+    text-transform: uppercase; letter-spacing: 0.05em;
+}
+.ov-quick-value { color: var(--text-secondary); flex: 1; }
+
+/* Section title in status panel */
+.ov-section-title {
+    font-size: 0.72rem; font-weight: 600; color: var(--text-muted);
+    text-transform: uppercase; letter-spacing: 0.05em;
+    display: flex; align-items: center; gap: 6px; margin-bottom: 6px;
+}
+
+@media (max-width: 767px) {
+    .ov-hero-portrait img { max-height: 300px; object-fit: cover; }
+}

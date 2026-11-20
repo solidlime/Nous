@@ -11,8 +11,8 @@ def render_settings_tab() -> str:
     return """
         <!-- ========== SETTINGS TAB ========== -->
         <section id="tab-settings" class="tab-panel" role="tabpanel">
-            <div style="margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
-                <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="settings"></i></span> Settings</h2>
+            <div class="tab-head">
+                <h2><span><i data-lucide="settings"></i></span> Settings</h2>
             </div>
             <div id="settings-diagnostics"></div>
             <div id="settings-content">

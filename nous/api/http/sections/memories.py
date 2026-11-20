@@ -5,8 +5,8 @@ def render_memories_tab() -> str:
     """Return the memories tab HTML section with all UI elements."""
     return """        <!-- ========== MEMORIES TAB ========== -->
         <section id="tab-memories" class="tab-panel" role="tabpanel">
-            <div style="margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
-                <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="brain"></i></span> Memories</h2>
+            <div class="tab-head">
+                <h2><span><i data-lucide="brain"></i></span> Memories</h2>
             </div>
 
             <div id="memories-content">
@@ -41,28 +41,28 @@ def render_memories_tab() -> str:
                         <label class="form-label">Emotion Type</label>
                         <select id="edit-emotion" class="glass-input" style="width:100%">
                             <option value="">None</option>
-                            <option value="joy"><i data-lucide="smile"></i> Joy</option>
-                            <option value="sadness"><i data-lucide="frown"></i> Sadness</option>
-                            <option value="anger"><i data-lucide="angry"></i> Anger</option>
-                            <option value="fear"><i data-lucide="alert-triangle"></i> Fear</option>
-                            <option value="surprise"><i data-lucide="alert-triangle"></i> Surprise</option>
+                            <option value="joy">Joy</option>
+                            <option value="sadness">Sadness</option>
+                            <option value="anger">Anger</option>
+                            <option value="fear">Fear</option>
+                            <option value="surprise">Surprise</option>
                             <option value="disgust">&#129326; Disgust</option>
                             <option value="love">&#10084; Love</option>
-                            <option value="neutral"><i data-lucide="meh"></i> Neutral</option>
+                            <option value="neutral">Neutral</option>
                             <option value="anticipation">&#129300; Anticipation</option>
                             <option value="trust">&#129309; Trust</option>
-                            <option value="anxiety"><i data-lucide="alert-triangle"></i> Anxiety</option>
+                            <option value="anxiety">Anxiety</option>
                             <option value="excitement">&#127881; Excitement</option>
-                            <option value="frustration"><i data-lucide="frown"></i> Frustration</option>
+                            <option value="frustration">Frustration</option>
                             <option value="nostalgia">&#127749; Nostalgia</option>
                             <option value="pride">&#129412; Pride</option>
-                            <option value="shame"><i data-lucide="frown"></i> Shame</option>
-                            <option value="guilt"><i data-lucide="frown"></i> Guilt</option>
+                            <option value="shame">Shame</option>
+                            <option value="guilt">Guilt</option>
                             <option value="loneliness">&#128148; Loneliness</option>
-                            <option value="contentment"><i data-lucide="smile"></i> Contentment</option>
-                            <option value="curiosity"><i data-lucide="search-check"></i> Curiosity</option>
-                            <option value="awe"><i data-lucide="frown"></i> Awe</option>
-                            <option value="relief"><i data-lucide="smile-plus"></i> Relief</option>
+                            <option value="contentment">Contentment</option>
+                            <option value="curiosity">Curiosity</option>
+                            <option value="awe">Awe</option>
+                            <option value="relief">Relief</option>
                         </select>
                     </div>
                     <div class="form-group">

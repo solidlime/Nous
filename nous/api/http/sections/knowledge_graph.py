@@ -44,8 +44,8 @@ def render_graph_tab() -> str:
     return """
         <!-- ========== KNOWLEDGE GRAPH TAB ========== -->
         <section id="tab-graph" class="tab-panel" role="tabpanel">
-            <div style="margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
-                <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="share-2"></i></span> Knowledge Graph</h2>
+            <div class="tab-head">
+                <h2><span><i data-lucide="share-2"></i></span> Knowledge Graph</h2>
             </div>
 
           <div id="graph-content">

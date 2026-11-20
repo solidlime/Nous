@@ -209,10 +209,6 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
     color: var(--accent-red); margin-top: 2px;
 }
 .settings-actions { display: flex; gap: 10px; flex-wrap: wrap; }
-.global-apply-section {
-    display: flex; align-items: center; gap: 12px;
-    flex-wrap: wrap; margin-top: 16px;
-}
 .global-apply-btn {
     padding: 10px 24px; font-size: 0.85rem; font-weight: 600; border-radius: 10px;
     background: linear-gradient(135deg, rgba(var(--accent-blue-rgb), 0.2), rgba(var(--accent-teal-rgb), 0.2));
@@ -357,10 +353,11 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
     pointer-events: none;
 }
 .toast {
-    padding: 12px 20px; border-radius: var(--radius-lg);
+    padding: 12px 20px; border-radius: var(--radius-md);
     font-size: 0.85rem; font-weight: 500;
+    background: var(--glass-bg);
     backdrop-filter: blur(20px) saturate(180%);
-    border: 0.5px solid var(--glass-border);
+    border: 1px solid var(--glass-border);
     animation: toastIn 0.3s var(--ease-apple), toastOut 0.3s var(--ease-apple) 2.9s forwards;
     max-width: min(360px, calc(100vw - 2rem));
     will-change: transform, opacity;
@@ -373,12 +370,12 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 @keyframes toastIn { from { opacity:0; transform: translateX(40px); } to { opacity:1; transform: translateX(0); } }
 @keyframes toastOut { from { opacity:1; transform: translateX(0); } to { opacity:0; transform: translateX(40px); } }
 .toast-action-btn {
-  background: rgba(255, 255, 255, 0.15); border: 0.5px solid rgba(255, 255, 255, 0.25);
+  background: var(--glass-border); border: 0.5px solid var(--glass-border);
   border-radius: var(--radius-sm); color: var(--text-primary); padding: 4px 12px;
   font-size: 0.78rem; cursor: pointer; white-space: nowrap; min-height: 44px;
   transition: background var(--duration-fast) var(--ease-apple); flex-shrink: 0;
 }
-.toast-action-btn:hover { background: rgba(255, 255, 255, 0.25); }
+.toast-action-btn:hover { background: var(--glass-bg-subtle); }
 .toast-error .toast-action-btn { background: rgba(255, 69, 58, 0.2); border-color: rgba(255, 69, 58, 0.3); }
 .toast-error .toast-action-btn:hover { background: rgba(255, 69, 58, 0.3); }
 @media (prefers-reduced-motion: reduce) {
@@ -404,7 +401,7 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 }
 .mem-modal {
     background: var(--bg-secondary); border: 0.5px solid var(--glass-border);
-    border-radius: var(--radius-xl); max-width: 700px; width: 100%;
+    border-radius: var(--radius-lg); max-width: 700px; width: 100%;
     max-height: 85dvh; overflow-y: auto; padding: 24px;
     box-shadow: var(--shadow-lg);
     transform: scale(0.95); transition: transform var(--duration-normal) var(--ease-apple);
@@ -464,7 +461,7 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 .confirm-modal {
     background: var(--bg-secondary);
     border: 0.5px solid var(--glass-border);
-    border-radius: var(--radius-xl); padding: 24px;
+    border-radius: var(--radius-lg); padding: 24px;
     max-width: 400px; width: 90%;
     box-shadow: var(--shadow-lg);
     transform: scale(0.95); transition: transform var(--duration-normal) var(--ease-apple);
@@ -497,7 +494,7 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 .shortcut-help-modal {
     background: var(--bg-secondary);
     border: 0.5px solid var(--glass-border);
-    border-radius: var(--radius-xl);
+    border-radius: var(--radius-lg);
     max-width: 420px; width: 90%;
     box-shadow: var(--shadow-lg);
     overflow: hidden;
@@ -550,63 +547,6 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 @media (max-width: 640px) {
     .mem-modal-overlay { padding: 8px; }
     .mem-modal { width: 100%; max-width: none; max-height: 90dvh; }
-}
-
-/* ============================================================
-   RESPONSIVE TABLES — Mobile card view
-   ============================================================ */
-@media (max-width: 767px) {
-    /*
-     * Wrap any table in overflow-x:auto by default
-     * For tables that need card-view conversion, use .table-card-mobile
-     */
-    .table-card-mobile,
-    .table-card-mobile > table {
-        display: block;
-        width: 100%;
-    }
-    .table-card-mobile thead {
-        display: none; /* hide header on mobile */
-    }
-    .table-card-mobile tbody,
-    .table-card-mobile tr {
-        display: block;
-        width: 100%;
-    }
-    .table-card-mobile tr {
-        padding: 12px 16px;
-        border-bottom: 0.5px solid var(--separator-non-opaque);
-    }
-    .table-card-mobile tr:last-child {
-        border-bottom: none;
-    }
-    .table-card-mobile td {
-        display: flex;
-        align-items: center;
-        gap: 8px;
-        padding: 6px 0 !important;
-        text-align: left !important;
-        border: none;
-        font-size: 0.82rem;
-    }
-    .table-card-mobile td::before {
-        content: attr(data-label);
-        font-weight: 600;
-        color: var(--text-muted);
-        min-width: 80px;
-        flex-shrink: 0;
-        font-size: 0.75rem;
-    }
-    /* Actions cell: avoid label for button-only cells */
-    .table-card-mobile td[data-label="操作"] {
-        display: flex;
-        gap: 8px;
-        padding-top: 8px !important;
-        justify-content: flex-start;
-    }
-    .table-card-mobile td[data-label="操作"]::before {
-        display: none;
-    }
 }
 
 /* ============================================================
@@ -759,8 +699,8 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 
 .settings-search-card {
     position: sticky;
-    top: 120px;
-    z-index: 30;
+    top: calc(var(--header-height) + 16px);
+    z-index: var(--z-sticky);
 }
 
 .settings-search-wrap {
@@ -978,7 +918,7 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 .ov-modal-overlay {
     position: fixed;
     inset: 0;
-    z-index: 1000;
+    z-index: var(--z-modal);
     display: none;
     background: rgba(0, 0, 0, 0.75);
     align-items: center;
@@ -1075,9 +1015,9 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 .ov-field {
     width: 100%;
     padding: 8px 12px;
-    border-radius: 7px;
+    border-radius: var(--radius-sm);
     border: 0.5px solid var(--glass-border);
-    background: var(--glass-bg-faint);
+    background: var(--glass-bg-subtle);
     color: var(--text-primary);
     font-size: 0.88rem;
     outline: none;
@@ -1085,6 +1025,7 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 }
 .ov-field:focus {
     border-color: var(--accent-blue);
+    box-shadow: 0 0 0 3px rgba(0, 122, 255, 0.3);
 }
 .ov-field::placeholder {
     color: var(--text-muted);
@@ -1147,7 +1088,7 @@ textarea.ov-field {
     align-items: center;
     gap: 8px;
     padding: 6px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid var(--separator-non-opaque);
 }
 .ov-inv-row:last-child {
     border-bottom: none;
@@ -1174,7 +1115,7 @@ textarea.ov-field {
 }
 .ov-hl-row {
     padding: 6px 0;
-    border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+    border-bottom: 1px solid var(--separator-non-opaque);
     font-size: 0.82rem;
     color: var(--text-secondary);
 }
@@ -1227,7 +1168,7 @@ textarea.ov-field {
 .mem-bar-track {
     flex: 1;
     height: 5px;
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--separator-non-opaque);
     border-radius: 3px;
     overflow: hidden;
 }
@@ -1246,16 +1187,7 @@ textarea.ov-field {
 }
 
 /* Memory modal details (all class-based — inline styles are stripped) */
-.mem-tag-chip {
-    display: inline-block;
-    padding: 1px 6px;
-    border-radius: 3px;
-    font-size: 0.65rem;
-    margin: 1px 2px;
-    background: hsla(var(--chip-hue, 210), 70%, 60%, 0.16);
-    color: hsl(var(--chip-hue, 210), 80%, 60%);
-    border: 1px solid hsla(var(--chip-hue, 210), 70%, 60%, 0.35);
-}
+/* .mem-tag-chip は sections.css:208 に一本化 */
 .mem-emo-badge {
     font-size: 0.65rem;
     display: inline-block;
@@ -1286,29 +1218,7 @@ textarea.ov-field {
     color: var(--text-muted);
     font-size: 0.75rem;
 }
-.modal-progress {
-    display: inline-flex;
-    align-items: center;
-    gap: 6px;
-    vertical-align: middle;
-}
-.modal-progress-bar {
-    width: 120px;
-    height: 6px;
-    background: rgba(255, 255, 255, 0.1);
-    border-radius: 3px;
-    overflow: hidden;
-}
-.modal-progress-bar.wide {
-    width: 160px;
-}
-.modal-progress-fill {
-    display: block;
-    height: 100%;
-    width: 0;
-    border-radius: 3px;
-    transition: width 0.4s var(--ease-apple);
-}
+/* .modal-progress* は sections.css:382-384 に一本化 */
 .ov-accent-yellow {
     color: var(--accent-yellow);
     font-weight: 600;
@@ -1370,15 +1280,12 @@ textarea.ov-field {
     display: block;
     width: 44px;
     height: 4px;
-    background: rgba(255, 255, 255, 0.08);
+    background: var(--separator-non-opaque);
     border-radius: 2px;
     overflow: hidden;
 }
 .wiring-track .mem-bar-fill {
     display: block;
-}
-html.light .wiring-track {
-    background: rgba(0, 0, 0, 0.08);
 }
 
 /* Fire detail modal — built on the .ov-modal system */

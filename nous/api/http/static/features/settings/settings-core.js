@@ -44,12 +44,12 @@ async function loadSecurityDiagnostics() {
         const warnings = (data && data.warnings) || [];
         if (!warnings.length) { safeSetHTML(el, ''); return; }
         const rows = warnings.map(function(w) {
-            return '<div style="margin-top:6px;"><strong>' + esc(w.message) + '</strong>' +
-                '<div style="color:var(--text-muted); font-size:0.78rem; margin-top:2px;">' + esc(w.hint) + '</div></div>';
+            return '<div class="settings-warn-row"><strong>' + esc(w.message) + '</strong>' +
+                '<div class="settings-warn-hint">' + esc(w.hint) + '</div></div>';
         }).join('');
         safeSetHTML(el,
-            '<div class="glass p-4" style="margin-bottom:16px; border-left:3px solid var(--accent-orange, #f59e0b);">' +
-            '<div style="font-weight:600; color:var(--accent-orange, #f59e0b);">' +
+            '<div class="glass p-4 settings-warn-card">' +
+            '<div class="settings-warn-head">' +
             '公開運用の警告（' + warnings.length + ' 件）</div>' + rows + '</div>');
     } catch (e) {
         console.warn('security diagnostics failed:', e);

@@ -9,12 +9,12 @@
     #chat-input-area { position: sticky; bottom: 0; background: var(--bg-primary); z-index: var(--z-content); }
 }
 
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   #chat-layout {
     flex-direction: column;
   }
   #chat-messages {
-    min-height: 350px;
+    min-height: min(350px, 50dvh);
     max-height: 50dvh;
   }
   #memory-panel {
@@ -71,13 +71,8 @@
     display: block;
   }
 }
-@media (min-width: 769px) {
+@media (min-width: 768px) {
   .settings-panel-close {
-    display: none;
-  }
-}
-@media (max-width: 900px) {
-  #memory-panel {
     display: none;
   }
 }
@@ -99,7 +94,7 @@
    ============================================================ */
 
 /* --- Header: smaller glass-btn icons + tighter controls --- */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   /* Glass-btn SVG inside header: 24px → 18px */
   .header-controls .glass-btn svg,
   .header-controls .glass-btn i {
@@ -117,13 +112,14 @@
 }
 
 /* --- Chat tab header: smaller title + icon --- */
-@media (max-width: 768px) {
-  /* Chat h2 title — !important: sections/chat がインライン style で固定しているため */
+@media (max-width: 767px) {
+  /* Chat h2 title — !important 不要: chat_layout.py のインラインは廃止済み。
+     #tab-chat h2 の特異度 1,0,1 で .tab-head h2 に勝つ。 */
   #tab-chat h2 {
-    font-size: 1.05rem !important;
+    font-size: 1.05rem;
   }
   #tab-chat h2 span {
-    font-size: 1.15rem !important;
+    font-size: 1.15rem;
   }
   /* Chat header action buttons: smaller SVGs */
   .mem-panel-toggle svg,
@@ -136,7 +132,7 @@
 }
 
 /* --- Welcome command chips: more compact --- */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   .chat-welcome-commands {
     gap: 4px;
     max-width: 320px;
@@ -148,7 +144,7 @@
 }
 
 /* --- Chat input area: tighter on mobile --- */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   #chat-input-area {
     padding: 8px 12px;
     gap: 8px;
@@ -187,7 +183,7 @@
 }
 
 /* --- Suppress blue scrollbar on mobile --- */
-@media (max-width: 768px) {
+@media (max-width: 767px) {
   #chat-messages {
     scrollbar-width: none; /* Firefox */
     -ms-overflow-style: none; /* IE/Edge */
@@ -205,15 +201,12 @@
   .chat-thinking-body::-webkit-scrollbar {
     display: none;
   }
-  #chat-messages::-webkit-scrollbar {
-    display: none; /* Chrome/Safari */
-  }
   /* Settings panel: thin subtle scrollbar instead of blue */
   #settings-panel .settings-scroll-container {
     scrollbar-width: thin;
-    scrollbar-color: rgba(255, 255, 255, 0.1) transparent;
+    scrollbar-color: var(--separator-non-opaque) transparent;
   }
   #settings-panel .settings-scroll-container::-webkit-scrollbar-thumb {
-    background: rgba(255, 255, 255, 0.1);
+    background: var(--separator-non-opaque);
   }
 }

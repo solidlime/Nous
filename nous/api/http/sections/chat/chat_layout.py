@@ -37,9 +37,9 @@ def render_chat_layout_prefix(persona: str = "") -> str:
     return f"""
         <!-- ========== CHAT TAB ========== -->
         <section id="tab-chat" class="tab-panel" role="tabpanel">
-            <div style="position:relative; margin-bottom:16px; display:flex; align-items:center; justify-content:space-between; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
-                <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><img id="chat-persona-avatar" src="{avatar_url}" alt="" style="width:40px;height:40px;border-radius:50%;object-fit:cover;flex-shrink:0;"/><span style="font-size:1.4rem;"><i data-lucide="message-circle"></i></span> Chat</h2>
-                <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap;">
+            <div class="tab-head">
+                <h2><img id="chat-persona-avatar" src="{avatar_url}" alt=""/><span><i data-lucide="message-circle"></i></span> Chat</h2>
+                <div class="chat-head-actions">
                     <button class="chat-sidebar-toggle" id="chat-mode-toggle-btn" title="キャラチャットモードに切替" aria-label="キャラチャットモードの切替"><i data-lucide="person-standing"></i></button>
                     <button class="mem-panel-toggle" id="memory-panel-toggle-btn" data-action="chat-toggle-memory" title="記憶パネルを開閉" aria-label="記憶パネルの表示切替"><i data-lucide="brain"></i></button>
                     <button class="chat-sidebar-toggle" data-action="chat-toggle-settings" id="chat-sidebar-toggle-btn" title="設定パネルを開閉" aria-label="設定パネルの表示切替"><i data-lucide="settings"></i></button>

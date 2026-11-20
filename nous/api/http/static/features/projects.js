@@ -19,15 +19,15 @@ function contextUrl(slug) {
 }
 
 function section(title, bodyHtml, count) {
-    var badge = (typeof count === 'number') ? ' <span style="color:var(--text-muted); font-weight:400;">(' + count + ')</span>' : '';
+    var badge = (typeof count === 'number') ? ' <span class="proj-count">(' + count + ')</span>' : '';
     return '<div class="glass p-4 mb-4">' +
-        '<div style="font-weight:600; margin-bottom:10px;">' + esc(title) + badge + '</div>' +
+        '<div class="proj-section-title">' + esc(title) + badge + '</div>' +
         bodyHtml +
         '</div>';
 }
 
 function empty(text) {
-    return '<div style="color:var(--text-muted); font-size:0.82rem;">' + esc(text) + '</div>';
+    return '<div class="proj-empty">' + esc(text) + '</div>';
 }
 
 function itemList(items, emptyText, opts) {
@@ -35,10 +35,10 @@ function itemList(items, emptyText, opts) {
     var withDate = !!(opts && opts.withDate);
     return items.map(function(it) {
         var when = withDate && it.created_at
-            ? '<span style="color:var(--text-muted); font-size:0.72rem; margin-left:6px;">' + esc(String(it.created_at).slice(0, 16).replace('T', ' ')) + '</span>'
+            ? '<span class="proj-row-meta">' + esc(String(it.created_at).slice(0, 16).replace('T', ' ')) + '</span>'
             : '';
-        return '<div style="padding:8px 0; border-top:1px solid var(--glass-border);">' +
-            '<div style="font-size:0.85rem; white-space:pre-wrap;">' + esc(it.content) + when + '</div>' +
+        return '<div class="proj-row">' +
+            '<div class="proj-row-text">' + esc(it.content) + when + '</div>' +
             '</div>';
     }).join('');
 }
@@ -46,10 +46,10 @@ function itemList(items, emptyText, opts) {
 function wikiList(pages) {
     if (!pages || !pages.length) return empty('このプロジェクトの wiki ページはまだ無い');
     return pages.map(function(p) {
-        return '<div style="padding:8px 0; border-top:1px solid var(--glass-border);">' +
-            '<a href="#" data-project-wiki="' + esc(p.slug) + '" style="font-size:0.86rem; color:var(--accent-blue, #60a5fa); text-decoration:none;">' +
+        return '<div class="proj-row">' +
+            '<a href="#" data-project-wiki="' + esc(p.slug) + '" class="proj-row-link">' +
             esc(p.title || p.slug) + '</a>' +
-            '<span style="color:var(--text-muted); font-size:0.72rem; margin-left:6px;">' + esc(String(p.updated || '').slice(0, 16)) + '</span>' +
+            '<span class="proj-row-meta">' + esc(String(p.updated || '').slice(0, 16)) + '</span>' +
             '</div>';
     }).join('');
 }
@@ -59,12 +59,12 @@ function render(data) {
     if (!el) return;
     if (!data || !data.counts) { safeSetHTML(el, empty('データが空')); return; }
     var c = data.counts;
-    var head = '<div class="glass p-4 mb-4" style="display:flex; gap:18px; flex-wrap:wrap; font-size:0.82rem;">' +
+    var head = '<div class="glass p-4 mb-4 proj-badge-row">' +
         '<span>記憶 <strong>' + c.memories + '</strong></span>' +
         '<span>決定事項 <strong>' + c.decisions + '</strong></span>' +
         '<span>未解決の問い <strong>' + c.open_questions + '</strong></span>' +
         '<span>wiki <strong>' + c.wiki + '</strong></span>' +
-        '<span style="color:var(--text-muted);">' + esc(data.tag) + '</span>' +
+        '<span class="proj-tag">' + esc(data.tag) + '</span>' +
         '</div>';
     safeSetHTML(el,
         head +

@@ -54,7 +54,7 @@ nous/
 │           ├── chat/          # 14ファイル（チャット機能）
 │           ├── features/      # 17ファイル（タブ機能）
 │           ├── components/    # 3ファイル（共通UI部品）
-│           └── styles/        # 7ファイル（CSSレイヤー）
+│           └── styles/        # 9ファイル（CSSレイヤー: variables/reset/theme/layout/components/sections/chat/chat-mobile/utilities）
 ├── application/               # ビジネスロジック
 │   ├── chat/                  # チャットパイプライン
 │   │   ├── pipeline/          # 準備→推論→圧縮→投稿

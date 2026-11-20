@@ -51,8 +51,8 @@ html.light .glass-input { background: var(--glass-bg-subtle); }
 .glass-input option { background: var(--bg-secondary); color: var(--text-primary); }
 html.light .glass-input option { background: var(--bg-primary); color: var(--text-primary); }
 .glass-btn {
-    background: var(--glass-bg-subtle);
-    border: 0.5px solid var(--glass-border);
+    background: var(--glass-bg-faint);
+    border: 1px solid var(--glass-border);
     border-radius: var(--radius-sm);
     color: var(--text-primary);
     padding: 8px 16px;
@@ -62,7 +62,7 @@ html.light .glass-input option { background: var(--bg-primary); color: var(--tex
     white-space: nowrap;
 }
 .glass-btn:hover {
-    background: var(--glass-hover);
+    background: var(--glass-bg-subtle);
     box-shadow: none;
     transform: none;
 }

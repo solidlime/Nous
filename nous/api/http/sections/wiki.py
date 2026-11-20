@@ -11,8 +11,8 @@ def render_wiki_tab() -> str:
     return """
         <!-- ========== WIKI TAB ========== -->
         <section id="tab-wiki" class="tab-panel" role="tabpanel">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
-                <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="book-open"></i></span> Wiki</h2>
+            <div class="tab-head">
+                <h2><span><i data-lucide="book-open"></i></span> Wiki</h2>
                 <div style="display:flex;align-items:center;gap:8px;">
                 <button id="wiki-btn-history" class="glass-btn" title="更新履歴と差分を見る"><i data-lucide="history"></i></button>
                 <button id="wiki-btn-recompile" class="glass-btn" title="いま編纂を走らせる（手動トリガ）"><i data-lucide="sparkles"></i></button>

@@ -10,14 +10,14 @@ def render_project_tab() -> str:
     """Return the projects tab HTML section."""
     return """        <!-- ========== PROJECTS TAB ========== -->
         <section id="tab-projects" class="tab-panel" role="tabpanel">
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
-                <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="folder-kanban"></i></span> Projects</h2>
+            <div class="tab-head">
+                <h2><span><i data-lucide="folder-kanban"></i></span> Projects</h2>
             </div>
-            <div class="glass p-4 mb-4" style="display:flex; gap:8px; align-items:center; flex-wrap:wrap;">
-                <label for="project-slug-input" style="font-size:0.8rem; color:var(--text-muted);">project slug</label>
-                <input id="project-slug-input" class="glass-input" type="text" placeholder="nous" autocomplete="off" style="max-width:240px;">
+            <div class="glass p-4 mb-4 proj-form">
+                <label for="project-slug-input" class="proj-form-label">project slug</label>
+                <input id="project-slug-input" class="glass-input proj-slug-input" type="text" placeholder="nous" autocomplete="off">
                 <button id="project-load-btn" class="glass-btn" type="button">Load</button>
-                <span id="project-status" style="font-size:0.78rem; color:var(--text-muted);"></span>
+                <span id="project-status" class="proj-status"></span>
             </div>
             <div id="project-content"><div class="glass p-6"><div class="skeleton skeleton-title"></div><div class="skeleton skeleton-text" style="width:70%"></div><div class="skeleton skeleton-text" style="width:55%"></div></div></div>
         </section>"""

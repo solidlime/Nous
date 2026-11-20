@@ -138,7 +138,7 @@ function _showTooltip(icon) {
   tooltip.classList.remove("visible");
 
   var rect = icon.getBoundingClientRect();
-  var isMobile = window.innerWidth <= 768;
+  var isMobile = window.innerWidth <= 767;
 
   if (isMobile) {
     tooltip.style.top = rect.bottom + 8 + "px";
@@ -307,7 +307,7 @@ async function loadChat() {
     } else {
       // Ensure panel is closed: add collapsed class
       _settingsPanel.classList.add("collapsed");
-      var _isMobile = window.innerWidth <= 768;
+      var _isMobile = window.innerWidth <= 767;
       if (!_isMobile) {
         _settingsPanel.style.width = "0";
       }
@@ -329,7 +329,7 @@ async function loadChat() {
   // ESC closes settings panel on mobile (moved from chat.js)
   document.addEventListener("keydown", function(e) {
     if (e.key === "Escape" && CHAT.sidebarOpen) {
-      var isMobile = window.innerWidth <= 768;
+      var isMobile = window.innerWidth <= 767;
       if (isMobile) {
         toggleSettingsPanel();
       }
@@ -503,7 +503,7 @@ async function loadSkillsForChat() {
 function toggleSettingsPanel() {
   var sidebar = document.getElementById("settings-panel");
   var backdrop = document.getElementById("settings-backdrop");
-  var isMobile = window.innerWidth <= 768;
+  var isMobile = window.innerWidth <= 767;
   CHAT.sidebarOpen = !CHAT.sidebarOpen;
   _setCookie("nous_sidebar", CHAT.sidebarOpen ? "1" : "0");
   if (CHAT.sidebarOpen) {

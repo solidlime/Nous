@@ -26,19 +26,19 @@ def render_timeline_tab() -> str:
     """
     return r"""
         <section id="tab-timeline" class="tab-panel" role="tabpanel">
-            <div style="margin-bottom:16px; padding-bottom:12px; border-bottom:1px solid var(--glass-border);">
-                <h2 style="font-size:1.25rem; font-weight:700; color:var(--text-primary); display:flex; align-items:center; gap:10px;"><span style="font-size:1.4rem;"><i data-lucide="calendar"></i></span> Timeline</h2>
+            <div class="tab-head">
+                <h2><span><i data-lucide="calendar"></i></span> Timeline</h2>
             </div>
 
-            <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px;">
-                <h2 style="font-size:1.1rem;font-weight:600;color:var(--text-primary);"><i data-lucide="clock"></i> Memory Timeline</h2>
-                <button data-action="tl-reload" style="background:none;border:1px solid var(--glass-border);border-radius:6px;color:var(--text-muted);padding:4px 10px;cursor:pointer;font-size:0.75rem;"><i data-lucide="refresh-cw"></i> 更新</button>
+            <div class="tl-head">
+                <h2 class="tl-subhead"><i data-lucide="clock"></i> Memory Timeline</h2>
+                <button data-action="tl-reload" class="tl-reload-btn"><i data-lucide="refresh-cw"></i> 更新</button>
             </div>
 
             <div class="tl-toolbar">
                 <label>感情 <select id="tl-emotion"><option value="">すべて</option></select></label>
-                <label>タグ <input type="text" id="tl-tag" placeholder="例: goal" /></label>
-                <label>重要度≧ <input type="number" id="tl-min-importance" value="0" min="0" max="1" step="0.1" style="min-width:60px;" /></label>
+                <label>タグ <input type="text" id="tl-tag" class="glass-input" placeholder="例: goal" /></label>
+                <label>重要度≧ <input type="number" id="tl-min-importance" class="glass-input tl-min-imp" value="0" min="0" max="1" step="0.1" /></label>
                 <label>件数 <select id="tl-per-page"><option value="50">50</option><option value="100" selected>100</option><option value="200">200</option><option value="500">500</option></select></label>
             </div>
 
