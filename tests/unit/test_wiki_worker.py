@@ -31,6 +31,12 @@ from nous.infrastructure.sqlite.memory_repo import SQLiteMemoryRepository
 from nous.infrastructure.wiki.store import WikiStore
 
 
+def _unwrap[T, E](result: Success[T] | Failure[E]) -> T:
+    """pyright strict は is_ok 判別子も Failure への .value も narrow しないため isinstance で保証する（#113/#116 と同一理由）。"""
+    assert isinstance(result, Success), getattr(result, "error", "unwrap failed")
+    return result.value
+
+
 def _mem(key: str, *, tags: list[str] | None = None, lifecycle: str = "active", content: str | None = None) -> Memory:
     now = get_now()
     return Memory(
@@ -77,8 +83,8 @@ def _setup(
     # 日記は TestJournal 側（_journal_setup）が固定時刻で見る。
     worker._cfg = worker._cfg.model_copy(update={"journal_enabled": False, **(cfg_update or {})})
     worker.vector_enabled = False
-    worker._ask_llm_for_test = llm  # type: ignore[attr-defined]
-    worker._ask_llm_raise = raise_exc  # type: ignore[attr-defined]
+    worker._ask_llm_for_test = llm
+    worker._ask_llm_raise = raise_exc
     worker._compile_persona(ctx, "test_ww")
     return conn, worker
 
@@ -292,7 +298,7 @@ class TestIndexMaintenance:
 
         assert repaired == 1
         read = store.read_page("project-nous-a")
-        assert read.is_ok
+        assert isinstance(read, Success)
         body = read.value.body
         assert "[[project-nous-ghost]]" not in body
         assert "project-nous-ghost" in body
@@ -371,9 +377,9 @@ class TestSourceDeletion:
         conn, _ = _setup(tmp_path, memories, llm=_pages_json(page))
         try:
             repo = SQLiteMemoryRepository(conn)
-            assert repo.find_by_key("a0").value is None
-            assert repo.find_by_key("a1").value is None
-            assert repo.find_by_key("a2").value is not None, "編纂に使っていない記憶まで消してはいけない"
+            assert _unwrap(repo.find_by_key("a0")) is None
+            assert _unwrap(repo.find_by_key("a1")) is None
+            assert _unwrap(repo.find_by_key("a2")) is not None, "編纂に使っていない記憶まで消してはいけない"
             detail = (
                 conn.get_memory_db()
                 .execute("SELECT detail FROM session_events WHERE event_type='wiki.compiled' ORDER BY id DESC LIMIT 1")
@@ -529,7 +535,7 @@ class TestRepairLinks:
         worker = WikiWorker(_settings(tmp_path))
         assert worker._repair_links(store) == 1
         read = store.read_page("project-nous-notes")
-        assert read.is_ok
+        assert isinstance(read, Success)
         assert read.value.project == "nous"
         assert read.value.sources == ("a0",)
         assert "[[project-nous-ghost]]" not in read.value.body
@@ -791,8 +797,8 @@ def _journal_setup(
     if cfg_update:
         worker._cfg = worker._cfg.model_copy(update=cfg_update)
     worker.vector_enabled = False
-    worker._ask_llm_for_test = llm  # type: ignore[attr-defined]
-    worker._ask_llm_raise = raise_exc  # type: ignore[attr-defined]
+    worker._ask_llm_for_test = llm
+    worker._ask_llm_raise = raise_exc
     return conn, worker, ctx
 
 
@@ -815,7 +821,7 @@ class TestJournal:
         conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
         try:
             assert worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now) == ["late", "today"]
-            page = _store(tmp_path).read_page(f"journal-{_DAY}").value
+            page = _unwrap(_store(tmp_path).read_page(f"journal-{_DAY}"))
             assert page.sources == ("late", "today")  # created_at 昇順
             assert page.title == f"{_DAY} の記録"
             assert page.tags == ("journal", "2026-11")
@@ -857,7 +863,7 @@ class TestJournal:
         conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
-            page = _store(tmp_path).read_page(f"journal-{_DAY}").value
+            page = _unwrap(_store(tmp_path).read_page(f"journal-{_DAY}"))
             assert len(page.sources) == 60
             assert page.sources[0] == "m00" and page.sources[-1] == "m59"
         finally:
@@ -905,7 +911,7 @@ class TestJournal:
         )
         conn, worker, ctx = _journal_setup(tmp_path, memories + [question], self._body)
         prompts: list[str] = []
-        worker._ask_text = lambda prompt, boost=0: (prompts.append(prompt), self._body)[1]  # type: ignore[method-assign]
+        worker._ask_text = lambda prompt, boost=0: (prompts.append(prompt), self._body)[1]  # type: ignore[func-returns-value]
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             assert "未解決の問い（1 件" in prompts[0]
@@ -918,7 +924,7 @@ class TestJournal:
         memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
         conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
         prompts: list[str] = []
-        worker._ask_text = lambda prompt, boost=0: (prompts.append(prompt), self._body)[1]  # type: ignore[method-assign]
+        worker._ask_text = lambda prompt, boost=0: (prompts.append(prompt), self._body)[1]  # type: ignore[func-returns-value]
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             assert "未解決の問い（0 件" in prompts[0]
@@ -932,7 +938,7 @@ class TestJournal:
         conn, worker, ctx = _journal_setup(tmp_path, memories, None)
         service = _fake_service()
         ctx.persona_service = service
-        worker._ask_text = _fake_llm([self._body, _STATE_JSON])  # type: ignore[method-assign]
+        worker._ask_text = _fake_llm([self._body, _STATE_JSON])
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             assert _store(tmp_path).read_page(f"journal-{_DAY}").is_ok
@@ -953,7 +959,7 @@ class TestJournal:
         conn, worker, ctx = _journal_setup(tmp_path, memories, None, cfg_update={"journal_apply_state": False})
         service = _fake_service()
         ctx.persona_service = service
-        worker._ask_text = _fake_llm([self._body, _STATE_JSON])  # type: ignore[method-assign]
+        worker._ask_text = _fake_llm([self._body, _STATE_JSON])
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             service.update_emotion.assert_not_called()
@@ -968,7 +974,7 @@ class TestJournal:
         conn, worker, ctx = _journal_setup(tmp_path, memories, None)
         service = _fake_service()
         ctx.persona_service = service
-        worker._ask_text = _fake_llm([self._body, ""])  # type: ignore[method-assign]
+        worker._ask_text = _fake_llm([self._body, ""])
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             service.update_emotion.assert_not_called()
@@ -983,7 +989,7 @@ class TestJournal:
         service = _fake_service()
         service.update_emotion.side_effect = RuntimeError("db down")
         ctx.persona_service = service
-        worker._ask_text = _fake_llm([self._body, _STATE_JSON])  # type: ignore[method-assign]
+        worker._ask_text = _fake_llm([self._body, _STATE_JSON])
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             assert _store(tmp_path).read_page(f"journal-{_DAY}").is_ok
@@ -1096,9 +1102,9 @@ class TestJournalIsolation:
             m.tags = ["project:zzz"]
         conn, worker, ctx = _journal_setup(tmp_path, memories + memory_topic, None)
         order: list[str] = []
-        worker._compile_journal = lambda *a, **k: order.append("journal") or []  # type: ignore[method-assign]
-        worker._compile_topic = lambda *a, **k: order.append("topic")  # type: ignore[method-assign]
-        worker._repair_links = lambda *a, **k: order.append("repair") or 0  # type: ignore[method-assign]
+        worker._compile_journal = lambda *a, **k: order.append("journal") or []  # type: ignore[func-returns-value]
+        worker._compile_topic = lambda *a, **k: order.append("topic")
+        worker._repair_links = lambda *a, **k: order.append("repair") or 0  # type: ignore[func-returns-value]
         worker._cfg = worker._cfg.model_copy(update={"journal_enabled": True})
         try:
             worker._cfg = worker._cfg.model_copy(update={"min_memories_per_topic": 3})
@@ -1116,7 +1122,7 @@ class TestJournalIsolation:
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             page = _store(tmp_path).read_page("journal-2026-11-09")
-            assert page.is_ok, page.error if hasattr(page, "error") else "write failed"
+            assert isinstance(page, Success), getattr(page, "error", "write failed")
         finally:
             conn.close()
 
@@ -1149,7 +1155,7 @@ class TestJournalStateInstrumentation:
         """persona_service が無いときは黙って何もしないのではなく 1 行残す。"""
         memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
         conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
-        worker._ask_text = _fake_llm([self._body])  # type: ignore[method-assign]
+        worker._ask_text = _fake_llm([self._body])
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             summaries = [s for _t, s, _d in _event_rows(conn)]
@@ -1164,7 +1170,7 @@ class TestJournalStateInstrumentation:
         service = _fake_service()
         service.update_emotion.side_effect = RuntimeError("db down")
         ctx.persona_service = service
-        worker._ask_text = _fake_llm([self._body, _STATE_JSON])  # type: ignore[method-assign]
+        worker._ask_text = _fake_llm([self._body, _STATE_JSON])
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             assert worker._cycle_errors == 0
@@ -1317,7 +1323,7 @@ class TestJournalActivity:
         try:
             _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 15, 20, tzinfo=_JST), {"user_text": "お菓子作り"})
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
-            page = _store(tmp_path).read_page(f"journal-{_DAY}").value
+            page = _unwrap(_store(tmp_path).read_page(f"journal-{_DAY}"))
             assert page.sources == ()
             assert [s for _t, s, _d in _event_rows(conn) if "journal-" in s] == [
                 f"created journal-{_DAY} from 0 memories"
@@ -1480,7 +1486,7 @@ class TestJournalKeepsExistingPage:
         try:
             _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 15, 20, tzinfo=_JST), {"user_text": "お菓子作り"})
             assert worker._compile_journal(ctx, "test_ww", store, self._now) == []
-            page = store.read_page(f"journal-{_DAY}").value
+            page = _unwrap(store.read_page(f"journal-{_DAY}"))
             assert page.body.startswith("## やったこと\n\n- 前のサイクルで書いた本文")
         finally:
             conn.close()
@@ -1495,7 +1501,7 @@ class TestJournalKeepsExistingPage:
         try:
             worker._compile_persona(ctx, "test_ww")
             assert _store(tmp_path).read_page(f"journal-{_DAY}").is_ok
-            assert SQLiteMemoryRepository(conn).find_by_key("a").value is None
+            assert _unwrap(SQLiteMemoryRepository(conn).find_by_key("a")) is None
         finally:
             conn.close()
 
@@ -1523,7 +1529,7 @@ class TestNoTopicSilence:
         memories += [_mem("live1"), _mem("live2")]  # 未編纂の新着（inbox）
         conn, _worker = _setup(tmp_path, memories, llm=None)
         try:
-            remaining = {m.key for m in SQLiteMemoryRepository(conn).find_all().value}
+            remaining = {m.key for m in _unwrap(SQLiteMemoryRepository(conn).find_all())}
             assert remaining == {"live1", "live2"}
             purged = [s for _t, s, _d in _event_rows(conn) if s.startswith("purged")]
             assert purged == ["purged 4 obsolete memories"], purged
@@ -1540,7 +1546,7 @@ class TestNoTopicSilence:
         gist.content = "gist の要約本文"
         conn, _worker = _setup(tmp_path, [gist], llm=None)
         try:
-            assert SQLiteMemoryRepository(conn).find_all().value == []
+            assert _unwrap(SQLiteMemoryRepository(conn).find_all()) == []
             dumped = list((tmp_path / "persona" / "test_ww" / "wiki" / "_purged").glob("gists-*.jsonl"))
             assert len(dumped) == 1
             rows = [json.loads(line) for line in dumped[0].read_text(encoding="utf-8").splitlines()]
@@ -1559,9 +1565,9 @@ class TestNoTopicSilence:
             repo = SQLiteMemoryRepository(conn)
             repo.save(gist)
             repo.save(archived)
-            worker._dump_gists = lambda *a, **k: False  # type: ignore[method-assign]
+            worker._dump_gists = lambda *a, **k: False
             worker._compile_persona(SimpleNamespace(memory_repo=repo, connection=conn), "test_ww")
-            remaining = {m.key for m in SQLiteMemoryRepository(conn).find_all().value}
+            remaining = {m.key for m in _unwrap(SQLiteMemoryRepository(conn).find_all())}
             assert remaining == {"g0"}
             warnings = [s for _t, s, _d in _event_rows(conn) if "gist purge skipped" in s]
             assert warnings == ["warning: gist purge skipped (dump failed)"]
@@ -1642,7 +1648,7 @@ class TestPromptRevisionContext:
             }
             page = {"slug": "project-nous-x", "title": "x", "body": "新しい本文", "sources": ["new1"]}
             assert worker._apply_page(_ctx, "test_ww", store, "project-nous", page, cands, {"project-nous-x"}, set())
-            assert set(store.read_page("project-nous-x").value.sources) == {"new1", "old1", "old2"}
+            assert set(_unwrap(store.read_page("project-nous-x")).sources) == {"new1", "old1", "old2"}
         finally:
             conn.close()
 
@@ -1671,7 +1677,7 @@ class TestJournalLife:
         conn, worker, ctx = _journal_setup(tmp_path, [], None)
         self._off(worker)
         # 実ログの営みは session_events から取る。ここでは日記が「材料あり」で進むよう 1 行だけ与える。
-        worker._journal_activity = lambda *a, **k: "- 15:20 お菓子を作った"  # type: ignore[method-assign]
+        worker._journal_activity = lambda *a, **k: "- 15:20 お菓子を作った"
         prompts: list[str] = []
 
         def ask(prompt: str, boost: int = 0) -> str:
@@ -1680,7 +1686,7 @@ class TestJournalLife:
                 return "- 14:40 ラウンジで紅茶。砂糖を入れすぎた\n- 09:12 演算ユニットを検算"
             return "## 活動\n\n- 15:20 お菓子を作った"
 
-        worker._ask_text = ask  # type: ignore[method-assign]
+        worker._ask_text = ask
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             journal_prompt = next(p for p in prompts if "日記を書く記録係" in p)
@@ -1695,14 +1701,14 @@ class TestJournalLife:
         """設定が読めない人物に生活をでっち上げない（LLM も呼ばない）。"""
         conn, worker, ctx = _journal_setup(tmp_path, [], None)
         self._off(worker)
-        worker._journal_activity = lambda *a, **k: "- 15:20 お菓子を作った"  # type: ignore[method-assign]
+        worker._journal_activity = lambda *a, **k: "- 15:20 お菓子を作った"
         prompts: list[str] = []
 
         def ask(prompt: str, boost: int = 0) -> str:
             prompts.append(prompt)
             return "## 活動\n\n- 15:20 お菓子を作った"
 
-        worker._ask_text = ask  # type: ignore[method-assign]
+        worker._ask_text = ask
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             assert not any("暮らしの記録" in p for p in prompts)
@@ -1713,7 +1719,7 @@ class TestJournalLife:
     def test_life_disabled_is_not_called(self, tmp_path) -> None:
         self._write_character(tmp_path)
         conn, worker, ctx = _journal_setup(tmp_path, [], None)
-        worker._journal_activity = lambda *a, **k: "- 15:20 お菓子を作った"  # type: ignore[method-assign]
+        worker._journal_activity = lambda *a, **k: "- 15:20 お菓子を作った"
         worker._cfg = worker._cfg.model_copy(update={"life_enabled": False, "journal_apply_state": False})
         prompts: list[str] = []
 
@@ -1721,7 +1727,7 @@ class TestJournalLife:
             prompts.append(prompt)
             return "## 活動\n\n- 15:20 お菓子を作った"
 
-        worker._ask_text = ask  # type: ignore[method-assign]
+        worker._ask_text = ask
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             assert not any("暮らしの記録" in p for p in prompts)
@@ -1778,7 +1784,7 @@ class TestJournalTomorrow:
             memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
         conn, worker, ctx = _journal_setup(tmp_path, memories, None, cfg_update=cfg_update)
         ctx.memory_service = MemoryService(ctx.memory_repo)
-        worker._ask_text = _fake_llm(list(llm))  # type: ignore[method-assign]
+        worker._ask_text = _fake_llm(list(llm))
         return conn, worker, ctx
 
     @staticmethod
@@ -1858,7 +1864,7 @@ class TestJournalTomorrow:
             prompts.append(prompt)
             return _BODY
 
-        worker._ask_text = ask  # type: ignore[method-assign]
+        worker._ask_text = ask
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             assert len(prompts) == 1
@@ -2026,7 +2032,7 @@ class TestJournalTomorrow:
     def test_lookup_failure_registers_nothing_and_warns(self, tmp_path) -> None:
         """既存予定が読めないなら重複を作らないため登録しない（fail-closed）＋ 監査に 1 行。"""
         conn, worker, ctx = self._setup(tmp_path, llm=[_BODY, _TOMORROW_JSON])
-        ctx.memory_service.get_by_tags = MagicMock(return_value=Failure("db down"))  # type: ignore[method-assign]
+        ctx.memory_service.get_by_tags = MagicMock(return_value=Failure("db down"))
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
             # 既存予定を読めないまま登録しない（agent:task の記憶が 1 件も増えない）。
@@ -2084,4 +2090,4 @@ def test_compile_is_serialized_per_persona() -> None:
         worker._compile_persona(MagicMock(), "herta")
         assert calls == ["herta"]
     finally:
-        wiki_worker.WikiWorker._compile_persona_unlocked = original
+        wiki_worker.WikiWorker._compile_persona_unlocked = original  # type: ignore[method-assign]
