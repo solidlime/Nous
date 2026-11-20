@@ -66,12 +66,13 @@ com.nous.sandbox=1
 
 | コンテナ内 | ホスト | モード |
 |---|---|---|
-| `/home/agent/workspace` | `${DATA_ROOT}/persona/<persona>/workspace` | rw |
-| `/home/agent/wiki` | `${DATA_ROOT}/persona/<persona>/wiki` | rw |
-| `/home/agent/uploads` | `${DATA_ROOT}/persona/<persona>/uploads` | rw |
-| `/home/agent/media` | `${DATA_ROOT}/persona/<persona>/media` | ro |
-| `/home/agent/.agents/skills` | `${DATA_ROOT}/persona/<persona>/skills` | rw |
-| `/home/agent/.agents/global-skills` | `${DATA_ROOT}/skills` | ro |
+| `/root` | `${DATA_ROOT}/persona/<persona>/root` | rw |
+| `/mnt/nous/workspace` | `${DATA_ROOT}/persona/<persona>/workspace` | rw |
+| `/mnt/nous/wiki` | `${DATA_ROOT}/persona/<persona>/wiki` | rw |
+| `/mnt/nous/uploads` | `${DATA_ROOT}/persona/<persona>/uploads` | rw |
+| `/mnt/nous/skills` | `${DATA_ROOT}/persona/<persona>/skills` | rw |
+| `/mnt/nous/media` | `${DATA_ROOT}/persona/<persona>/media` | ro |
+| `/mnt/nous/global-skills` | `${DATA_ROOT}/skills` | ro |
 
 **渡さないもの**: `db/`（`memory.sqlite` / `inventory.sqlite`）と `config.json`。
 記憶化は nous 側の自動抽出が担うので、sandbox に DB を持たせる必要がない。
@@ -79,14 +80,36 @@ com.nous.sandbox=1
 `media` は nous が書く生成物（画像・音声・アバター）なので ro。ペルソナが
 ファイルを読む経路は sandbox に寄せる方針で、wiki / uploads はそこから書ける。
 
-環境変数 `HOME=/home/agent` を固定し、コンテナは `--user 0:0`（root）で走る。
+環境変数 `HOME=/root` を固定し、コンテナは `--user 0:0`（root）で走る。
 root なので bind mount 先の所有者・パーミッションを気にせず書ける。
 `--memory` / `--cpu-shares` / `--pids-limit` の上限は以前どおりかけたまま。
 
-イメージは素の `ubuntu:24.04`（ツール類は入っていない）。`/home/agent` と
-`/home/agent/.agents` は `docker run -v` の親ディレクトリを Docker が root 0755 で
-自動生成する（ツールはペルソナが root で自由に `apt` / `pip` する思想。
-#96 以前の焼き込みイメージは 2026-11-20 に廃止）。
+イメージは素の `ubuntu:24.04`（ツール類は入っていない）。ペルソナが日常的に
+触る場所（workspace / wiki / uploads / media / skills / global-skills）は
+`/root` 配下の symlink で見せる:
+
+```text
+/root/workspace            → /mnt/nous/workspace
+/root/wiki                 → /mnt/nous/wiki
+/root/uploads              → /mnt/nous/uploads
+/root/media                → /mnt/nous/media        (ro)
+/root/.agents/skills       → /mnt/nous/skills
+/root/.agents/global-skills → /mnt/nous/global-skills (ro)
+```
+
+symlink は manager が run / restore の直後と、実行中のコンテナへの exec のたびに
+`ln -sfn` で張り直す（冪等なので毎回でよい）。張る前に全 target の実在を検査し、
+マウント漏れなら 1 本も触らずに run を殺して `status="error"`。
+実行中の経路では DNS 再確認はしない — exec に応答した時点で net も
+生きている。手で壊しても次回の ensure で戻る。リンク先に実ディレクトリが
+ある場合（移行前に `mkdir ~/workspace` していた等）は退避してから張る——
+退避先 `<link>.pre-link` が既に有る場合は `.pre-link.1`, `.pre-link.2` … と
+追い番で退避し、ログに `旧データを退避した（手で統合する）` という
+warning が出るので、旧データを確認して手で統合したこと。host 側の既存データ
+（`<p>/workspace` 等）は 1 バイトも動かさない（plans/2026-11-20-sandbox-root-home.md）。
+
+（ツールはペルソナが root で自由に `apt` / `pip` する思想。
+#96 以前の焼き込みイメージは 2026-11-20 に廃止。）
 
 **旧 uid 運用のコンテナが残っていると、`$HOME` に書けないまま古い挙動になる。**
 running / start の経路で `docker inspect` の `.Config.User` を見て、`{"", "0", "0:0"}`
@@ -177,7 +200,7 @@ persona/<p>/
 - `/restore` で `network` / `memory` を省略すると manager の既定（`SANDBOX_NETWORK` / `SANDBOX_MEMORY`）で**作り直す**。snapshot 元と違えば `SANDBOX_DNS_CHECK=1` なら DNS チェックで落ちるが、`0` なら静かに別ネットワークのマシンになる
 - **`/restore` は sandbox の外から実行する。** 自分の exec 中は必ず in_flight で拒否され、sandbox 内からの curl では自分を殺すだけ
 - exec は `docker exec [-w cwd] <persona>-sandbox bash -lc <command>`。subprocess は `shell=False` のリスト引数で、`command` 文字列は内側の `bash -lc` にだけ渡す
-- 出力は末尾 120 行だけ返し、全文はワークスペース内の `.nous/logs/` に落とす。`log_path` は**コンテナ視点のパス**（`/home/agent/workspace/.nous/logs/<ts>.log`）で返すので、モデルはそのまま `read_file` で読み直せる。ワークスペース外に置くと `resolve_in_workspace` に弾かれて `log_path` が空約束になる
+- 出力は末尾 120 行だけ返し、全文はワークスペース内の `.nous/logs/` に落とす。`log_path` は**コンテナ視点のパス**（`/root/workspace/.nous/logs/<ts>.log`）で返すので、モデルはそのまま `read_file` で読み直せる。ワークスペース外に置くと `resolve_in_workspace` に弾かれて `log_path` が空約束になる
 - アイドル `sandbox_idle_minutes`（既定 30）で `docker stop`。状態は残し、次の exec で `docker start` する
 
 ---
@@ -252,6 +275,23 @@ docker exec <persona>-sandbox bash -c '[ -f /usr/share/zoneinfo/Asia/Tokyo ] && 
 
 （以降の新規作成コンテナは `_apply_timezone` が run 直後に Nous 設定の
 `timezone` を自動で書き込む。）
+
+#### 既存稼働コンテナの /root 集約移行（ワンタイム）
+
+2026-11-20 の /root 集約より前に作られたコンテナは旧マウント
+（`/home/agent` 直結）のまま。symlink を手で張っても `/root` が writable layer
+上なので stop までは持つが、`rm` で消える。移行は**コンテナの作り直し**一択:
+
+```bash
+# 1. 必要なら snapshot を取っておく（writable layer を残す場合）
+# 2. 作り直し（host 側データは不動。次回 exec で新構成が自動生成される）
+docker rm -f <persona>-sandbox
+# 3. 次の exec で /root マウント + symlink 付きで再作成される
+```
+
+`<p>/root` ディレクトリは run 時に manager が自動で作る。旧 `/home/agent`
+配下に置いた dotfiles は、`docker cp` か exec の `cp` で `/root` に持ってくる
+（自動移行はしない — 相手は root 権限持ち、何を残すかはペルソナの裁量）。
 bind mount の中身（workspace / wiki / uploads / media / skills）は消えない。
 
 ### 4. デプロイ後の実機チェックリスト
@@ -261,7 +301,11 @@ bind mount の中身（workspace / wiki / uploads / media / skills）は消え�
 - [ ] `docker run --rm <新イメージ> id` → `uid=0(root)`
 - [ ] `docker inspect -f '{{.Config.User}}' <p>-sandbox` が全件 `0:0`（空 = image 既定）
 - [ ] `docker exec -it <p>-sandbox apt-get install -y tree` → `docker stop` → `docker start` → `tree` が残る
-- [ ] root で `touch /home/agent/media/x` → `Read-only file system`（EROFS）
+- [ ] root で `touch /root/media/x` → `Read-only file system`（EROFS）
+- [ ] `docker exec <p>-sandbox ls -la /root` → symlink 6本（`workspace` / `wiki` / `uploads` / `.agents/skills` / `media` / `.agents/global-skills`）が全て `/mnt/nous/*` に解ける
+- [ ] `docker exec <p>-sandbox bash -c 'echo $HOME'` → `/root`
+- [ ] `docker exec <p>-sandbox grep /home/agent /etc/passwd` → 空応答（passwd 行追加は廃止）
+- [ ] attach_file 境界（readlink -f）: `ln -s /mnt/nous/wiki/x /root/workspace/lnk` → `exit 3` で弾く／`echo hi > /root/workspace/ok.txt` → 通る
 - [ ] snapshot → restore の往復（`/restore` の戻り値が `{"status":"ok"}`）
 - [ ] `ls -ln ${DATA_ROOT}/persona/<p>/workspace` で新旧の所有者混在を確認
 - [ ] `/proc/sys` が ro: `docker exec <p>-sandbox sh -c 'mount | grep /proc/sys'`
@@ -280,7 +324,7 @@ sandbox 既定になり（`workspace_root` は要らない）、別ツール `sa
 実装は `nous/application/chat/tools/sandbox_shell.py`。manager の `/exec` だけを使う
 （`read_file` は `base64 -w0` をデコード、`write_file` は本文を base64 にして流し込む。
 `edit_file` は読んで nous 側で exact-match 置換してから書き戻すので、コンテナに python/perl は要らない）。
-パスは相対なら `/home/agent/workspace` 起点（全ペルソナ共通の HOME）。コマンドもパス（`..` を含む）も制限しない。
+パスは相対なら `/root/workspace` 起点（全ペルソナ共通の HOME）。コマンドもパス（`..` を含む）も制限しない。
 
 | 設定 | 既定 | 意味 |
 |---|---|---|

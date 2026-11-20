@@ -482,7 +482,6 @@ async def _do_attachment_upload(persona: str, ctx, filename: str, file_bytes: by
     """Save uploaded file to host FS and return metadata dict."""
     import mimetypes
     import os
-    from contextlib import suppress
     from pathlib import Path
 
     settings = get_settings()
@@ -497,16 +496,12 @@ async def _do_attachment_upload(persona: str, ctx, filename: str, file_bytes: by
     counter = 0
     stem = dest.stem
     suffix = dest.suffix
-    while dest.exists():
+    while dest.exists() or dest.is_symlink():
         counter += 1
         dest = uploads_dir / f"{stem}_{counter}{suffix}"
     safe_name = dest.name
 
     dest.write_bytes(file_bytes)
-    # persona は別 uid で動く。root 0644 のままだと edit_file / 削除で Permission denied。
-    # 権限を変えられなくても保存は成功させる（ペルソナが読めないよりはまし）。
-    with suppress(OSError):
-        os.chmod(dest, 0o666)  # nosec B103 - persona 専用の隔離ディレクトリ。
 
     mime_type, _ = mimetypes.guess_type(safe_name)
     mime_type = mime_type or "application/octet-stream"
@@ -515,8 +510,8 @@ async def _do_attachment_upload(persona: str, ctx, filename: str, file_bytes: by
     return {
         "filename": safe_name,
         "url": f"/api/chat/{persona}/attachment/{safe_name}",
-        # sandbox からは /home/agent/uploads に見える（sandbox_manager のマウント先）。
-        "workspace_path": f"/home/agent/uploads/{safe_name}",
+        # sandbox からは /root/uploads に見える（/mnt/nous/uploads への symlink）。
+        "workspace_path": f"/root/uploads/{safe_name}",
         "mime_type": mime_type,
         "size": size,
     }
@@ -641,9 +636,7 @@ async def attachment_upload(request: Request) -> JSONResponse:
     filename = upload.filename or "upload"
     file_bytes = await _read_limited(upload, limit)
     if file_bytes is None:
-        return JSONResponse(
-            {"error": f"file too large (max {limit // (1024 * 1024)} MB)"}, status_code=413
-        )
+        return JSONResponse({"error": f"file too large (max {limit // (1024 * 1024)} MB)"}, status_code=413)
     return JSONResponse(await _do_attachment_upload(persona, ctx, filename, file_bytes))
 
 

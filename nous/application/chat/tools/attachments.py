@@ -5,8 +5,9 @@
 新しいルートもサニタイズも増やさない。
 
 sandbox 稼働中はホストのワークスペースが見えない。manager は同じ uploads を
-``/home/agent/uploads`` に rw マウントしているので、コピーはコンテナ内で行い、
-サイズ検査だけホスト側の実ファイルで行う。
+``/root/uploads`` に rw マウントしているので、境界検査・サイズ検査・コピーの
+全部をコンテナ内で行い、ホスト側は ``dest.stat().st_size`` による二重目の
+サイズ門として残す。
 """
 
 from __future__ import annotations
@@ -33,7 +34,7 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-SANDBOX_UPLOADS = "/home/agent/uploads"
+SANDBOX_UPLOADS = "/root/uploads"
 
 
 class AttachmentError(ValueError):
@@ -85,7 +86,10 @@ async def _copy_from_sandbox(manager: object, persona: str, path: str, name: str
     # 外差し symlink も抜けない。途中で切れても最終名には書かない（.part 経由）。
     command = (
         f"src=$(readlink -f -- {shlex.quote(source)}) || exit 1; "
-        f'case "$src" in {base}/?*) ;; *) exit 3 ;; esac; '
+        f"base=$(readlink -f -- {shlex.quote(base)}) || exit 1; "
+        # base も実体で揃える: workspace_path は symlink で、src だけ実体化すると
+        # 常に不一致になり正当な添付まで exit 3 になる。
+        f'case "$src" in "$base"/?*) ;; *) exit 3 ;; esac; '
         f'size=$(stat -c %s -- "$src") || exit 1; '
         f'[ "$size" -le {limit} ] || exit 2; '
         f'cp -- "$src" {shlex.quote(f"{SANDBOX_UPLOADS}/{part_name}")} || exit 1; '
@@ -95,16 +99,21 @@ async def _copy_from_sandbox(manager: object, persona: str, path: str, name: str
     try:
         payload = await manager.exec(persona, command)  # type: ignore[attr-defined]
         code = payload.get("exit_code")
-        if code is None or payload.get("status") == "error":
-            # manager の失敗 payload は message ではなく stderr_tail に理由が入る
-            raise AttachmentError(str(payload.get("stderr_tail") or "sandbox でコピーできなかった"))
+        # _failure は必ず exit_code=None を返すので None 判定だけで輸送失敗が分かる。
+        # status="error" で分岐すると exit 3/2（境界・サイズ）がここに吸い込まれ、
+        # 下の診断分岐が到達不能になる。
+        if code is None:
+            # 輸送失敗 payload は2形: manager の _failure は stderr_tail、
+            # SandboxManager.exec 自身の失敗（manager 停止・HTTP 401 など）は message。
+            detail = str(payload.get("stderr_tail") or payload.get("message") or "sandbox でコピーできなかった")
+            raise AttachmentError(detail)
         if code == 3:
             raise AttachmentError(f"ワークスペース外は触れない: {path}")
         if code == 2:
             raise AttachmentError(f"大きすぎる（上限 {limit // (1024 * 1024)}MB）: {path}")
         if code != 0:
-            detail = (payload.get("stderr_tail") or "").strip().splitlines()
-            raise AttachmentError(f"コピーできなかった: {detail[0] if detail else 'cp failed'}")
+            lines = (payload.get("stderr_tail") or "").strip().splitlines()
+            raise AttachmentError(f"コピーできなかった: {lines[0] if lines else 'cp failed'}")
     except BaseException:
         # タイムアウト切断でも部分ファイルを uploads に残さない
         with contextlib.suppress(OSError):

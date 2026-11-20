@@ -160,13 +160,15 @@ class TestSandbox:
 
         async def fake_exec(persona, command, cwd=None, timeout_seconds=None):
             # cp の代わりに uploads 側へ書き出す（ホストからも見えるマウントの再現）
+            # 境界検査は src も base も readlink -f で実体化して揃える。
             assert "readlink -f" in command
-            assert 'case "$src" in /home/agent/workspace/?*)' in command
+            assert "base=$(readlink -f -- /root/workspace)" in command
+            assert 'case "$src" in "$base"/?*)' in command
             assert "stat -c %s" in command
-            assert "/home/agent/uploads/.part-" in command
+            assert "/root/uploads/.part-" in command
             uploads.mkdir(parents=True, exist_ok=True)
             (uploads / "out.png").write_bytes(b"png")
-            return {"status": "success", "exit_code": 0, "stdout_tail": "", "stderr_tail": ""}
+            return {"status": "ok", "exit_code": 0, "stdout_tail": "", "stderr_tail": ""}
 
         manager = MagicMock()
         manager.exec = AsyncMock(side_effect=fake_exec)
@@ -181,7 +183,7 @@ class TestSandbox:
         assert result["attachments"][0]["size"] == 3
 
     @pytest.mark.asyncio
-    @pytest.mark.parametrize("path", ["/etc/passwd", "../../etc/passwd", "/home/agent/uploads/x.txt"])
+    @pytest.mark.parametrize("path", ["/etc/passwd", "../../etc/passwd", "/root/uploads/x.txt"])
     async def test_outside_workspace_is_rejected(self, tmp_path, ctx, config, path):
         """コンテナ内でもワークスペース配下しか触らない（cp すら呼ばない）。"""
         manager = MagicMock()
@@ -198,8 +200,9 @@ class TestSandbox:
 
     @pytest.mark.asyncio
     async def test_too_big_in_container(self, tmp_path, ctx, config):
+        """status="error" でも exit_code があれば診断分岐に届く（回帰: 輸送失敗に吸い込まれない）。"""
         manager = MagicMock()
-        manager.exec = AsyncMock(return_value={"status": "success", "exit_code": 2, "stderr_tail": ""})
+        manager.exec = AsyncMock(return_value={"status": "error", "exit_code": 2, "stderr_tail": ""})
         with (
             _patch_settings(tmp_path),
             patch("nous.application.chat.tools.attachments.sandbox_manager", return_value=manager),
@@ -211,9 +214,10 @@ class TestSandbox:
 
     @pytest.mark.asyncio
     async def test_symlink_escape_in_container_is_rejected(self, tmp_path, ctx, config):
-        """パス文字列が内側でも、実体が外ならコンテナ側の case 文で落ちる（exit 3）。"""
+        """パス文字列が内側でも、実体が外ならコンテナ側の case 文で落ちる（exit 3）。
+        回帰: status="error" で来た exit 3 も「ワークスペース外」に届く（輸送失敗扱いに吸い込まれない）。"""
         manager = MagicMock()
-        manager.exec = AsyncMock(return_value={"status": "success", "exit_code": 3, "stderr_tail": ""})
+        manager.exec = AsyncMock(return_value={"status": "error", "exit_code": 3, "stderr_tail": ""})
         with (
             _patch_settings(tmp_path),
             patch("nous.application.chat.tools.attachments.sandbox_manager", return_value=manager),
@@ -248,7 +252,7 @@ class TestSandbox:
     async def test_sandbox_cp_failure_is_reported(self, tmp_path, ctx, config):
         manager = MagicMock()
         manager.exec = AsyncMock(
-            return_value={"status": "success", "exit_code": 1, "stderr_tail": "cp: No such file or directory\n"}
+            return_value={"status": "error", "exit_code": 1, "stderr_tail": "cp: No such file or directory\n"}
         )
         with (
             _patch_settings(tmp_path),
@@ -257,4 +261,19 @@ class TestSandbox:
             result = await _handle_attach_file(ctx, self._sandbox_config(config), {"path": "gone.txt"})
 
         assert result["status"] == "error"
+        assert result["message"].startswith("コピーできなかった")
         assert "cp: No such file" in result["message"]
+
+    @pytest.mark.asyncio
+    async def test_manager_unreachable_is_reported(self, tmp_path, ctx, config):
+        """SandboxManager.exec 自身の失敗（manager 停止・HTTP 401 など）は exit_code キーが無く、理由は message に入る。"""
+        manager = MagicMock()
+        manager.exec = AsyncMock(return_value={"status": "error", "message": "sandbox-manager: ConnectError"})
+        with (
+            _patch_settings(tmp_path),
+            patch("nous.application.chat.tools.attachments.sandbox_manager", return_value=manager),
+        ):
+            result = await _handle_attach_file(ctx, self._sandbox_config(config), {"path": "out.png"})
+
+        assert result["status"] == "error"
+        assert "ConnectError" in result["message"]

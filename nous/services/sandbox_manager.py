@@ -266,16 +266,76 @@ def _mount_specs(root: Path, persona: str) -> list[tuple[Path, str, bool]]:
 
     ペルソナが読める場所だけを見せる。memory.sqlite や config.json は見せない
     （壊されると復旧できない）。media は nous が書く生成物なので ro。
+    host 側の既存データは動かさず、/root 集約は /mnt/nous/* への symlink で行う
+    （plans/2026-11-20-sandbox-root-home.md）。
     """
-    home = "/home/agent"
+    p = root / "persona" / persona
     return [
-        (root / "persona" / persona / "workspace", f"{home}/workspace", False),
-        (root / "persona" / persona / "wiki", f"{home}/wiki", False),
-        (root / "persona" / persona / "uploads", f"{home}/uploads", False),
-        (root / "persona" / persona / "media", f"{home}/media", True),
-        (root / "persona" / persona / "skills", f"{home}/.agents/skills", False),
-        (root / "skills", f"{home}/.agents/global-skills", True),
+        (p / "root", "/root", False),
+        (p / "workspace", "/mnt/nous/workspace", False),
+        (p / "wiki", "/mnt/nous/wiki", False),
+        (p / "uploads", "/mnt/nous/uploads", False),
+        (p / "skills", "/mnt/nous/skills", False),
+        (p / "media", "/mnt/nous/media", True),
+        (root / "skills", "/mnt/nous/global-skills", True),
     ]
+
+
+# /root 配下に張る symlink（link, target）。target は _mount_specs の /mnt/nous 側。
+_SANDBOX_LINKS: tuple[tuple[str, str], ...] = (
+    ("/root/workspace", "/mnt/nous/workspace"),
+    ("/root/wiki", "/mnt/nous/wiki"),
+    ("/root/uploads", "/mnt/nous/uploads"),
+    ("/root/.agents/skills", "/mnt/nous/skills"),
+    ("/root/media", "/mnt/nous/media"),
+    ("/root/.agents/global-skills", "/mnt/nous/global-skills"),
+)
+
+
+def _link_home_dirs(container: str) -> str | None:
+    """/root 配下に /mnt/nous/* への symlink を張り直す。dangling なら理由を返す。
+
+    run / start のたびに張り直す（手で壊されても次回の ensure で戻る）。
+    マウント漏れがあると dangling symlink になり「ファイルが無い」に化けるので、
+    全 target の実在を同じ exec で確かめる。
+    """
+    # dangling チェックの対象は _SANDBOX_LINKS から導く（二重管理しない）。
+    # MISS は全本数を溜めてから落とす（1 本で即抜けだと残りが静かに
+    # 漏れる）。検査が先でマウント漏れなら 1 本も触らずに返る。
+    targets = " ".join(sorted({t.rsplit("/", 1)[-1] for _, t in _SANDBOX_LINKS}))
+    parts = [
+        f'miss=0; for t in {targets}; do [ -e "/mnt/nous/$t" ] || {{ echo "MISS:$t"; miss=1; }}; done; [ "$miss" -eq 0 ]',
+        "mkdir -p /root/.agents",
+    ]
+    # ln -sfn は実ディレクトリに負ける。ペルソナが過去に mkdir した場合
+    # （移行直後の /root 残り含む）は退避してから張る。衝突で止めると
+    # 「.pre-link が残る限り二度と起動できない」恒久故障になるので、
+    # .pre-link.1, .pre-link.2 … と追い番で退避し MOVED: で知らる。
+    for link, target in _SANDBOX_LINKS:
+        parts.append(
+            f'([ ! -e "{link}" ] || [ -L "{link}" ] || {{ d="{link}.pre-link"; i=0; while [ -e "$d" ] || [ -L "$d" ]; do i=$((i+1)); d="{link}.pre-link.$i"; done; mv -- "{link}" "$d" && echo "MOVED:$d"; }}) && ln -sfn {target} "{link}"'
+        )
+    script = " && ".join(parts)
+    # profile に exit を書かれるとリンク 0 本のまま成功扱いになるので読み
+    # 込ませない（ペルソナの bash とは違い、ここは manager の処理）。
+    proc, err = _call("exec", "-u", "0", container, "bash", "--noprofile", "--norc", "-c", script, timeout=30.0)
+    if proc is None:
+        # symlink 無しではペルソナが何も読めない。警告で済ませず run を殺す。
+        return err or "docker exec failed"
+    # MISSING の拾い取りは戻り値判定より先（MISS 時は検査群が非 0 で
+    # 鎖が切れるため、exit code では区別できない）。
+    missing = [line.removeprefix("MISS:") for line in proc.stdout.splitlines() if line.startswith("MISS:")]
+    if missing:
+        logger.error("sandbox %s のマウントが見えない: %s", container, ", ".join(missing))
+        return f"マウントが見えない（dangling symlink になる）: {', '.join(missing)}"
+    moved = [line.removeprefix("MOVED:") for line in proc.stdout.splitlines() if line.startswith("MOVED:")]
+    if moved:
+        # 無言で退避すると「ワークスペースが空」と誤認して作り直す。
+        logger.warning("sandbox %s: 旧データを退避した（手で統合する）: %s", container, ", ".join(moved))
+    if proc.returncode != 0:
+        detail = (proc.stderr.strip() or f"exit {proc.returncode}")[:300]
+        return f"symlink 張りに失敗: {detail}"
+    return None
 
 
 # 旧 uid 運用（1026:100）のコンテナは root 前提の操作で書けない場所がある。
@@ -334,8 +394,11 @@ def _install_missing(container: str, packages: list[str]) -> list[str]:
         "export DEBIAN_FRONTEND=noninteractive; "
         "apt-get update && apt-get install -y --no-install-recommends " + " ".join(missing)
     )
-    # 旧 1026 コンテナも動くので、apt は uid に依らず root で打つ。
-    proc, err = _call("exec", "-u", "0", container, "bash", "-lc", script, timeout=APT_EXTRA_TIMEOUT_SECONDS)
+    # 旧 1026 コンテナも動くので、apt は uid に依らず root で打つ。profile に
+    # exit を書かれると黙って失敗扱いになるので読み込ませない（_link_home_dirs 同様）。
+    proc, err = _call(
+        "exec", "-u", "0", container, "bash", "--noprofile", "--norc", "-c", script, timeout=APT_EXTRA_TIMEOUT_SECONDS
+    )
     if proc is None:
         logger.warning("sandbox apt install failed (%s): %s", container, err)
         return []
@@ -361,7 +424,7 @@ def _apply_timezone(container: str) -> None:
         rf'&& printf "%s\n" "{zone}" > /etc/timezone '
         f'&& ln -sf "/usr/share/zoneinfo/{zone}" /etc/localtime'
     )
-    proc, err = _call("exec", "-u", "0", container, "bash", "-lc", script, timeout=15.0)
+    proc, err = _call("exec", "-u", "0", container, "bash", "--noprofile", "--norc", "-c", script, timeout=15.0)
     if proc is None:
         logger.warning("sandbox tz setup failed (%s): %s", container, err)
         return
@@ -371,10 +434,14 @@ def _apply_timezone(container: str) -> None:
 
 
 def _post_run(container: str) -> str | None:
-    """run 直後の面倒。戻り値に載るのは DNS の失敗だけ（tz・apt は警告で済ませる）。"""
+    """run 直後の面倒。戻り値に載るのは symlink と DNS の失敗だけ（tz・apt は警告で済ませる）。"""
     # run 直後は必ず新規コンテナ。外部の docker rm で作り直された場合も
     # ここを通るので、root 以外の警告キャッシュはここで捨てる。
     _user_warned.discard(container)
+    # /root 集約の symlink。dangling は「何も読めないマシン」なので先に殺す。
+    link_err = _link_home_dirs(container)
+    if link_err:
+        return link_err
     # DNS 失敗でも tz は付けておく（新規作成はここを 1 回しか通らない）。
     _apply_timezone(container)
     dns_err = _post_start_check(container)
@@ -484,12 +551,19 @@ def _ensure_inner(
             return f"{name} は nous の sandbox ではない（com.nous.sandbox ラベルが無い）"
         _warn_non_root(name, user)
         if running == "true":
-            return None
+            # start を挟まなくても symlink は壊れ得る（手で消す・移行前の
+            # writable layer 残り）。冪等なので running でも張り直す。
+            # 再確認は symlink のみ — DNS は exec に応答した時点で net も
+            # 生きていることが分かるので略す（docs/sandbox.md）。
+            return _link_home_dirs(name)
         started, err = _call("start", name)
         if started is None:
             return err or "docker start failed"
         if started.returncode != 0:
             return started.stderr.strip() or "docker start failed"
+        link_err = _link_home_dirs(name)
+        if link_err:
+            return link_err
         return _post_start_check(name)
 
     detail = inspected.stderr.strip()
@@ -497,12 +571,10 @@ def _ensure_inner(
         # sock の権限エラーなど。「無い」と決めつけて run すると原因が隠れる。
         return f"docker inspect 失敗: {detail or 'unknown error'}"
 
-    home = "/home/agent"
+    home = "/root"
     root = _host_data_root()
     if root is None:
         return "host data root が解決できない（SANDBOX_HOST_DATA_ROOT に絶対パスを設定する）"
-    # ペルソナが読める場所だけを見せる。memory.sqlite や config.json は
-    # 見せない（壊されると復旧できない）。media は nous が書く生成物なので ro。
     mounts = _mount_specs(root, persona)
     args = [
         "run",
@@ -543,6 +615,8 @@ def _ensure_inner(
         "-e",
         f"HOME={home}",
         "-e",
+        "USER=root",
+        "-e",
         f"TZ={_tz()}",
         # persona 側は UTF-8 前提。POSIX に落ちると Python が ASCII になる。
         "-e",
@@ -575,10 +649,20 @@ def _ensure_inner(
         return err or "docker run failed"
     if ran.returncode != 0:
         return ran.stderr.strip() or "docker run failed"
-    return _post_run(name)
+    post_err = _post_run(name)
+    if post_err:
+        # run 直後の失敗は壊れた新規コンテナを残さない（次の exec が
+        # running 短絡で symlink 無しのマシンを使い始めるのを防ぐ）。
+        # /restore と同じ「ID で消す」（名前は再利用される）。掃除の
+        # 失敗は run の失敗を隠さないよう warning に落とす。
+        proc_rm, _ = _call("rm", "-f", ran.stdout.strip() or name, timeout=60.0)
+        if proc_rm is None or proc_rm.returncode != 0:
+            logger.warning("sandbox %s の掃除に失敗（run 直後エラー: %s）", name, post_err)
+        return post_err
+    return None
 
 
-CONTAINER_WORKSPACE = "/home/agent/workspace"
+CONTAINER_WORKSPACE = "/root/workspace"
 LOG_DIR = ".nous/logs"
 
 
@@ -859,11 +943,11 @@ def restore_sandbox(req: RestoreRequest) -> dict:
                 return _failure(err)
             if cid is not None:
                 # 名前でなく ID で消す（inspect と rm の間に同名で作り直されても消さない）。
-                removed, rerr = _call("rm", "-f", cid)
-                if removed is None:
+                proc_rm, rerr = _call("rm", "-f", cid)
+                if proc_rm is None:
                     return _failure(rerr or "docker rm failed")
-                if removed.returncode != 0 and not _missing(removed.stderr):
-                    return _failure(removed.stderr.strip() or "docker rm failed")
+                if proc_rm.returncode != 0 and not _missing(proc_rm.stderr):
+                    return _failure(proc_rm.stderr.strip() or "docker rm failed")
             # _ensure だとロックを二重取得するので _ensure_inner を直に呼ぶ。
             eerr = _ensure_inner(persona, image=req.image, network=req.network, memory=req.memory)
             if eerr:

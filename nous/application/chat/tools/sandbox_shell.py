@@ -39,11 +39,11 @@ if TYPE_CHECKING:
 def workspace_path(persona: str) -> str:
     """コンテナ内のワークスペース（manager のマウント先）。
 
-    ペルソナごとに分かれるのはホスト側で、コンテナ内の HOME は共通
-    （/home/agent）。sandbox はペルソナ専用の使い捨てコンテナ。
+    ペルソナごとに分かれるのはホスト側で、コンテナ内は /root 集約で共通。
+    sandbox はペルソナ専用のマシン（/root/workspace は /mnt/nous/workspace への symlink）。
     """
     del persona  # 呼び出し側の互換のため引数は残す
-    return "/home/agent/workspace"
+    return "/root/workspace"
 
 
 class SandboxManager:

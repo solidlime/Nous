@@ -6,6 +6,7 @@ docker は実行しない。``_docker`` を FakeDocker に差し替えて引数�
 
 from __future__ import annotations
 
+import logging
 import os
 import re
 import subprocess
@@ -199,11 +200,11 @@ def test_exec_builds_docker_exec_args(client, fake) -> None:
 
 
 def test_exec_with_cwd_adds_workdir(client, fake) -> None:
-    client.post("/exec", json={"persona": "alice", "command": "pwd", "cwd": "/home/agent/workspace"})
+    client.post("/exec", json={"persona": "alice", "command": "pwd", "cwd": "/root/workspace"})
     assert (
         "exec",
         "-w",
-        "/home/agent/workspace",
+        "/root/workspace",
         "alice-sandbox",
         "timeout",
         "-k",
@@ -226,11 +227,12 @@ def test_exec_runs_container_when_missing(client, fake, tmp_path: Path) -> None:
     assert "com.docker.compose.project=nous-sandbox" in run
     assert "com.docker.compose.service=sbx-alice" in run
     assert "com.nous.sandbox=1" in run
-    assert f"{tmp_path}/host/persona/alice/workspace:/home/agent/workspace" in run
-    assert f"{tmp_path}/host/persona/alice/wiki:/home/agent/wiki" in run
-    assert f"{tmp_path}/host/persona/alice/uploads:/home/agent/uploads" in run
+    assert f"{tmp_path}/host/persona/alice/root:/root" in run
+    assert f"{tmp_path}/host/persona/alice/workspace:/mnt/nous/workspace" in run
+    assert f"{tmp_path}/host/persona/alice/wiki:/mnt/nous/wiki" in run
+    assert f"{tmp_path}/host/persona/alice/uploads:/mnt/nous/uploads" in run
     # media は nous が書く生成物なので読み取り専用。
-    assert f"{tmp_path}/host/persona/alice/media:/home/agent/media:ro" in run
+    assert f"{tmp_path}/host/persona/alice/media:/mnt/nous/media:ro" in run
     assert "--user" in run
     # ペルソナ専用マシンなので root で走らせる。
     assert run[run.index("--user") + 1] == "0:0"
@@ -239,15 +241,123 @@ def test_exec_runs_container_when_missing(client, fake, tmp_path: Path) -> None:
     # no-new-privileges は廃止（root 前提の運用に合わせる）。
     assert "no-new-privileges" not in run
     assert not any(a.startswith("--cap-drop") for a in run)
-    assert f"{tmp_path}/host/persona/alice/skills:/home/agent/.agents/skills" in run
-    assert f"{tmp_path}/host/skills:/home/agent/.agents/global-skills:ro" in run
+    assert f"{tmp_path}/host/persona/alice/skills:/mnt/nous/skills" in run
+    assert f"{tmp_path}/host/skills:/mnt/nous/global-skills:ro" in run
+    # /root 集約: HOME も workdir も /root。日常ディレクトリは symlink で見せる。
+    assert "HOME=/root" in run
+    assert run[run.index("--workdir") + 1] == "/root"
     assert run[-2:] == ("sleep", "infinity")
     # mkdir は manager から見えるパス（NOUS_DATA_ROOT）に行う。
     # -v に渡すのはホスト名前空間のパスで、コンテナからは触れない。
+    assert (tmp_path / "container" / "persona" / "alice" / "root").is_dir()
     assert (tmp_path / "container" / "persona" / "alice" / "workspace").is_dir()
     assert (tmp_path / "container" / "persona" / "alice" / "wiki").is_dir()
     assert (tmp_path / "container" / "persona" / "alice" / "uploads").is_dir()
     assert (tmp_path / "container" / "persona" / "alice" / "media").is_dir()
+
+
+def test_run_links_home_dirs_and_checks_the_mounts(client, fake) -> None:
+    """run 直後は symlink を張り直して、対象は _SANDBOX_LINKS から導く。"""
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+
+    assert client.post("/exec", json={"persona": "alice", "command": "id"}).json()["status"] == "ok"
+
+    link_call = next(c for c in fake.calls if c[0] == "exec" and "ln -sfn" in " ".join(c))
+    # root 権限で実行し、/root/.agents の親も作る。profile 読み込みは無し。
+    assert link_call[link_call.index("-u") + 1] == "0"
+    assert "--noprofile" in link_call and "--norc" in link_call
+    script = link_call[link_call.index("-c") + 1]
+    assert "mkdir -p /root/.agents" in script
+    # 検査が mutate に先立つ（マウント漏れなら 1 本も触らない）。
+    # MISS は 1 本で即抜けせず全本数を積んでから非 0 で落とす。
+    assert script.index("MISS:$t") < script.index("mkdir -p")
+    assert '[ "$miss" -eq 0 ]' in script
+    for link, target in sm._SANDBOX_LINKS:
+        assert f'ln -sfn {target} "{link}"' in script
+        # ln -sfn は実ディレクトリに負けるので退避する。衝突で止めると恒久
+        # 故障になるので .pre-link.1, .pre-link.2 … と追い番にし、MOVED: で
+        # host 側に知らせる。
+        assert f'while [ -e "$d" ] || [ -L "$d" ]; do i=$((i+1)); d="{link}.pre-link.$i"; done' in script
+        assert f'mv -- "{link}" "$d" && echo "MOVED:$d"' in script
+    # dangling チェックの対象は _SANDBOX_LINKS から導く（二重管理しない）。
+    derived = " ".join(sorted({t.rsplit("/", 1)[-1] for _, t in sm._SANDBOX_LINKS}))
+    assert f"for t in {derived}; do" in script
+    assert "MISS:$t" in script
+    # post_run の最初に走る（tz より先）。
+    execs = [c for c in fake.calls if c[0] == "exec"]
+    assert execs.index(link_call) == 0
+    # /etc/passwd のパッチは廃止済み（復活したらここで落ちる）。
+    assert all("/etc/passwd" not in " ".join(c) for c in fake.calls)
+
+
+def test_ensure_relinks_even_when_already_running(client, fake) -> None:
+    """start を挟がない経路（既に running）でも symlink は張り直す。"""
+    fake.by_subcommand["inspect"] = (0, "true 1 0\n", "")
+
+    assert client.post("/exec", json={"persona": "alice", "command": "id"}).json()["status"] == "ok"
+
+    # run は叩かないが、link の exec は走る（手で壊された symlink の修復）。
+    assert not any(c[0] == "run" for c in fake.calls)
+    assert any(c[0] == "exec" and "ln -sfn" in " ".join(c) for c in fake.calls)
+
+
+def test_run_fails_when_a_mount_is_invisible(client, fake) -> None:
+    """dangling symlink は「ファイルが無い」に化けるので、run を殺して status=error。"""
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+    fake.by_subcommand["exec"] = (1, "MISS:workspace\nMISS:media\n", "")
+
+    body = client.post("/exec", json={"persona": "alice", "command": "id"}).json()
+    assert body["status"] == "error"
+    assert "workspace" in body["stderr_tail"] and "media" in body["stderr_tail"]
+    # 検査が 2 本まとめて報告する（1 本で即抜けすると残りが静かに漏れる）。
+    assert "workspace, media" in body["stderr_tail"]
+    # dangling が見つかったら tz も DNS チェックも走らせない。
+    assert not any("zoneinfo" in " ".join(c) or "getent" in " ".join(c) for c in fake.calls if c[0] == "exec")
+    # 壊れた新規コンテナを残さない（running 短絡による再入を防ぐ）。
+    # /restore と同じ「ID で消す」規約（run -d の stdout = コンテナ ID）。
+    assert any(c[0] == "rm" and "abc123" in c for c in fake.calls)
+
+
+def test_run_fails_when_linking_itself_fails(client, fake) -> None:
+    """ln 自体が失敗したら（シェル不在など）run を殺す。"""
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+    fake.by_subcommand["exec"] = (127, "", "bash: ln: command not found\n")
+
+    body = client.post("/exec", json={"persona": "alice", "command": "id"}).json()
+    assert body["status"] == "error"
+    assert "symlink" in body["stderr_tail"]
+
+
+def test_ensure_miss_leaves_running_container_alone(client, fake) -> None:
+    """running 短絡での dangling は error を返すだけで、既存コンテナは rm しない。
+
+    rm は「run 直後に失敗した新規コンテナ」専用。この釘が無いと将来の
+    経路統合で他人の running マシンを消す変更が緑のまま通る。
+    """
+    fake.by_subcommand["inspect"] = (0, "true 1 0\n", "")
+    fake.by_subcommand["exec"] = (1, "MISS:workspace\n", "")
+
+    body = client.post("/exec", json={"persona": "alice", "command": "id"}).json()
+    assert body["status"] == "error"
+    assert "workspace" in body["stderr_tail"]
+    assert not any(c[0] == "rm" for c in fake.calls)
+
+
+def test_run_reports_moved_directories(client, fake, caplog) -> None:
+    """退避が起きたら（MOVED:）host 側に warning を出す（サイレント統合を防ぐ）。"""
+    fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
+    fake.by_subcommand["run"] = (0, "abc123\n", "")
+    fake.by_subcommand["exec"] = (0, "MOVED:/root/workspace.pre-link\n", "")
+
+    with caplog.at_level(logging.WARNING, logger="nous.services.sandbox_manager"):
+        body = client.post("/exec", json={"persona": "alice", "command": "id"}).json()
+    # 退避はエラーではない: リンクは張れており、データは .pre-link 側に生きる。
+    assert body["status"] == "ok"
+    assert "workspace.pre-link" in caplog.text
+    assert "退避" in caplog.text
 
 
 def test_run_uses_cpu_shares_because_the_kernel_has_no_cfs(client, fake) -> None:
@@ -355,7 +465,7 @@ def test_apply_timezone_writes_etc_timezone_before_the_dns_check(client, fake, m
     execs = [c for c in fake.calls if c[0] == "exec"]
     assert execs, "run 直後の後処理 exec が無い"
     tz_call = next(c for c in execs if "/etc/timezone" in " ".join(c))
-    script = tz_call[tz_call.index("-lc") + 1]
+    script = tz_call[tz_call.index("-c") + 1]
     assert 'printf "%s\\n" "Asia/Tokyo" > /etc/timezone' in script
     assert 'ln -sf "/usr/share/zoneinfo/Asia/Tokyo" /etc/localtime' in script
     # DNS チェック（getent）より先に書く — DNS 失敗コンテナにも tz が付く。
@@ -377,7 +487,6 @@ def test_apply_timezone_failure_does_not_kill_the_run(client, fake, monkeypatch)
         def __init__(self, inner: FakeDocker) -> None:
             self.inner = inner
             self.calls = inner.calls
-            self.by_subcommand = inner.by_subcommand
 
         def __call__(self, *args: str, timeout: float = 60.0) -> subprocess.CompletedProcess[str]:
             if args and args[0] == "exec" and "/etc/timezone" in " ".join(args):
@@ -436,11 +545,28 @@ def test_dns_check_reports_the_first_stderr_line(fake) -> None:
     assert "Name or service not known" in err and "second" not in err
 
 
-def test_dns_failure_fails_the_ensure(client, fake) -> None:
+def test_dns_failure_fails_the_ensure(client, fake, monkeypatch) -> None:
     """名前解決できないコンテナを静かに使い始めない。"""
     fake.by_subcommand["inspect"] = (1, "", "No such object: alice-sandbox")
     fake.by_subcommand["run"] = (0, "abc123\n", "")
-    fake.by_subcommand["exec"] = (2, "", "getent: nous: Name or service not known\n")
+    # exec の応答は symlink 張り・tz・DNS チェックで共有される。DNS だけを
+    # 失敗させるため、getent を含む呼び出しだけを攔む wrapper にする（TZFailDocker と同型）。
+    real_docker = fake
+
+    class DNSFailDocker:
+        def __init__(self, inner: FakeDocker) -> None:
+            self.inner = inner
+            self.calls = inner.calls
+
+        def __call__(self, *args: str, timeout: float = 60.0) -> subprocess.CompletedProcess[str]:
+            if args and args[0] == "exec" and "getent" in " ".join(args):
+                self.calls.append(args)
+                return subprocess.CompletedProcess(
+                    ["docker", *args], 2, "", "getent: nous: Name or service not known\n"
+                )
+            return self.inner(*args, timeout=timeout)
+
+    monkeypatch.setattr(sm, "_docker", DNSFailDocker(real_docker))
 
     body = client.post("/exec", json={"persona": "alice", "command": "id"}).json()
     assert body["status"] == "error"
@@ -513,7 +639,7 @@ class _DockerSpy:
         if args[:4] == ("exec", "alice-sandbox", "dpkg", "-s"):
             missing = args[4] not in self.installed
             return subprocess.CompletedProcess(["docker", *args], 1 if missing else 0, "", "")
-        if args[:4] == ("exec", "alice-sandbox", "bash", "-lc") and "apt-get install" in args[4]:
+        if args[0] == "exec" and "apt-get install" in " ".join(args):
             return subprocess.CompletedProcess(["docker", *args], *self.apt)
         return self.fake(*args, timeout=timeout)
 
@@ -530,8 +656,25 @@ def test_exec_starts_stopped_container(client, fake) -> None:
     assert not any(c[0] == "run" for c in fake.calls)
 
 
-def test_exec_nonzero_exit_is_error(client, fake) -> None:
-    fake.by_subcommand["exec"] = (2, "", "bash: nope: command not found\n")
+def test_exec_nonzero_exit_is_error(client, fake, monkeypatch) -> None:
+    """ユーザーコマンドの非零終了は status=error + exit_code で返す。"""
+    # link 張り直し・tz・DNS の exec は成功させ、ユーザーコマンドだけ失敗させる。
+    real_docker = fake
+
+    class UserCmdFailDocker:
+        def __init__(self, inner: FakeDocker) -> None:
+            self.inner = inner
+            self.calls = inner.calls
+
+        def __call__(self, *args: str, timeout: float = 60.0) -> subprocess.CompletedProcess[str]:
+            if args and args[0] == "exec":
+                self.calls.append(args)
+                if args[-1] == "nope":
+                    return subprocess.CompletedProcess(["docker", *args], 2, "", "bash: nope: command not found\n")
+                return subprocess.CompletedProcess(["docker", *args], 0, "", "")
+            return self.inner(*args, timeout=timeout)
+
+    monkeypatch.setattr(sm, "_docker", UserCmdFailDocker(real_docker))
 
     body = client.post("/exec", json={"persona": "alice", "command": "nope"}).json()
     assert body["status"] == "error"
