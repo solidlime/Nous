@@ -293,6 +293,7 @@ def _render_setup_page() -> str:
 <title>Nous — Setup</title>
 <link rel="icon" type="image/png" href="/static/icon.png">
 <script src="/static/vendor/lucide.min.js"></script>
+<link rel="stylesheet" href="/static/styles/variables.css">
 <style>
   body {
     background: linear-gradient(135deg, #0f0a1a 0%, #1a1035 50%, #0f0a1a 100%);
@@ -321,7 +322,7 @@ def _render_setup_page() -> str:
     outline: none;
     transition: border-color 0.2s;
   }
-  .glass-input:focus { border-color: #a855f7; }
+  .glass-input:focus { border-color: var(--accent-blue); box-shadow: var(--focus-ring); }
   .glass-btn {
     background: rgba(255,255,255,0.08);
     border: 1px solid rgba(255,255,255,0.12);
@@ -329,23 +330,25 @@ def _render_setup_page() -> str:
     color: rgba(255,255,255,0.9);
     padding: 10px 24px;
     cursor: pointer;
-    transition: background 0.2s;
+    transition: background 0.2s, filter 0.2s;
     font-size: 0.95rem;
   }
   .glass-btn:hover { background: rgba(255,255,255,0.14); }
   .btn-primary {
-    background: #a855f7;
+    /* #115: accent follows the main theme token (variables.css), not a
+       hard-coded violet. Hover darkens via filter so it tracks the token. */
+    background: var(--accent-purple);
     border: none;
     color: white;
   }
-  .btn-primary:hover { background: #9333ea; }
+  .btn-primary:hover { background: var(--accent-purple); filter: brightness(0.85); }
   .text-muted { color: rgba(255,255,255,0.5); font-size: 0.85rem; }
 </style>
 </head>
 <body>
 <div class="glass">
   <div style="display:flex;align-items:center;gap:12px;margin-bottom:24px">
-    <i data-lucide="brain" style="width:2rem;height:2rem;color:#a855f7"></i>
+    <i data-lucide="brain" style="width:2rem;height:2rem;color:var(--accent-purple)"></i>
     <div>
       <h1 style="font-size:1.5rem;font-weight:700;color:white;margin:0">Nous</h1>
       <p style="margin:2px 0 0 0" class="text-muted">Welcome! Let's set up your first persona.</p>
