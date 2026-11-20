@@ -35,7 +35,7 @@ function _playNext(stream) {
   } catch (_e2) { stream.playing = false; _playNext(stream); }
 }
 T.startStream = function(persona) {
-  if (N.Chat.tts && N.Chat.tts._endSession) { try { N.Chat.tts._endSession("stream-start"); } catch (e) {} }
+  if (N.Chat.tts && N.Chat.tts.endSession) { try { N.Chat.tts.endSession("stream-start"); } catch (e) {} }
   if (_stream) { try { T.stop(); } catch (_e2) {} }
   _stream = { persona: persona, stopped: false, audio: null, ctrl: null, queue: [], playing: false, done: false };
   return _stream;
