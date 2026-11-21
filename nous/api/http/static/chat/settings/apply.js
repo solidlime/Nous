@@ -190,13 +190,6 @@
       cfg.mental_model_min_samples ??
         (_defaultOf("mental_model_min_samples") ?? 3),
     );
-    // Character judge / repair settings
-    setChecked("chat-character-judge-enabled", cfg.character_judge_enabled !== false);
-    set(
-      "chat-character-repair-max-attempts",
-      cfg.character_repair_max_attempts ??
-        (_defaultOf("character_repair_max_attempts") ?? 2),
-    );
     // Retrieval weights
     const setSlider = (id, valId, v) => {
       const el = document.getElementById(id);

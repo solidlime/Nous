@@ -71,7 +71,7 @@ async def _save_one(fact: dict) -> dict:
         return Success(mem)
 
     ctx.memory_service.create_memory = AsyncMock(side_effect=fake_create)
-    await _save_extracted_facts(ctx, "p", [fact], "")
+    await _save_extracted_facts(ctx, "p", [fact])
     return created[0]
 
 

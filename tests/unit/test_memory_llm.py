@@ -275,7 +275,6 @@ class TestMemoryLLMPromptFormat:
             user_message="こんにちは",
             assistant_response="はい、こんにちは",
             language="ja",
-            drift_section="",
             current_time="2026-09-20T09:00",
         )
         assert "テストペルソナ" in formatted
@@ -294,7 +293,6 @@ class TestMemoryLLMPromptFormat:
             user_message="hello",
             assistant_response="world",
             language="ja",
-            drift_section="",
             current_time="2026-09-20T09:00",
         )
         # Should still produce a valid string with "hello" and "world"
@@ -314,7 +312,6 @@ class TestMemoryLLMPromptFormat:
             "user_message": "test",
             "assistant_response": "response",
             "language": "ja",
-            "drift_section": "",
             "current_time": "2026-09-20T09:00",
         }
         formatted = _MEMORY_LLM_PROMPT.format(**kwargs)
@@ -333,7 +330,6 @@ class TestMemoryLLMPromptFormat:
             user_message="msg",
             assistant_response="resp",
             language="ja",
-            drift_section="",
             current_time="2026-09-20T09:00",
         )
         assert "facts" in formatted
@@ -356,7 +352,6 @@ class TestMemoryLLMPromptFormat:
             "user_message",
             "assistant_response",
             "language",
-            "drift_section",
             "current_time",
         }
         assert placeholders == expected, f"Unexpected placeholders: {placeholders - expected}"

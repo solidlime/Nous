@@ -636,6 +636,8 @@ async def _apply_emotion_decay(ctx: AppContext, persona: str, state: PersonaStat
             neutral_threshold=neutral_threshold,
         )
         if decay_result is not None:
+            # 減衰した時だけ state を取り直す（毎ターンの再読込は PrepareStep の
+            # 無音時間になっていた。変化なしなら元の state のまま）。
             refreshed = ctx.persona_service.get_context(persona)
             if isinstance(refreshed, Success):
                 state = refreshed.value
@@ -695,10 +697,11 @@ async def _apply_body_decay(ctx: AppContext, persona: str, state: PersonaState) 
     try:
         from nous.domain.persona.body_decay import apply_body_decay_if_needed
 
-        await apply_body_decay_if_needed(ctx.persona_service, persona, state)
-        state_result = ctx.persona_service.get_context(persona)
-        if isinstance(state_result, Success) and state_result.value:
-            state = state_result.value
+        # 身体が実際に減衰した時だけ state を取り直す（変化なしの再読込は無駄）。
+        if await apply_body_decay_if_needed(ctx.persona_service, persona, state):
+            state_result = ctx.persona_service.get_context(persona)
+            if isinstance(state_result, Success) and state_result.value:
+                state = state_result.value
     except Exception:
         logger.warning(
             "_apply_body_decay: body decay failed for persona '%s', returning un-decayed state",

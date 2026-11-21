@@ -1,222 +1,20 @@
-"""Tests for character-drift accumulation (spec: 2026-09-05-drift-memory-design)."""
+"""装備コンテキストのテスト（旧 character-drift テストから装備分だけを残した）。
+
+旧 character-drift テストから、判定器廃止後も生きる分だけを残した。
+キャラ一貫性判定（character_judge / RepairStep）と drift 記憶の生成・注入は
+2026-11 の遅延対策で全廃した。廃止の見張りは
+tests/unit/test_post_process_validation.py の TestPerTurnJudgeRemoved にある。
+"""
 
 from __future__ import annotations
 
-from datetime import timedelta
 from types import SimpleNamespace
-from unittest.mock import AsyncMock, MagicMock, patch
+from unittest.mock import MagicMock
 
 import pytest
 
-from nous.application.chat.memory_extractor import run_memory_llm
-from nous.application.chat.memory_prompts import _MEMORY_LLM_PROMPT, _build_drift_section
 from nous.application.chat.pipeline.context_loader import _build_context_section
-from nous.application.chat.pipeline.memory_retriever import _search_memories
-from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.result import Success
-from nous.domain.shared.time_utils import get_now
-
-
-class TestDriftSection:
-    def test_none_returns_empty(self):
-        assert _build_drift_section(None) == ""
-
-    def test_violation_renders_type_and_detail(self):
-        section = _build_drift_section({"violation": "tone", "detail": "一人称が俺だった"})
-        assert "tone" in section
-        assert "一人称が俺だった" in section
-
-    def test_template_has_placeholder(self):
-        assert "{drift_section}" in _MEMORY_LLM_PROMPT
-
-    def test_template_has_drift_rule(self):
-        assert "character_drift" in _MEMORY_LLM_PROMPT
-
-
-def _make_ctx():
-    ctx = MagicMock()
-    ctx.persona = "herta"
-    ctx.vector_store = None
-    ctx.search_engine.search = AsyncMock(return_value=MagicMock(is_ok=False))
-    mem = MagicMock()
-    mem.key = "mem_test"
-    mem.content = "dummy"
-    ctx.memory_service.create_memory = AsyncMock(return_value=Success(mem))
-    ctx.memory_service.get_by_tags = MagicMock(return_value=MagicMock(is_ok=False, value=[]))
-    ctx.persona_service.get_context = MagicMock(return_value=MagicMock(is_ok=False))
-    ctx.equipment_service.get_equipment = MagicMock(return_value=MagicMock(is_ok=False))
-    ctx.equipment_service.search_items = MagicMock(return_value=MagicMock(is_ok=False))
-    return ctx
-
-
-def _make_config():
-    config = MagicMock()
-    config.extract_model = ""
-    config.get_effective_api_key.return_value = "key"
-    config.get_effective_model.return_value = "model"
-    return config
-
-
-class TestDriftForwarding:
-    @pytest.mark.asyncio
-    async def test_run_memory_llm_forwards_drift(self):
-        ctx, config = _make_ctx(), _make_config()
-        drift = {"violation": "tone", "detail": "一人称が俺だった"}
-        with (
-            patch(
-                "nous.application.chat.memory_extractor._build_memory_llm_context",
-                new=AsyncMock(return_value=("c", "cm", "i")),
-            ),
-            patch(
-                "nous.application.chat.memory_extractor.MemoryLLM.process",
-                new=AsyncMock(return_value={}),
-            ) as mock_process,
-        ):
-            await run_memory_llm(ctx, config, {"user": "u", "assistant": "a", "drift": drift})
-        assert mock_process.await_args_list[0].kwargs["drift"] == drift
-
-    @pytest.mark.asyncio
-    async def test_run_memory_llm_no_drift_defaults_none(self):
-        ctx, config = _make_ctx(), _make_config()
-        with (
-            patch(
-                "nous.application.chat.memory_extractor._build_memory_llm_context",
-                new=AsyncMock(return_value=("c", "cm", "i")),
-            ),
-            patch(
-                "nous.application.chat.memory_extractor.MemoryLLM.process",
-                new=AsyncMock(return_value={}),
-            ) as mock_process,
-        ):
-            await run_memory_llm(ctx, config, {"user": "u", "assistant": "a"})
-        assert mock_process.await_args_list[0].kwargs["drift"] is None
-
-    @pytest.mark.asyncio
-    async def test_drift_fact_saved_with_valid_until(self):
-        ctx, config = _make_ctx(), _make_config()
-        result = {
-            "facts": [
-                {
-                    "content": "私は一人称を間違えた。次は私で通すべきだった。",
-                    "importance": 0.85,
-                    "tags": ["character_drift", "tone"],
-                    "emotion": "neutral",
-                }
-            ],
-            "goals": [],
-            "promises": [],
-            "context_update": {},
-            "inventory_update": {},
-        }
-        with (
-            patch(
-                "nous.application.chat.memory_extractor._build_memory_llm_context",
-                new=AsyncMock(return_value=("c", "cm", "i")),
-            ),
-            patch(
-                "nous.application.chat.memory_extractor.MemoryLLM.process",
-                new=AsyncMock(return_value=result),
-            ),
-        ):
-            await run_memory_llm(ctx, config, {"user": "u", "assistant": "a"})
-        kwargs = ctx.memory_service.create_memory.await_args.kwargs
-        assert kwargs["tags"] == ["character_drift", "tone"]
-        assert kwargs["importance"] == 0.85
-        valid_until = kwargs["valid_until"]
-        delta = valid_until - get_now()
-        assert timedelta(days=6) < delta <= timedelta(days=7, seconds=60)
-
-    @pytest.mark.asyncio
-    async def test_normal_fact_saved_without_valid_until(self):
-        ctx, config = _make_ctx(), _make_config()
-        result = {
-            "facts": [{"content": "ユーザーは猫が好き", "importance": 0.7, "tags": ["preference"], "emotion": "joy"}],
-            "goals": [],
-            "promises": [],
-            "context_update": {},
-            "inventory_update": {},
-        }
-        with (
-            patch(
-                "nous.application.chat.memory_extractor._build_memory_llm_context",
-                new=AsyncMock(return_value=("c", "cm", "i")),
-            ),
-            patch(
-                "nous.application.chat.memory_extractor.MemoryLLM.process",
-                new=AsyncMock(return_value=result),
-            ),
-        ):
-            await run_memory_llm(ctx, config, {"user": "u", "assistant": "a"})
-        kwargs = ctx.memory_service.create_memory.await_args.kwargs
-        assert "valid_until" not in kwargs
-
-
-class TestDriftEnforcement:
-    @pytest.mark.asyncio
-    async def test_broken_tags_and_importance_are_forced(self):
-        ctx, config = _make_ctx(), _make_config()
-        result = {
-            "facts": [
-                {
-                    "content": "私は一人称を誤った。",
-                    "importance": 0.2,
-                    "tags": ["Character_Drift"],
-                    "emotion": "neutral",
-                },
-                {
-                    "content": "私は迎合しすぎた。",
-                    "importance": 9.9,
-                    "tags": ["character_drift", "TONE"],
-                    "emotion": "neutral",
-                },
-                {
-                    "content": "範囲内の値は触らない。",
-                    "importance": 0.8,
-                    "tags": ["character_drift", "tone"],
-                    "emotion": "neutral",
-                },
-                {
-                    "content": "通常factは対象外。",
-                    "importance": 0.7,
-                    "tags": ["preference"],
-                    "emotion": "joy",
-                },
-            ],
-            "goals": [],
-            "promises": [],
-            "context_update": {},
-            "inventory_update": {},
-        }
-        drift = {"violation": "tone", "detail": "一人称が俺だった"}
-        with (
-            patch(
-                "nous.application.chat.memory_extractor._build_memory_llm_context",
-                new=AsyncMock(return_value=("c", "cm", "i")),
-            ),
-            patch(
-                "nous.application.chat.memory_extractor.MemoryLLM.process",
-                new=AsyncMock(return_value=result),
-            ),
-        ):
-            await run_memory_llm(ctx, config, {"user": "u", "assistant": "a", "drift": drift})
-        calls = ctx.memory_service.create_memory.await_args_list
-        assert len(calls) == 4
-        k0 = calls[0].kwargs
-        assert k0["tags"] == ["character_drift", "tone"]
-        assert k0["importance"] == 0.85
-        k1 = calls[1].kwargs
-        assert k1["tags"] == ["character_drift", "tone"]
-        assert k1["importance"] == 0.85
-        k2 = calls[2].kwargs
-        assert k2["tags"] == ["character_drift", "tone"]
-        assert k2["importance"] == 0.8
-        for k in (k0, k1, k2):
-            delta = k["valid_until"] - get_now()
-            assert timedelta(days=6) < delta <= timedelta(days=7, seconds=60)
-        k3 = calls[3].kwargs
-        assert k3["tags"] == ["preference"]
-        assert k3["importance"] == 0.7
-        assert "valid_until" not in k3
 
 
 def _make_state():
@@ -233,76 +31,13 @@ def _make_state():
     )
 
 
-def _make_drift_ctx(drifts):
-    """context_loader用ctx。driftはcharacter_driftタグでのみ返し、他タグは空にする。"""
+def _make_ctx():
     ctx = MagicMock()
     ctx.connection.get_memory_db.side_effect = Exception("no db in unit test")
-
-    def _by_tags(tags):
-        if "character_drift" in tags:
-            return Success(list(drifts))
-        return Success([])
-
-    ctx.memory_service.get_by_tags = MagicMock(side_effect=_by_tags)
+    ctx.memory_service.get_by_tags = MagicMock(return_value=Success([]))
     ctx.persona_service.get_emotion_history = MagicMock(return_value=MagicMock(is_ok=False))
     ctx.equipment_service.get_equipment = MagicMock(return_value=MagicMock(is_ok=False))
     return ctx
-
-
-class TestDriftRecall:
-    @pytest.mark.asyncio
-    async def test_retriever_passes_valid_at(self):
-        ctx = MagicMock()
-        ctx.search_engine.search = AsyncMock(return_value=MagicMock(is_ok=False))
-        config = MagicMock()
-        config.retrieval_recency_weight = 0.3
-        config.retrieval_importance_weight = 0.3
-        config.retrieval_relevance_weight = 0.4
-        await _search_memories(ctx, "こんにちは", None, config)
-        assert ctx.search_engine.search.await_args is not None
-        query = ctx.search_engine.search.await_args[0][0]
-        assert isinstance(query, SearchQuery)
-        assert query.valid_at is not None
-        # true recall 経路の最終スコア段（rank_policy）も必ず渡される
-        assert query.rank_policy is not None
-
-    @pytest.mark.asyncio
-    async def test_retriever_passes_correlation_ids(self):
-        """Q2: chat recall 経路も request_id（検索実行単位）と turn_id（発話単位）を載せる。
-
-        載らないと発火モードの request_id フィルタでイベントが全部捨てられる。
-        """
-        ctx = MagicMock()
-        ctx.search_engine.search = AsyncMock(return_value=MagicMock(is_ok=False))
-        config = MagicMock()
-        config.retrieval_recency_weight = 0.3
-        config.retrieval_importance_weight = 0.3
-        config.retrieval_relevance_weight = 0.4
-        await _search_memories(ctx, "こんにちは", "はい", config, turn_id="t1")
-        queries = [c[0][0] for c in ctx.search_engine.search.await_args_list]
-        assert len(queries) == 2
-        assert all(q.turn_id == "t1" for q in queries)
-        # 検索実行ごとに別 ID（turn_id + request_id + hop で連鎖が一意に定まる）
-        assert all(q.request_id for q in queries)
-        assert len({q.request_id for q in queries}) == 2
-
-    @pytest.mark.asyncio
-    async def test_injection_includes_valid_drift(self):
-        drift = SimpleNamespace(content="私は一人称を誤った", valid_until=get_now() + timedelta(days=1))
-        section = await _build_context_section(_make_drift_ctx([drift]), _make_state())
-        assert "前回の反省" in section
-        assert "私は一人称を誤った" in section
-
-    @pytest.mark.asyncio
-    async def test_injection_excludes_expired_drift(self):
-        drift = SimpleNamespace(content="古い反省", valid_until=get_now() - timedelta(days=1))
-        section = await _build_context_section(_make_drift_ctx([drift]), _make_state())
-        assert "古い反省" not in section
-
-    @pytest.mark.asyncio
-    async def test_injection_without_drift(self):
-        section = await _build_context_section(_make_drift_ctx([]), _make_state())
-        assert "前回の反省" not in section
 
 
 class TestEquipmentContext:
@@ -315,7 +50,7 @@ class TestEquipmentContext:
     def _ctx_with_equipment(self, equipment: dict):
         from nous.domain.shared.result import Success
 
-        ctx = _make_drift_ctx([])
+        ctx = _make_ctx()
         ctx.equipment_service.get_equipment = MagicMock(return_value=Success(equipment))
         return ctx
 

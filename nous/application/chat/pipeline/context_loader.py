@@ -2,7 +2,7 @@
 
 from __future__ import annotations
 
-from datetime import UTC, datetime
+from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 from nous.application.chat.pipeline.aliveness import emotion_band, place_hint, safe_bands
@@ -51,12 +51,34 @@ def _is_suspicious_cp(cp: int) -> bool:
     return any(lo <= cp <= hi for lo, hi in _SUSPICIOUS_RANGES)
 
 
+#: (persona, 日付) → 関係性コンテキストのキャッシュ。
+#: 値は「最初に会った日」と「会話した日数」で、どちらも 1 日 1 回しか変わらない。
+#: 以前は毎ターン session_events の全走査を 2 回叩いていた（created_at はインデックス無し）。
+_relationship_cache: dict[tuple[str, str], str] = {}
+_relationship_cache_max = 64
+
+
 def _build_relationship_context(ctx: AppContext) -> str:
     """Build relationship context summary from interaction history.
     Returns empty string if no interaction history exists."""
     db = ctx.connection.get_memory_db()
     persona = ctx.persona
+    today = datetime.now(UTC).date()
+    cache_key = (persona, today.isoformat())
+    cached = _relationship_cache.get(cache_key)
+    if cached is not None:
+        return cached
 
+    text = _query_relationship_context(db, persona, today)
+    if text:  # 履歴なし("")はキャッシュしない（初回イベントが来たら即反映させる）
+        if len(_relationship_cache) >= _relationship_cache_max:
+            _relationship_cache.clear()
+        _relationship_cache[cache_key] = text
+    return text
+
+
+def _query_relationship_context(db, persona: str, today: date) -> str:
+    """関係性コンテキストの実体（キャッシュミス時のみ実行）。"""
     # First interaction time
     row = db.execute(
         "SELECT MIN(created_at) FROM session_events WHERE persona = ?",
@@ -66,9 +88,8 @@ def _build_relationship_context(ctx: AppContext) -> str:
     if not first_at_str:
         return ""  # No history at all
 
-    first_at = datetime.fromisoformat(first_at_str)
-    now = datetime.now(UTC)
-    days_known = (now - first_at.replace(tzinfo=UTC)).days
+    first_at = datetime.fromisoformat(first_at_str).date()
+    days_known = (today - first_at).days
 
     # Active days (distinct dates with events)
     row = db.execute(
@@ -361,19 +382,9 @@ async def _build_context_section(
         except Exception as e:
             logger.debug("Failed to fetch task states: %s", e)
 
-    # Character drift — skip in light mode
-    if not _is_light:
-        try:
-            drift_result = ctx.memory_service.get_by_tags(["character_drift"])
-            if isinstance(drift_result, Success) and drift_result.value:
-                now = get_now()
-                valid = [m for m in drift_result.value if m.content and (m.valid_until is None or m.valid_until > now)]
-                if valid:
-                    latest = _sanitize_text(valid[0].content)
-                    if latest:
-                        t3.append("前回の反省:\n  ⚠ " + latest)
-        except Exception as e:
-            logger.debug("Failed to fetch character drift: %s", e)
+    # Character drift の注入は廃止した（毎ターンのキャラ判定器を廃止し、
+    # drift 記憶を作る経路が無くなったため）。既存の drift 記憶は validate_until
+    # の失効で自然に消える。
 
     try:
         equip_result = ctx.equipment_service.get_equipment()

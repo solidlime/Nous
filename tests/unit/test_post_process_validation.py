@@ -9,22 +9,45 @@ rather than absence.
 import inspect
 import textwrap
 
+import pytest
+
 
 class TestPerTurnJudgeRemoved:
-    """毎ターンキャラ判定は PostProcessStep から repair.py (RepairStep) に移管された。"""
+    """毎ターンのキャラ判定器（RepairStep / character_judge）は 2026-11 に全廃した。
+
+    遅延対策: 判定は毎ターン外部 LLM を 1〜5 往復叩き、得られるのは
+    ``{"violation": "none"}`` だけだった。drift 記憶の生成・注入も同じ経路で
+    消えている（復活させないための見張り）。
+    """
+
+    def test_repair_module_is_gone(self):
+        import importlib
+
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("nous.application.chat.pipeline.repair")
+
+    def test_character_judge_module_is_gone(self):
+        import importlib
+
+        with pytest.raises(ModuleNotFoundError):
+            importlib.import_module("nous.application.chat.character_judge")
 
     def test_run_does_not_call_judge_character(self):
         from nous.application.chat.pipeline.post import PostProcessStep
 
         source = inspect.getsource(PostProcessStep.run)
-        assert "judge_character" not in source, "per-turn judge must live in RepairStep, not PostProcessStep"
+        assert "judge_character" not in source
         assert "_with_drift" not in source
 
-    def test_repair_step_owns_judge_character(self):
-        from nous.application.chat.pipeline import repair
+    def test_memory_payload_has_no_drift(self):
+        """MemoryLLM の payload に drift を載せる経路が無いこと。"""
+        from nous.application.chat.pipeline.context import ChatTurnContext
+        from nous.application.chat.pipeline.post import _memory_payload
 
-        source = inspect.getsource(repair)
-        assert "judge_character" in source, "RepairStep must reuse judge_character for per-turn judgment"
+        turn_ctx = ChatTurnContext(session_id="main", user_message="やあ")
+        turn_ctx.full_response = "おや、あんたか"
+        assert _memory_payload(turn_ctx) == {"user": "やあ", "assistant": "おや、あんたか"}
+        assert not hasattr(turn_ctx, "drift")
 
     def test_memory_llm_still_called(self):
         from nous.application.chat.pipeline.post import PostProcessStep
@@ -32,18 +55,11 @@ class TestPerTurnJudgeRemoved:
         source = inspect.getsource(PostProcessStep.run)
         assert "run_memory_llm" in source, "MemoryLLM extraction must remain per-turn"
 
-    def test_drift_reaches_memory_llm_payload(self):
-        """RepairStep の違反判定が MemoryLLM の payload まで届くこと（配線切れの再発防止）。"""
-        from nous.application.chat.pipeline.context import ChatTurnContext
-        from nous.application.chat.pipeline.post import _memory_payload
+    def test_drift_injection_is_gone(self):
+        from nous.application.chat.pipeline import context_loader
 
-        turn_ctx = ChatTurnContext(session_id="main", user_message="やあ")
-        turn_ctx.full_response = "おや、あんたか"
-        assert _memory_payload(turn_ctx) == {"user": "やあ", "assistant": "おや、あんたか"}
-
-        turn_ctx.drift = {"violation": "tone", "detail": "一人称が俺だった"}
-        payload = _memory_payload(turn_ctx)
-        assert payload["drift"] == {"violation": "tone", "detail": "一人称が俺だった"}
+        source = inspect.getsource(context_loader)
+        assert "character_drift" not in source, "drift 注入は廃止済み（判定器が無いので生成経路も無い）"
 
 
 class TestCharacterConsistencyGap:

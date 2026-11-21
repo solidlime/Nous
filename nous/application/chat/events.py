@@ -140,28 +140,6 @@ class InventoryUpdateSSE:
 
 
 @dataclass
-class ResponseReplacedSSE:
-    """キャラ修復 (RepairStep) により応答本文が再生成・置換されたことを通知。"""
-
-    content: str
-    violation: str = "none"  # "tone" | "compliance" | "character" | "none"
-    detail: str = ""
-    # done 後に届くため、どの吹き出しを差し替えるかの手がかりを添える（#58）
-    assistant_msg_id: str | None = None
-
-    def to_sse(self) -> str:
-        return _sse_encode(
-            "response_replaced",
-            {
-                "content": self.content,
-                "violation": self.violation,
-                "detail": self.detail,
-                "assistant_msg_id": self.assistant_msg_id,
-            },
-        )
-
-
-@dataclass
 class ContextCompressedSSE:
     """Notification when context compression occurs."""
 

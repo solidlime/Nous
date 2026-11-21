@@ -55,8 +55,14 @@ def _make_ctx(db, persona: str = "test_persona"):
 
 @pytest.fixture(autouse=True)
 def _patch_datetime():
+    # 関係性コンテキストは (persona, 日付) でキャッシュされる（毎ターンの
+    # session_events 全走査を避けるため）。テスト間で持ち越さない。
+    from nous.application.chat.pipeline import context_loader
+
+    context_loader._relationship_cache.clear()
     with patch("nous.application.chat.pipeline.context_loader.datetime", FakeDatetime):
         yield
+    context_loader._relationship_cache.clear()
 
 
 class MockDb:

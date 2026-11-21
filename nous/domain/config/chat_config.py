@@ -75,18 +75,12 @@ class ChatConfig(BaseModel):
 
     persona: str | None = None
     updated_at: str | None = None
-    character_judge_enabled: bool = Field(
-        default=True, description="キャラクターの一貫性を判定する機能を有効にします。"
-    )  # キャラ一貫性判定器（Task 8・非破壊フラグ）
     emotion_hint_low: float = Field(
         default=0.35, ge=0.0, le=1.0, description="感情 if-then の下側境界。これ未満が弱い。"
     )
     emotion_hint_high: float = Field(default=0.7, ge=0.0, le=1.0, description="感情 if-then の上側境界。超えると強い。")
     emotion_hint_texts: dict[str, list[str]] = Field(
         default_factory=dict, description="感情ラベル→[弱い,中,強い] の文言上書き。空なら既定表。"
-    )
-    character_repair_max_attempts: int = Field(
-        default=2, ge=0, description="キャラ一貫性違反を検出した際の応答再生成（修復）の最大試行回数。0で修復を無効化。"
     )
     memory_min_score: float = Field(
         default=0.35, description="想起結果を注入する最低スコア。これ未満の記憶は文脈に入れない。"

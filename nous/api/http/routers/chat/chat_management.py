@@ -190,10 +190,9 @@ _TIER_ADVANCED: frozenset[str] = frozenset(
         "reasoning_enabled",
         "reasoning_effort",
         "dynamic_temperature",
-        # ペルソナ/表示/キャラ判定
+        # ペルソナ/表示
         "system_prompt",
         "debug_mode",
-        "character_judge_enabled",
         # ツール / スキル / MCP
         "mcp_servers",
         "disabled_tools",

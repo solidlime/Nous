@@ -109,7 +109,6 @@ async def test_extractor_honors_fact_kind():
             {"content": "私は紅茶が好き", "importance": 0.8, "kind": "semantic"},
             {"content": "私は本を読んでいる", "importance": 0.6, "kind": "bogus"},
         ],
-        "",
     )
 
     kinds = [c.get("kind", "semantic") for c in created]

@@ -4,13 +4,11 @@ from __future__ import annotations
 
 import contextlib
 import json
-from datetime import timedelta
 from typing import TYPE_CHECKING
 
 from nous.application.chat.memory_prompts import (
     _CONTEXT_LLM_PROMPT,
     _ITEM_LLM_PROMPT,
-    _build_drift_section,
 )
 from nous.domain.language import LanguageResolver
 from nous.domain.memory.cue import PROMISE_TAGS
@@ -35,7 +33,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-DRIFT_VALID_DAYS = 7
 EXTRACT_FALLBACK_IMPORTANCE = 0.6
 EXTRACT_FALLBACK_TAGS = ["auto_extract"]
 
@@ -59,33 +56,6 @@ def normalize_tags(v: object) -> list[str]:
     return cleaned or list(EXTRACT_FALLBACK_TAGS)
 
 
-def _normalize_drift_fact(fact: dict, violation: str) -> bool:
-    """drift factのtags・importanceをコード強制する。drift factならTrue。
-
-    判定: tags内に大小文字・前後空白を無視して "character_drift" を含むもの。
-    強制: tags=["character_drift", <種別>]（種別はviolation優先、なければ既存2件目をlower/strip）、
-    importanceが0.8-0.9に収まらない・非数値なら0.85に補正。fact dictに書き戻す。
-    """
-    tags = fact.get("tags")
-    if not isinstance(tags, list) or not any(
-        isinstance(t, str) and t.strip().lower() == "character_drift" for t in tags
-    ):
-        return False
-    kind = (violation or "").strip().lower()
-    if not kind or kind == "none":
-        rest = [t.strip().lower() for t in tags if isinstance(t, str) and t.strip().lower() != "character_drift"]
-        kind = rest[0] if rest else ""
-    fact["tags"] = ["character_drift", kind] if kind else ["character_drift"]
-    try:
-        imp = float(fact.get("importance", 0.6))
-    except (TypeError, ValueError):
-        imp = 0.85
-    if not 0.8 <= imp <= 0.9:
-        imp = 0.85
-    fact["importance"] = imp
-    return True
-
-
 class MemoryLLM:
     """T35: ターン終了後に facts・context_update・inventory_update を一括抽出する。"""
 
@@ -100,7 +70,6 @@ class MemoryLLM:
         inventory: str = "",
         persona_name: str = "assistant",
         persona_identity: str = "",
-        drift: dict | None = None,
         mode: str = "context",
     ) -> dict:
         # mode: "context" = facts/goals/promises/context_update, "item" = inventory_update
@@ -169,8 +138,6 @@ class MemoryLLM:
             inventory=inventory.strip() or "(なし)",
             user_message=user_message[:500],
             assistant_response=assistant_response[:500],
-            # item 抽出に drift 反省は不要。
-            drift_section="" if mode == "item" else _build_drift_section(drift),
             # audit M2 — cue_time の相対表現（「明日」等）を絶対日時に解決させる基準時刻
             current_time=get_now().strftime("%Y-%m-%dT%H:%M"),
         )
@@ -437,10 +404,8 @@ async def run_memory_llm(
         persona = ctx.persona
 
         # facts: スマートアップサート（類似度 > 0.85 ならスキップ）
-        drift = payload.get("drift")
-        drift_violation = str(drift.get("violation", "") or "") if isinstance(drift, dict) else ""
         facts = result.get("facts", [])
-        await _save_extracted_facts(ctx, persona, facts, drift_violation)
+        await _save_extracted_facts(ctx, persona, facts)
 
         # goals: action ベース処理（create / achieve / cancel）
         goals = result.get("goals", [])
@@ -504,7 +469,7 @@ async def _run_memory_llm_calls(
         persona_name=persona_name,
         persona_identity=persona_identity,
     )
-    result = await llm.process(config, **common, drift=payload.get("drift"), mode="context")
+    result = await llm.process(config, **common, mode="context")
     if not result:
         logger.warning("MemoryLLM: empty context result drift=empty_result persona=%s", persona_name)
         result = {"facts": [], "goals": [], "promises": [], "context_update": {}}
@@ -523,7 +488,7 @@ async def _run_memory_llm_calls(
     return result
 
 
-async def _save_extracted_facts(ctx: AppContext, persona: str, facts: list, drift_violation: str) -> None:
+async def _save_extracted_facts(ctx: AppContext, persona: str, facts: list) -> None:
     """facts をスマートアップサート（類似度 > 0.85 ならスキップ）で保存する。"""
     place = _current_place(ctx, persona)
     for fact in facts:
@@ -545,7 +510,6 @@ async def _save_extracted_facts(ctx: AppContext, persona: str, facts: list, drif
                 )
                 fact["_saved"] = False
                 continue
-        _normalize_drift_fact(fact, drift_violation)
         tags = normalize_tags(fact.get("tags"))
         # #40: 体験記憶に「その時の感情1語」を残す（検索の felt_boost が拾う）
         felt = felt_tag(fact.get("felt"))
@@ -556,8 +520,6 @@ async def _save_extracted_facts(ctx: AppContext, persona: str, facts: list, drif
         raw_kind = str(fact.get("kind") or "").strip().lower()
         if raw_kind in VALID_KINDS:
             save_kwargs["kind"] = raw_kind
-        if "character_drift" in tags:
-            save_kwargs["valid_until"] = get_now() + timedelta(days=DRIFT_VALID_DAYS)
         mem_result = await ctx.memory_service.create_memory(
             content=content,
             importance=normalize_importance(fact.get("importance")),

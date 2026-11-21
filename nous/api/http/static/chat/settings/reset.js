@@ -60,8 +60,6 @@
     ["chat-session-summarize", "session_summarize"],
     ["chat-mental-model-enabled", "mental_model_enabled"],
     ["chat-mental-model-min-samples", "mental_model_min_samples"],
-    ["chat-character-judge-enabled", "character_judge_enabled"],
-    ["chat-character-repair-max-attempts", "character_repair_max_attempts"],
     ["chat-tool-result-max", "tool_result_max_chars"],
     ["chat-recency-weight", "retrieval_recency_weight"],
     ["chat-importance-weight", "retrieval_importance_weight"],

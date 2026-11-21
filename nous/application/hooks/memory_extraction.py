@@ -10,16 +10,13 @@ from __future__ import annotations
 
 import contextlib
 from dataclasses import dataclass
-from datetime import datetime, timedelta
 from typing import TYPE_CHECKING, Any, cast
 
 from nous.application.chat.memory_extractor import (
-    DRIFT_VALID_DAYS,
     MemoryLLM,
     _body_delta_state,
     _build_memory_llm_context,
     _context_update_skips,
-    _normalize_drift_fact,
     normalize_importance,
     normalize_tags,
 )
@@ -27,13 +24,14 @@ from nous.domain.language import FALLBACK_LANGUAGE, SUPPORTED_LANGUAGES, detect_
 from nous.domain.memory.session_event import SessionEvent
 from nous.domain.search.engine import SearchQuery
 from nous.domain.shared.result import Success
-from nous.domain.shared.time_utils import get_now
 from nous.domain.value_objects import ensure_project_tag, normalize_emotion, normalize_project_slug
 from nous.domain.value_objects import normalize_importance as _clamp
 from nous.infrastructure.logging.structured import get_logger
 from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
 
 if TYPE_CHECKING:
+    from datetime import datetime
+
     from nous.application.use_cases import AppContext
     from nous.config.settings import Settings
     from nous.domain.config.chat_config import ChatConfig
@@ -154,9 +152,7 @@ async def _apply_result(
         content = str(fact.get("content") or "").strip()
         if not content:
             continue
-        _normalize_drift_fact(fact, "")
         tags = normalize_tags(fact.get("tags"))
-        valid_until = get_now() + timedelta(days=DRIFT_VALID_DAYS) if "character_drift" in tags else None
         if await _create(
             ctx,
             persona,
@@ -164,7 +160,6 @@ async def _apply_result(
             importance=normalize_importance(fact.get("importance")),
             tags=_with_project(tags, project_tag),
             emotion=str(fact.get("emotion") or "neutral"),
-            valid_until=valid_until,
         ):
             n_facts += 1
 

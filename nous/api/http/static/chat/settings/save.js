@@ -157,11 +157,6 @@
         document.getElementById("chat-mental-model-min-samples")?.value ||
           _defStr("mental_model_min_samples", 3),
       ),
-      character_judge_enabled: getChecked("chat-character-judge-enabled"),
-      character_repair_max_attempts: parseInt(
-        document.getElementById("chat-character-repair-max-attempts")?.value ||
-          _defStr("character_repair_max_attempts", 2),
-      ),
       debug_mode: getChecked("chat-debug-mode"),
 
       // === Brain simulation ===

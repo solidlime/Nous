@@ -52,11 +52,8 @@ def _track_background(task: asyncio.Task) -> None:
 
 
 def _memory_payload(turn_ctx: ChatTurnContext) -> dict:
-    """MemoryLLM に渡す payload。RepairStep が違反判定を残していれば drift を載せる。"""
-    payload: dict = {"user": turn_ctx.user_message, "assistant": turn_ctx.full_response}
-    if turn_ctx.drift:
-        payload["drift"] = turn_ctx.drift
-    return payload
+    """MemoryLLM に渡す payload。"""
+    return {"user": turn_ctx.user_message, "assistant": turn_ctx.full_response}
 
 
 async def _do_summarize(ctx: AppContext, config: ChatConfig, turns: list[dict]) -> str | None:

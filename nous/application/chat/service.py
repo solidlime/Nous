@@ -14,7 +14,6 @@ from nous.application.chat.pipeline.inference import InferenceStep
 from nous.application.chat.pipeline.post import PostProcessStep
 from nous.application.chat.pipeline.prepare import PrepareStep
 from nous.application.chat.pipeline.prompt import PromptBuildStep
-from nous.application.chat.pipeline.repair import RepairStep
 from nous.application.chat.pipeline.trimmer import TrimmerMixin
 from nous.application.chat.session_store import SessionManager
 from nous.application.chat.tools.definitions import get_filtered_tools
@@ -72,6 +71,24 @@ def _spawn_turn(coro) -> asyncio.Task:
     _background_tasks.add(task)
     task.add_done_callback(_background_tasks.discard)
     return task
+
+
+async def _run_post_process(ctx: AppContext, config: ChatConfig, session, turn_ctx, debug: bool = False) -> None:
+    """done 送出後の後処理（MemoryLLM・記憶保存・SSE）をターン枠の外で走らせる。
+
+    ``chat()`` の done 後に直列で await していたため、後処理の 7〜24 秒の間
+    次の送信が 409 で待たされていた。SSE は TurnHub へ直接配信する
+    （``response_replaced`` と同じ経路）。
+    """
+    try:
+        async for ev in PostProcessStep().run(ctx, config, session, turn_ctx, debug=debug, emit_done=False):
+            _turn_hub.publish(ctx.persona, ev.to_sse())
+    except Exception:
+        logger.exception("PostProcessStep failed")
+        _turn_hub.publish_synthetic(ctx.persona, {"type": "error", "message": "internal error"})
+    finally:
+        # クライアント切断時も記憶の書き込みを落とさない
+        session.flush()
 
 
 # ── Tool search engine (search_tools) ─────────────────────────────────────────
@@ -449,31 +466,7 @@ class ChatService:
                 # so reload-after-response doesn't lose messages
                 session.flush()
 
-            # DoneSSE はキャラ判定（RepairStep）より先に出す（#58）。
-            # 判定は外部 LLM の往復なので、待つと体感の終端がその分遅れる。
-            # 差し替えが起きたら response_replaced で後追いし、保存済みノードも更新する。
-            from nous.application.chat.events import DoneSSE
-
-            yield DoneSSE(
-                truncated=turn_ctx.was_truncated,
-                usage=turn_ctx.usage,
-                user_msg_id=turn_ctx.user_msg_id,
-                assistant_msg_id=turn_ctx.assistant_msg_id,
-            ).to_sse()
-
-            # RepairStep: done の後にキャラ判定 + 違反時の再生成
-            async for ev in RepairStep().run(ctx, config, messages, turn_ctx):
-                if turn_ctx.assistant_msg_id and turn_ctx.full_response:
-                    # 履歴（content + segments）も修復後の本文に揃える。
-                    # これをやらないとリロードで修復前の文が出る。
-                    session.replace_response(turn_ctx.assistant_msg_id, turn_ctx.full_response)
-                    session.flush()
-                    full_response = turn_ctx.full_response
-                ev.assistant_msg_id = turn_ctx.assistant_msg_id
-                yield ev.to_sse()
-
             if full_response:
-                # キャラ修復の後に出す（先に出すと修復前の本文が記録に残る）
                 await ctx.event_bus.publish(
                     CHAT_LLM_RESPONSE,
                     {
@@ -484,19 +477,19 @@ class ChatService:
                     },
                 )
 
-            try:
-                async for post_event in PostProcessStep().run(
-                    ctx, config, session, turn_ctx, debug=debug, emit_done=False
-                ):
-                    yield post_event.to_sse()
-            except Exception:
-                logger.exception("Chat pipeline crashed")
-                from nous.application.chat.events import ErrorSSE
+            from nous.application.chat.events import DoneSSE
 
-                yield ErrorSSE(message="（ごめん、今のうまく処理できなかった…もう一度言って？）").to_sse()
-            finally:
-                # Always persist, even on GeneratorExit (client disconnect during PostProcessStep)
-                session.flush()
+            yield DoneSSE(
+                truncated=turn_ctx.was_truncated,
+                usage=turn_ctx.usage,
+                user_msg_id=turn_ctx.user_msg_id,
+                assistant_msg_id=turn_ctx.assistant_msg_id,
+            ).to_sse()
+
+            # done が体感の終端。後処理（MemoryLLM）はターン枠の外へ逃がす。
+            # ここから戻ると chat_turn の finally が end_turn するので、
+            # 後処理の 7〜24 秒を次の送信が 409 で待たされることがなくなる。
+            _spawn_turn(_run_post_process(ctx, config, session, turn_ctx, debug=debug))
         except Exception:
             logger.exception("Chat pipeline crashed")
             # 途中まで生成できていた本文は捨てない

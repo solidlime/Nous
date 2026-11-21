@@ -8,16 +8,6 @@ _MEMORY_LLM_PROMPT is kept as a backward-compatible alias of the context prompt.
 
 from __future__ import annotations
 
-
-def _build_drift_section(drift: dict | None) -> str:
-    """キャラ一貫性監査の指摘をMemoryLLMプロンプト用の追記ブロックに変換する。"""
-    if not drift or drift.get("violation") in (None, "none"):
-        return ""
-    violation = str(drift.get("violation", ""))
-    detail = str(drift.get("detail", ""))
-    return f"【前回の振り返り】\n- 気になった点: {violation}\n- 内容: {detail}\n"
-
-
 _CONTEXT_LLM_PROMPT = """\
 [System Directive] All output content must be written in {language}.
 
@@ -35,7 +25,6 @@ _CONTEXT_LLM_PROMPT = """\
 【会話】
 [user]: {user_message}
 [assistant（私={persona_name}）]: {assistant_response}
-{drift_section}
 
 【出力形式】
 JSONのみ。コメント不要。不要なフィールドは省略可。
@@ -74,10 +63,6 @@ JSONのみ。コメント不要。不要なフィールドは省略可。
 - facts の felt（体験記憶）: その出来事のとき私（{persona_name}）が感じた感情を1語で書く（語彙自由・20字以内）。
   - 「嬉しい」「恥ずかしい」「もやもや」のような生の語でよい。記号や説明文は付けない。
   - 感情が動いていない事実では省略する（推測で埋めない）。
-- drift: 上に【キャラ一貫性監査の指摘】がある場合のみ、反省文をfactsに1件だけ作る。
-  - contentは{persona_name}自身の一人称独白の反省文とすること。
-  - tagsは ["character_drift", 指摘の種別]、importanceは0.8-0.9。
-  - 指摘がなければ作らない（重複禁止）。
 - goals: ユーザーが「〜したい」「〜を目指す」と表明した目標のみ。
   - 新規の場合: action="create" + content
   - 既存リストにあるgoalが会話で達成されたら: action="achieve" + memory_key
