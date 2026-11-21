@@ -200,7 +200,7 @@ function _handleHubMessage(e) {
   } else {
     seq = parseInt(e.lastEventId, 10);
   }
-  if (isFinite(seq) && seq > 0) {
+  if (Number.isFinite(seq) && seq > 0) {
     // サーバー再起動で seq は 1 に戻る。epoch 付き id で基線が変わったら
     // seq 基線をリセットする。進行中の自 turn は再起動で消えた孤児なので
     // 回復処理へ回す — ただし自 turn の echo（再起動後の再送信）だけは
@@ -338,12 +338,9 @@ function connectChatEvents(persona) {
       // epoch が不一致なら全量 replay になり、最初の event で基線を作り直せる。
       // bare seq のままだとサーバ側の純数値ゲート（seq <= last）に新 epoch の
       // event を捨てられ続け、UI が永久に固まる（2026-11-21 事故の主因）。
-      return _chatEventsPersona
-        ? "/api/chat/" +
-            encodeURIComponent(_chatEventsPersona) +
-            "/events?last_seq=" +
-            (_chatEpoch ? _chatEpoch + ":" + _chatLastSeq : _chatLastSeq)
-        : null;
+      if (!_chatEventsPersona) return null;
+      var seqRef = _chatEpoch ? _chatEpoch + ":" + _chatLastSeq : String(_chatLastSeq);
+      return "/api/chat/" + encodeURIComponent(_chatEventsPersona) + "/events?last_seq=" + seqRef;
     },
     handlers: {
       message: function (e) { _handleHubMessage(e); },
