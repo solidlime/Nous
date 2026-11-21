@@ -116,3 +116,15 @@ goal: Nous Dashboard を1から作り直す。API含む。SSR+vanilla踏襲。�
 | 結合CSS/JSのデバッグ性低下 | build scriptは連結のみ（minifyは空白除去程度）。sourcemap無しでも読める範囲に |
 | 150ms未達（特にTailscale越し） | ローカル150msをGATE、実回線は計測報告。削り残し（lucide/three/CDN）を先に削る |
 | 人形並列の衝突 | §4分離厳守。同一ファイルは統括が直す枠に |
+
+---
+
+## 9. 残件の後始末（2026-11-21）
+
+- **#131 memories 見出し帯**: `render_lazy_tab` が tab dict を受けて `.tab-head` を描くよう変更。SSR 辞書に無いタブも見出しが付く。契約は `tests/unit/test_lazy_manifest.py`（実在・非チャンク・自タブ限定）と既存 `test_tab_head_markup.py`。
+- **#132 chunk 過剰ロード**: `overview/memories/misc.chunk.js` を削除し manifest に実体 script を直接列挙。ready.js は宣言順に逐次ロード済みだったため束ねは不要。chat は自前ローダを持つので据え置き。
+- **#133 本番デプロイ確認**: ローカルに `python -m nous.main`（本番 ENTRYPOINT）を `/tmp` のデータ領域で起動し実測。
+  - `/dashboard/herta` 23,001B・9パネル・manifest 埋込・shell-critical.css 1本・script src 1本（first paint）
+  - v2 7本（overview/recent/blocks/equipment/items/goals/images）+ `/api/chat/herta/layout` 全 200
+  - 実ブラウザで9タブ全て可視・描画（空状態含む）。memories に見出し帯あり。tabs-lazy.css は初回ペイント後に遅延 attach。wiki 初回で読み込まれた features script は 6 本（chunk 廃止の実効を確認）
+  - 画像レジストリは pull のみ（プッシュは Docker workflow が ghcr へ）。Docker Build & Push は 1e402336 で success。
