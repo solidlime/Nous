@@ -31,7 +31,12 @@ from nous.api.http.routers.chat.chat_messages import (  # noqa: F401
     rollback_chat_session,
     update_chat_message,
 )
-from nous.api.http.routers.chat.chat_stream import chat_approval, chat_endpoint, chat_events  # noqa: F401
+from nous.api.http.routers.chat.chat_stream import (  # noqa: F401
+    chat_approval,
+    chat_endpoint,
+    chat_events,
+    chat_events_epoch,
+)
 
 
 def register_chat_routes(mcp) -> None:
@@ -42,6 +47,7 @@ def register_chat_routes(mcp) -> None:
     mcp.custom_route("/api/chat/{persona}/mcp-tools", methods=["GET"])(list_mcp_tools)
     mcp.custom_route("/api/chat/{persona}", methods=["POST"])(chat_endpoint)
     mcp.custom_route("/api/chat/{persona}/events", methods=["GET"])(chat_events)
+    mcp.custom_route("/api/chat/{persona}/events/epoch", methods=["GET"])(chat_events_epoch)
     mcp.custom_route("/api/chat/{persona}/approval", methods=["POST"])(chat_approval)
     mcp.custom_route("/api/chat/{persona}/layout", methods=["GET"])(get_chat_layout)
     mcp.custom_route("/api/chat/{persona}/commitments", methods=["GET"])(get_chat_commitments)

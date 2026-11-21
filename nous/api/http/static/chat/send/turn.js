@@ -19,6 +19,12 @@ var CHAT = N.Chat.state;
 // resumed mid-turn after a reconnect replay — share one session.
 // ------------------------------------------------------------------
 var _chatLastSeq = 0;        // last hub event seq applied (EventSource id:)
+var _chatEpoch = null;       // hub epoch from id "<epoch>:<seq>" — サーバー再起動で変わる
+var _sawDrop = false;        // SSE onError since last open (drop→open の対で再接続とみなす)
+var _reconnectedAt = 0;      // 再接続完了時刻（再起動を跨いだ turn の判定基準）
+var _lastEventAt = 0;        // ゲート通過した直近の hub イベント時刻 (watchdog 用)
+var _watchdogTimer = null;   // 無進捗 watchdog（誰も terminal event を出さないケースの保険）
+var _WATCHDOG_TIMEOUT_MS = 600000; // 10分 — ツール実行の長い静寂を超える値（未知の freeze 用の最後の保険）
 var _chatEventsPersona = null;
 var _turn = null;            // active turn rendering session
 // SSE carries no snapshot/live boundary marker, so the connect-time
@@ -52,6 +58,7 @@ function _els() {
 
 function _beginTurnSession(localMessage) {
   _turn = {
+    startedAt: Date.now(),
     // Raw posted message — matches turn_started.user_message so the
     // hub echo dedupes against the locally rendered user bubble.
     localMessage: localMessage || null,
@@ -74,6 +81,7 @@ function _beginTurnSession(localMessage) {
   CHAT._streamingSince = Date.now();
   CHAT._firstContent = true;
   CHAT._userScrolledUp = false;
+  _startWatchdog();
   var els = _els();
   if (els.sendBtn) els.sendBtn.style.display = "none";
   if (els.cancelBtn) els.cancelBtn.style.display = "";
@@ -93,6 +101,7 @@ function _beginTurnSession(localMessage) {
 function _endTurnSession() {
   var t = _turn;
   _turn = null;
+  _stopWatchdog();
   if (t && t.scrollListener && t.chatMessages) {
     t.chatMessages.removeEventListener("scroll", t.scrollListener);
   }
@@ -151,7 +160,7 @@ function _emitChatSSE(evt) {
   if (!evt || !relayed[evt.type]) return;
   try {
     document.dispatchEvent(new CustomEvent("nous:chat-sse", { detail: { type: evt.type, data: evt } }));
-  } catch (_e) { /* best-effort */ }
+  } catch { /* best-effort */ }
 }
 
 
@@ -182,11 +191,44 @@ function _askApproval(evt) {
 }
 
 function _handleHubMessage(e) {
-  var seq = parseInt(e.lastEventId, 10);
+  // id 形式は2種類: "<epoch>:<seq>"（現行）と bare "<seq>"（旧形式）。
+  var _parts = String(e.lastEventId || "").split(":");
+  var seq = 0, epoch = null;
+  if (_parts.length === 2) {
+    epoch = _parts[0];
+    seq = parseInt(_parts[1], 10);
+  } else {
+    seq = parseInt(e.lastEventId, 10);
+  }
   if (isFinite(seq) && seq > 0) {
+    // サーバー再起動で seq は 1 に戻る。epoch 付き id で基線が変わったら
+    // seq 基線をリセットする。進行中の自 turn は再起動で消えた孤児なので
+    // 回復処理へ回す — ただし自 turn の echo（再起動後の再送信）だけは
+    // 健在な新 turn なので例外とする。
+    if (epoch && epoch !== _chatEpoch) {
+      var _prevEpoch = _chatEpoch;
+      _chatEpoch = epoch;
+      _chatLastSeq = 0;
+      if (_prevEpoch && _turn) {
+        var _ownEcho = false;
+        if (String(e.data || "").includes('"turn_started"')) {
+          try {
+            var _pe = JSON.parse(e.data);
+            _ownEcho = Boolean(_pe && _pe.type === "turn_started" &&
+              _turn.pendingEcho === true &&
+              String(_pe.user_message || "") === String(_turn.localMessage || ""));
+          } catch {}
+        }
+        if (!_ownEcho) {
+          _recoverOrphanedTurn("サーバーが再起動されたため応答が途切れました");
+          return;
+        }
+      }
+    }
     if (seq <= _chatLastSeq) return; // replayed duplicate
     _chatLastSeq = seq;
   }
+  _lastEventAt = Date.now();
   var evt;
   try {
     evt = JSON.parse(e.data);
@@ -249,6 +291,36 @@ function _handleHubMessage(e) {
   N.Chat._send.handleEvent(evt);
 }
 
+// ------------------------------------------------------------------
+// 復旧と watchdog — freeze の保険。turn が生きているのに terminal event
+// が永遠に来ないケース（サーバー再起動で id 基線が巻き戻った等）を回収する。
+// ------------------------------------------------------------------
+function _recoverOrphanedTurn(message) {
+  N.Chat._send.endTurnSession();
+  var els = _els();
+  if (els.statusEl) els.statusEl.textContent = "";
+  if (toast) toast(message, "error");
+  if (N.Chat.history && typeof N.Chat.history.restore === "function") {
+    N.Chat.history.restore(false);
+  }
+  N.Chat._send.flushPending();
+}
+
+function _startWatchdog() {
+  _stopWatchdog();
+  _lastEventAt = Date.now();
+  _watchdogTimer = setInterval(function () {
+    if (!_turn) { _stopWatchdog(); return; }
+    if (Date.now() - _lastEventAt > _WATCHDOG_TIMEOUT_MS) {
+      _recoverOrphanedTurn("応答が途切れたため、このターンを打ち切り履歴を再取得しました");
+    }
+  }, 5000);
+}
+
+function _stopWatchdog() {
+  if (_watchdogTimer) { clearInterval(_watchdogTimer); _watchdogTimer = null; }
+}
+
 function connectChatEvents(persona) {
   _chatEventsPersona = persona || (window.S && window.S.persona) || null;
   // Persona switch voids any in-flight rendering (the container is
@@ -258,16 +330,48 @@ function connectChatEvents(persona) {
   // A queued send belongs to the previous persona — drop it on switch.
   N.Chat._send.clearPending();
   _chatLastSeq = 0;
+  _chatEpoch = null; // persona 切替は snapshot 再生から始まる — epoch 基線もリセット
+  _sawDrop = false;
   N.Core.connectStream("chat-events", {
     url: function () {
+      // epoch を握っているなら "<epoch>:<seq>" で渡す。サーバー再起動後の再接続で
+      // epoch が不一致なら全量 replay になり、最初の event で基線を作り直せる。
+      // bare seq のままだとサーバ側の純数値ゲート（seq <= last）に新 epoch の
+      // event を捨てられ続け、UI が永久に固まる（2026-11-21 事故の主因）。
       return _chatEventsPersona
-        ? "/api/chat/" + encodeURIComponent(_chatEventsPersona) + "/events?last_seq=" + _chatLastSeq
+        ? "/api/chat/" +
+            encodeURIComponent(_chatEventsPersona) +
+            "/events?last_seq=" +
+            (_chatEpoch ? _chatEpoch + ":" + _chatLastSeq : _chatLastSeq)
         : null;
     },
     handlers: {
       message: function (e) { _handleHubMessage(e); },
     },
+    onError: function () {
+      _sawDrop = true; // drop→open の対でのみ再接続とみなす
+    },
     onOpen: function () {
+      if (_sawDrop) {
+        _sawDrop = false;
+        _reconnectedAt = Date.now();
+        // 再接続後も生きている turn があり、接続断の間にサーバーが再起動
+        // （= id 基線が巻き戻り）していたなら、イベントは二度と届かない。
+        // epoch を probe して変わっていれば即座に回復する。
+        if (_turn && _chatEpoch && _chatEventsPersona) {
+          api("/api/chat/" + encodeURIComponent(_chatEventsPersona) + "/events/epoch", { suppressErrorToast: true })
+            .then(function (d) {
+              if (d && d.epoch && d.epoch !== _chatEpoch) {
+                // 基線だけでも採っておく（接続 URL は次回再接続で新 epoch 付きになる）
+                _chatEpoch = d.epoch;
+                if (N.Chat._send.turn() && N.Chat._send.turn().startedAt < _reconnectedAt) {
+                  _recoverOrphanedTurn("サーバーが再起動されたため応答が途切れました");
+                }
+              }
+            })
+            .catch(function () { /* probe 失敗は本命のイベント経路に任せる */ });
+        }
+      }
       // Connect-time snapshot burst (the endpoint replays its whole ring
       // buffer on every connect): while idle, swallow it until the first
       // terminal event. A mid-turn reconnect (session active) must NOT
@@ -287,7 +391,7 @@ if (typeof N.Core.connectSSE === "function" && !N.Core._chatEventsConnectWrapped
     var _origConnect = N.Core.connectSSE;
     N.Core.connectSSE = function (persona) {
       var r = _origConnect.apply(this, arguments);
-      try { connectChatEvents(persona); } catch (_e) {}
+      try { connectChatEvents(persona); } catch {}
       return r;
     };
   })();

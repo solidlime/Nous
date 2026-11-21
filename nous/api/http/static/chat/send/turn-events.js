@@ -16,6 +16,13 @@ var safeMarkdown = N.Chat.markdown && N.Chat.markdown.render;
 
 var CHAT = N.Chat.state;
 
+// done 後の「ちょっと考えてる…」は最終 memory_activity が来れば消えるが、
+// 後処理が失敗・無効のときは誰も消さない。時間切れで解除する保険。
+var _STATUS_FALLBACK_MS = 30000;
+// チャンク分割時に var 宣言が失われ、memory_activity のたびに
+// ReferenceError を投げていた（ステータス残留＋loadCommitments 不発）。
+var _memoryActivityTimer = null;
+
 // memoryPanel is registered by chat-memory-panel.js; noop when absent
 // (e.g. panel script failed to load) so streaming never crashes on it.
 function _mem(fn) {
@@ -242,6 +249,11 @@ function _finalizeTurn(evt) {
   var wasRemote = !t.isLocal;
   N.Chat._send.endTurnSession();
   if (els.statusEl) els.statusEl.textContent = "ちょっと考えてる…";
+  // 保険: 30 秒経っても最終 memory_activity が来なければ解除する。
+  setTimeout(function () {
+    var s = N.Chat._send.els().statusEl;
+    if (s && s.textContent === "ちょっと考えてる…" && !CHAT.streaming) s.textContent = "";
+  }, _STATUS_FALLBACK_MS);
   // Show truncation notice when response was auto-continued
   if (evt.truncated) {
     const notice = document.createElement("div");

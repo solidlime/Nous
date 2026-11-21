@@ -42,7 +42,9 @@ N.Core.api = async function api(path, opts) {
     }
     return await resp.json();
   } catch (e) {
-    console.error("API error:", path, e);
+    /* suppressErrorToast は「この失敗は想定内」の表明（背景 404 / エンジン断等）。
+       その場合は devtool への console.error も出さない。 */
+    if (!opts.suppressErrorToast) console.error("API error:", path, e);
     /* Cancel/timeout aborts are not user-facing failures — skip the global
        hook + api:error toast so navigation/timeout races don't flash a toast. */
     if (e && (e.name === "AbortError" || e.name === "TimeoutError")) {

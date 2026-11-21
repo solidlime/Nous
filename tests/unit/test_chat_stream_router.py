@@ -8,7 +8,12 @@ from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 
-from nous.api.http.routers.chat.chat_stream import chat_endpoint, chat_event_stream
+from nous.api.http.routers.chat.chat_stream import (
+    _parse_last_seq,
+    chat_endpoint,
+    chat_event_stream,
+    chat_events_epoch,
+)
 from nous.application.chat.service import get_turn_hub
 from nous.application.chat.turn_hub import TurnHub
 from nous.domain.config.chat_config import ChatConfig
@@ -136,13 +141,13 @@ class TestChatEventsStream:
             # リプレイ2件
             item1 = await asyncio.wait_for(gen.__anext__(), timeout=2)
             item2 = await asyncio.wait_for(gen.__anext__(), timeout=2)
-            assert item1 == 'id: 1\ndata: {"type": "text_delta", "content": "a"}\n\n'
-            assert item2.startswith("id: 2\n")
+            assert item1 == f'id: {hub.epoch}:1\ndata: {{"type": "text_delta", "content": "a"}}\n\n'
+            assert item2.startswith(f"id: {hub.epoch}:2\n")
 
             # ライブ push
             hub.publish("test_persona", 'data: {"type": "done"}\n\n')
             item3 = await asyncio.wait_for(gen.__anext__(), timeout=2)
-            assert item3.startswith("id: 3\n")
+            assert item3.startswith(f"id: {hub.epoch}:3\n")
             assert '"done"' in item3
 
             await gen.aclose()
@@ -160,7 +165,7 @@ class TestChatEventsStream:
             req.is_disconnected = AsyncMock(return_value=False)
             gen = chat_event_stream(req, "test_persona", last_seq=1)
             item = await asyncio.wait_for(gen.__anext__(), timeout=2)
-            assert item.startswith("id: 2\n")
+            assert item.startswith(f"id: {hub.epoch}:2\n")
             await gen.aclose()
         finally:
             hub.unsubscribe("test_persona", q)
@@ -174,14 +179,14 @@ class TestChatEventsStream:
         req.is_disconnected = AsyncMock(return_value=False)
         gen = chat_event_stream(req, "test_persona", last_seq=0)
         replayed = await asyncio.wait_for(gen.__anext__(), timeout=2)
-        assert replayed.startswith("id: 1\n")
+        assert replayed.startswith(f"id: {hub.epoch}:1\n")
         # gen 内部 queue にリプレイ済み seq を再投入（競合の再現）
         # _subscribers は (queue, loop) の tuple（worker スレッド配送対応のため）
         inner = hub._subscribers["test_persona"][-1][0]
         inner.put_nowait((1, "old"))
         hub.publish("test_persona", "live")  # seq2 — 積んだ重複の後ろに積まれる
         item = await asyncio.wait_for(gen.__anext__(), timeout=2)
-        assert item.startswith("id: 2\n")
+        assert item.startswith(f"id: {hub.epoch}:2\n")
         assert "live" in item
         with pytest.raises(asyncio.TimeoutError):
             await asyncio.wait_for(gen.__anext__(), timeout=0.5)
@@ -196,7 +201,47 @@ class TestChatEventsStream:
         gen = chat_event_stream(req, "test_persona", last_seq=1)
         hub.publish("test_persona", "y")  # seq2 ライブ
         item = await asyncio.wait_for(gen.__anext__(), timeout=2)
-        assert item.startswith("id: 2\n")
+        assert item.startswith(f"id: {hub.epoch}:2\n")
         count_with_sub = len(hub._subscribers["test_persona"])
         await gen.aclose()
         assert len(hub._subscribers["test_persona"]) == count_with_sub - 1
+
+
+class TestEpochBaseline:
+    """SSE id は "<epoch>:<seq>" — サーバー再起動検出（freeze 回復）の基盤。"""
+
+    @pytest.mark.asyncio
+    async def test_events_epoch_endpoint_returns_hub_epoch(self):
+        hub = get_turn_hub()
+        p1, p2, _ctx = _patch_resolver()
+        with p1, p2:
+            resp = await chat_events_epoch(MagicMock())
+        assert resp.status_code == 200
+        assert json.loads(bytes(resp.body)) == {"epoch": hub.epoch}
+
+    @pytest.mark.asyncio
+    async def test_events_epoch_404_for_unknown_persona(self):
+        with (
+            patch("nous.api.http.routers.chat.chat_stream._resolve_persona_from_request", return_value="ghost"),
+            patch("nous.api.http.routers.chat.chat_stream._safe_get_context", return_value=None),
+        ):
+            resp = await chat_events_epoch(MagicMock())
+        assert resp.status_code == 404
+
+    def test_last_seq_with_current_epoch_honored(self):
+        hub = get_turn_hub()
+        assert _parse_last_seq(f"{hub.epoch}:1", hub) == 1
+
+    def test_last_seq_with_stale_epoch_replays_from_start(self):
+        # サーバー再起動後の古い基線 — 全 ring を再生して基線を作り直させる
+        assert _parse_last_seq("deadbeef0000:9", get_turn_hub()) == 0
+
+    def test_bare_numeric_last_seq_still_honored(self):
+        # 旧形式（素の seq）からの移行互換
+        assert _parse_last_seq("1", get_turn_hub()) == 1
+        assert _parse_last_seq("42", get_turn_hub()) == 42
+
+    def test_garbage_last_seq_replays_from_start(self):
+        assert _parse_last_seq("not-a-number", get_turn_hub()) == 0
+        assert _parse_last_seq("", get_turn_hub()) == 0
+        assert _parse_last_seq(None, get_turn_hub()) == 0

@@ -12,6 +12,7 @@ let _connectionCheckTimer = null;
 let _playbackSession = null;    // { audio, btn, seekBar, interval } | null
 let _autoplayUnlocked = false;
 let _autoTtsAbort = null;       // AbortController for auto-play requests
+let _engineDown = false;        // 503 検知でこのセッションの自動合成を止める（リロードで再試行）
 
 /* ── Autoplay priming — unlock audio context on user gesture ── */
 function _unlockAutoplay() {
@@ -144,12 +145,8 @@ function _showPlayPrompt(containerDiv, audio, btn) {
   containerDiv.appendChild(prompt);
 }
 
-function _removeSeekBar() {
-  _endSession("remove-seekbar");
-}
-
 /* ── Common audio setup ── */
-function _setupAudio(audio, audioUrl, btn, containerDiv) {
+function _setupAudio(audio, btn, containerDiv) {
   if (_playbackSession) _endSession("new-audio");
   
   audio.volume = _getVolume();
@@ -198,7 +195,11 @@ async function checkVoiceConnection() {
   if (!S.persona) return;
   _setStatus("checking", "接続確認中...");
   try {
-    var resp = await api("/api/tts/" + encodeURIComponent(S.persona) + "/health");
+    var resp = await api("/api/tts/" + encodeURIComponent(S.persona) + "/health", {
+      // エンジン停止（503）は想定内 — トーストも console.error も出さず、
+      // パネルの「未接続」表示で伝える。
+      suppressErrorToast: true,
+    });
     if (resp.ok && resp.connected) {
       _setStatus("connected", "接続中 — " + (resp.url || ""));
       // Auto-fill model if empty and models available
@@ -221,7 +222,6 @@ async function testVoicePlayback() {
   var statusEl = document.getElementById("chat-voice-test-status");
   if (statusEl) statusEl.textContent = "合成中...";
   try {
-    var urlInput = document.getElementById("chat-voice-url");
     var modelInput = document.getElementById("chat-voice-model");
     var body = { text: "こんにちは、" + (S.persona || "私") + "です。音声合成のテストをしています。" };
     if (modelInput && modelInput.value) {
@@ -259,6 +259,7 @@ async function testVoicePlayback() {
 /* ── Auto-play TTS on response ── */
 function autoPlayTts(text) {
   if (!S.persona || !text) return;
+  if (_engineDown) return; // エンジン停止中は静かに降参
   // Gate: skip if voice is disabled
   var _ve = document.getElementById("chat-voice-enabled");
   if (_ve && !_ve.checked) return;
@@ -282,6 +283,8 @@ function autoPlayTts(text) {
     method: "POST",
     body: JSON.stringify(body),
     signal: _autoTtsAbort.signal,
+    // エンジン停止（503）は想定内 — api() の console.error / トーストを抑制
+    suppressErrorToast: true,
   })
     .then(function (resp) {
       if (resp.audio_base64) {
@@ -295,11 +298,17 @@ function autoPlayTts(text) {
         if (msgEl && resp.audio_url) {
           msgEl.dataset.ttsCacheUrl = resp.audio_url;
         }
-        _setupAudio(audio, audioUrl, ttsBtn, msgEl);
+        _setupAudio(audio, ttsBtn, msgEl);
       }
     })
     .catch(function (e) {
       if (e && e.name === "AbortError") return; // session cleanup aborts are expected
+      if (e && String(e.message || "").indexOf("503") !== -1) {
+        // 以後のメッセージで毎回 503 を叩かないよう、このセッションは自動合成を止める
+        _engineDown = true;
+        console.warn("[AutoTTS] \u97f3\u58f0\u5408\u6210\u30b5\u30fc\u30d0\u30fc\u505c\u6b62\u4e2d\u306e\u305f\u3081\u3001\u81ea\u52d5\u5408\u6210\u3092\u30b9\u30ad\u30c3\u30d7\u3057\u307e\u3059");
+        return;
+      }
       console.warn("[AutoTTS] Request failed:", e.message);
     });
 }
@@ -317,7 +326,7 @@ async function playTts(btn, text) {
   if (cachedUrl && !_playbackSession) {
     cachedUrl = N.Core.auth.sign(cachedUrl);  // #102
     var audio = new Audio(cachedUrl);
-    _setupAudio(audio, cachedUrl, btn, msgDiv);
+    _setupAudio(audio, btn, msgDiv);
     return;
   }
 
@@ -362,7 +371,7 @@ async function playTts(btn, text) {
     if (resp.audio_base64) {
       const audioUrl = resp.audio_url ? N.Core.auth.sign(resp.audio_url) : ("data:audio/" + (resp.format || "wav") + ";base64," + resp.audio_base64);  // #102
       const audio = new Audio(audioUrl);
-      _setupAudio(audio, audioUrl, btn, btn.closest(".chat-msg"));
+      _setupAudio(audio, btn, btn.closest(".chat-msg"));
     } else {
       console.warn("[TTS] Synthesis failed:", resp.error || "unknown");
       safeSetHTML(btn, '<i data-lucide="volume-2"></i>');
@@ -370,7 +379,8 @@ async function playTts(btn, text) {
       N.Core.refreshIcons();
     }
   } catch (e) {
-    console.error("[TTS] Request error:", e.message);
+    /* 手動ボタンからの失敗はボタン復帰でユーザーに見える — red error にしない */
+    console.warn("[TTS] Request error:", e.message);
     safeSetHTML(btn, '<i data-lucide="volume-2"></i>');
     btn.disabled = false;
     N.Core.refreshIcons();

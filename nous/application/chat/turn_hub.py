@@ -22,6 +22,15 @@ class TurnHub:
         self._queue_size = queue_size
         self._buffers: dict[str, deque[tuple[int, str]]] = {}
         self._seqs: dict[str, int] = {}
+        # プロセス単位の id 基線。SSE id を "<epoch>:<seq>" とすることで、
+        # サーバー再起動（seq が 1 に戻る）をクライアントが基線リセットと
+        # して検出できる。再起動を跨いだ進行中 turn は即回復扱いにするため。
+        self._epoch = "e" + uuid.uuid4().hex[:11]
+        # "e" 接頭辞で必ず非数字開始にする。旧クライアント（epoch 未対応版）は
+        # parseInt("<id>") で id を読むため、数字開始の epoch だと例えば "3ab…" が
+        # 3 に化けて isFinite を通過し、旧基線の純数値ゲートで新イベントを捨て続ける
+        # （deploy 混在期間の同一事故再発、10/16 の確率で発生）。
+        # 非数字開始なら parseInt は NaN を返しゲートを素通りする。
         # (queue, 購読側のイベントループ)。worker スレッド（内省など）から
         # publish された場合に call_soon_threadsafe で安全に配送するため保持。
         self._subscribers: dict[str, list[tuple[asyncio.Queue, asyncio.AbstractEventLoop | None]]] = {}
@@ -49,6 +58,11 @@ class TurnHub:
         """このペルソナでターンが走っているか（削除の事前確認用）。"""
         with self._lock:
             return persona in self._running or persona in self._background
+
+    @property
+    def epoch(self) -> str:
+        """プロセス単位のイベント id 基線（id: ``<epoch>:<seq>`` の左側）。"""
+        return self._epoch
 
     def begin_background_turn(self, persona: str) -> bool:
         """自発ターンの排他。ユーザーターン中／別の自発ターン中なら False。

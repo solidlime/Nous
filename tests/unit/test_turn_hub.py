@@ -202,3 +202,16 @@ class TestTurnTaskLifetime:
         for t in threads:
             t.join()
         assert len(winners) == 1
+
+
+class TestEpoch:
+    """プロセス単位の epoch — SSE id "<epoch>:<seq>" の左側。再起動検出用。"""
+
+    def test_epoch_is_short_hex_and_unique_per_instance(self):
+        h1, h2 = TurnHub(), TurnHub()
+        assert isinstance(h1.epoch, str) and len(h1.epoch) == 12
+        int(h1.epoch, 16)  # 16進文字列であること
+        # 非数字開始 — 旧クライアントの parseInt が NaN を返し基線ゲートを素通りする保証
+        # （数字開始だと "3ab…" が 3 に化けて旧基線の純数値ゲートを通過してしまう）
+        assert h1.epoch[0] not in "0123456789"
+        assert h1.epoch != h2.epoch

@@ -284,21 +284,57 @@ describe('chat hub — send flow', () => {
     vi.useFakeTimers();
     const es = chatStream();
     await sendTurn('つづき');
-    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: 'つづき' }), '1');
-    es.emit('message', JSON.stringify({ type: 'text_delta', content: '途中まで' }), '2');
-    // connection drops — sse.js reconnects with the advanced last_seq
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: 'つづき' }), 'e1a:1');
+    es.emit('message', JSON.stringify({ type: 'text_delta', content: '途中まで' }), 'e1a:2');
+    // connection drops — sse.js reconnects with the epoch-tagged last_seq
+    // （サーバー側 _parse_last_seq が epoch 不一致で全量 replay するための基線）
     es.onerror();
-    vi.runAllTimers();
+    // 5000ms backoff only（watchdog interval を無限進行させる runAllTimers は使わない）
+    await vi.advanceTimersByTimeAsync(5000);
     vi.useRealTimers(); // jsdom rAF rides real timers
     const reconnect = instances[instances.length - 1];
-    expect(reconnect.url).toBe('/api/chat/p1/events?last_seq=2');
+    expect(reconnect.url).toBe('/api/chat/p1/events?last_seq=e1a:2');
     // replayed duplicates are dropped (bubble content unchanged); genuinely
     // new deltas continue the same bubble
     await raf();
     expect(bubbles()[1].textContent).toBe('途中まで');
-    reconnect.emit('message', JSON.stringify({ type: 'text_delta', content: '＋追加分' }), '3');
+    reconnect.emit('message', JSON.stringify({ type: 'text_delta', content: '＋追加分' }), 'e1a:3');
     await raf();
     expect(bubbles()[1].textContent).toBe('途中まで＋追加分');
+  });
+
+  it('recovers an orphaned turn when the server restarts (epoch change)', async () => {
+    vi.useFakeTimers();
+    const es = chatStream();
+    await sendTurn('たのんだ');
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: 'たのんだ' }), 'e1a:1');
+    es.emit('message', JSON.stringify({ type: 'text_delta', content: '途中' }), 'e1a:2');
+    // server restarts mid-turn: SSE drops, reconnects, and the first event
+    // under the NEW epoch is a foreign turn — our own turn's events are gone
+    es.onerror();
+    await vi.advanceTimersByTimeAsync(5000);
+    vi.useRealTimers();
+    const reconnect = instances[instances.length - 1];
+    expect(reconnect.url).toBe('/api/chat/p1/events?last_seq=e1a:2');
+    reconnect.emit('message', JSON.stringify({ type: 'turn_started', user_message: 'よそのクライアント' }), 'e9f:1');
+    await raf();
+    // orphan recovery: turn state closed, status cleared, error toast,
+    // history reload — and the user's input is never silently lost
+    expect(N.Chat._send.turn()).toBe(null);
+    expect(N.Core.toast).toHaveBeenCalledWith(
+      expect.stringContaining('再起動'), 'error');
+    expect(window.Nous.Chat.history.restore).toHaveBeenCalledWith(false);
+    expect(document.getElementById('chat-status').textContent).toBe('');
+    // この first event 自体は epoch 切替の合図として消費される — 同一 event で
+    // ユーザーバブルは作らない（履歴 restore が実物を再構築する）。
+    expect(userBubbles().length).toBe(1); // own echo only
+    // 新 epoch の以後の event は viewer 语义で普通に描画される
+    reconnect.emit('message', JSON.stringify({ type: 'turn_started', user_message: 'よそのクライアント2' }), 'e9f:2');
+    await raf();
+    reconnect.emit('message', JSON.stringify({ type: 'text_delta', content: 'よその返事' }), 'e9f:3');
+    await raf();
+    expect(userBubbles().length).toBe(2); // own echo + foreign #2
+    expect(bubbles().length).toBeGreaterThanOrEqual(3); // + foreign assistant delta
   });
 
   it('remote viewer renders the turn and reloads history on done', async () => {
@@ -415,5 +451,134 @@ describe('response_replaced after done', () => {
   it('does nothing when there is no assistant message', () => {
     document.getElementById('chat-messages').innerHTML = '';
     expect(() => N.Chat._send.applyReplaceAfterTurn({ content: 'x' })).not.toThrow();
+  });
+});
+
+// ------------------------------------------------------------------
+// サーバー再起動＝epoch 切替。素の seq 基線は再起動で 1 に巻き戻るため、
+// 旧実装は再起動後の全イベントを「リプレイ重複」と誤判して凍った
+// （2026-11-21 実機 freeze の直接原因）。id "<epoch>:<seq>" で基線の
+// リセットを検出し、再起動を跨いだ turn は即回復する。
+// ------------------------------------------------------------------
+describe('epoch baseline (server restart recovery)', () => {
+  it('restart resets the seq baseline instead of dropping new events', async () => {
+    const es = chatStream();
+    es.onopen(); // idle 接続直後 — burst swallow モード
+    // 旧 epoch e1 で seq 5 まで見た（接続時バーストは swallow される）
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '旧ターン' }), 'e1:4');
+    es.emit('message', JSON.stringify({ type: 'done', message: '旧完了' }), 'e1:5');
+    // サーバー再起動: 新 epoch で seq が 1 に戻る。旧実装では 1 <= 5 で
+    // 全部落ちた（freeze の直接原因）
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '再起動後' }), 'e2:1');
+    expect(N.Chat.state.streaming).toBe(true);
+    es.emit('message', JSON.stringify({ type: 'text_delta', content: '再起動後の応答' }), 'e2:2');
+    await raf();
+    expect(bubbles()[1].textContent).toBe('再起動後の応答');
+    es.emit('message', JSON.stringify({ type: 'done', message: '完了' }), 'e2:3');
+    expect(N.Chat.state.streaming).toBe(false);
+  });
+
+  it('bare numeric ids keep the legacy behavior (no epoch)', async () => {
+    const es = chatStream();
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: 'a' }), '7');
+    // duplicate seq 7 — dropped as replay, no crash
+    es.emit('message', JSON.stringify({ type: 'done', message: 'dup' }), '7');
+    expect(N.Chat.state.streaming).toBe(true);
+    es.emit('message', JSON.stringify({ type: 'done', message: 'ok' }), '8');
+    expect(N.Chat.state.streaming).toBe(false);
+  });
+
+  it('mid-turn restart: reconnect probe recovers the orphaned turn', async () => {
+    vi.useFakeTimers();
+    const es = chatStream();
+    es.onopen();
+    // 接続バーストを閉じる
+    es.emit('message', JSON.stringify({ type: 'done', message: '旧' }), 'e1:1');
+    // 自ターンを開始（e1 のまま進行中）
+    await sendTurn('途中で落ちる');
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '途中で落ちる' }), 'e1:2');
+    es.emit('message', JSON.stringify({ type: 'text_delta', content: '途中まで' }), 'e1:3');
+    expect(N.Chat.state.streaming).toBe(true);
+    // 少し時間が流れてから SSE 落下 → 再接続完了（stub は onopen を自動発火しないので手動で呼ぶ）
+    await vi.advanceTimersByTimeAsync(1000);
+    es.onerror();
+    N.Core.api.mockResolvedValueOnce({ epoch: 'e2' }); // epoch probe: 再起動済み
+    es.onopen();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(N.Core.toast).toHaveBeenCalledWith('サーバーが再起動されたため応答が途切れました', 'error');
+    expect(N.Chat.state.streaming).toBe(false);
+    expect(N.Chat.history.restore).toHaveBeenCalledWith(false);
+    expect(document.getElementById('chat-status').textContent).toBe('');
+    vi.useRealTimers();
+  });
+
+  it('probe with a matching epoch leaves the live turn alone', async () => {
+    vi.useFakeTimers();
+    const es = chatStream();
+    es.onopen();
+    es.emit('message', JSON.stringify({ type: 'done', message: '旧' }), 'e1:1');
+    await sendTurn('続行');
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '続行' }), 'e1:2');
+    await vi.advanceTimersByTimeAsync(1000);
+    es.onerror();
+    N.Core.api.mockResolvedValueOnce({ epoch: 'e1' }); // same epoch: 再起動していない
+    es.onopen();
+    await vi.advanceTimersByTimeAsync(0);
+    expect(N.Core.toast.mock.calls.some((c) => String(c[0]).indexOf('再起動') !== -1)).toBe(false);
+    expect(N.Chat.state.streaming).toBe(true); // turn keeps rendering
+    vi.useRealTimers();
+  });
+
+  it('epoch change mid-own-turn (event path, not probe) recovers it too', async () => {
+    const es = chatStream();
+    es.onopen();
+    es.emit('message', JSON.stringify({ type: 'done', message: '旧' }), 'e1:1');
+    await sendTurn('イベント経路');
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: 'イベント経路' }), 'e1:2');
+    // サーバー再起動後に他クライアントの turn が始まる → 新 epoch の id が届く
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '別クライアント' }), 'e2:1');
+    expect(N.Core.toast).toHaveBeenCalledWith('サーバーが再起動されたため応答が途切れました', 'error');
+    expect(N.Chat.state.streaming).toBe(false);
+  });
+});
+
+// ------------------------------------------------------------------
+// done 後のステータス残留 — 最終 memory_activity が来ない場合の保険と、
+// var 宣言欠落で memory_activity が ReferenceError を起こしていた回帰。
+// ------------------------------------------------------------------
+describe('post-done status lifecycle', () => {
+  it('memory_activity after done clears the status without ReferenceError', async () => {
+    const es = chatStream();
+    await sendTurn('記憶');
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '記憶' }), '1');
+    es.emit('message', JSON.stringify({ type: 'done', message: 'ok' }), '2');
+    expect(document.getElementById('chat-status').textContent).toBe('ちょっと考えてる…');
+    es.emit('message', JSON.stringify({ type: 'memory_activity', retrieved: 1, saved: 1 }), '3');
+    expect(document.getElementById('chat-status').textContent).toBe('');
+  });
+
+  it('status fallback clears a stranded ちょっと考えてる… after 30s', async () => {
+    vi.useFakeTimers();
+    const es = chatStream();
+    await sendTurn('残留');
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '残留' }), '1');
+    es.emit('message', JSON.stringify({ type: 'done', message: 'ok' }), '2');
+    expect(document.getElementById('chat-status').textContent).toBe('ちょっと考えてる…');
+    await vi.advanceTimersByTimeAsync(30000);
+    expect(document.getElementById('chat-status').textContent).toBe('');
+    vi.useRealTimers();
+  });
+
+  it('watchdog recovers a turn that receives no events for 5 minutes', async () => {
+    vi.useFakeTimers();
+    const es = chatStream();
+    es.emit('message', JSON.stringify({ type: 'done', message: '旧' }), '1');
+    await sendTurn('無言');
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '無言' }), '2');
+    expect(N.Chat.state.streaming).toBe(true);
+    await vi.advanceTimersByTimeAsync(610000);
+    expect(N.Core.toast).toHaveBeenCalledWith('応答が途切れたため、このターンを打ち切り履歴を再取得しました', 'error');
+    expect(N.Chat.state.streaming).toBe(false);
+    vi.useRealTimers();
   });
 });

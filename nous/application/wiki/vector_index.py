@@ -62,7 +62,7 @@ async def async_drop_page(settings: Settings, persona: str, slug: str) -> None:
 
 
 async def async_drop_memories(settings: Settings, persona: str, keys: list[str]) -> None:
-    """記憶のベクトル（collection prefix ``""``）をキーごとに削除する（失敗は warning）。"""
+    """記憶のベクトル（collection prefix = settings.qdrant.collection_prefix）をキーごとに削除する（失敗は warning）。"""
     if not keys:
         return
     from nous.application import use_cases
@@ -72,7 +72,10 @@ async def async_drop_memories(settings: Settings, persona: str, keys: list[str])
         await mgr.connect()
         if not await mgr.health_check():
             return
-        store = use_cases.QdrantVectorStore(mgr, _embedding(settings), "")
+        # 記憶ベクトルは settings.qdrant.collection_prefix（既定 "memory_"）配下に
+        # 書かれる。空 prefix を渡すと存在しないコレクションを叩いて 404 になり、
+        # ベクトルだけが残った孤児になる（2026-11-21 の実機ログで確認）。
+        store = use_cases.QdrantVectorStore(mgr, _embedding(settings), settings.qdrant.collection_prefix)
         for key in keys:
             try:
                 await store.delete(persona, key)

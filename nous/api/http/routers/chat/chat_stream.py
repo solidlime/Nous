@@ -14,6 +14,8 @@ from nous.infrastructure.logging.structured import get_logger
 if TYPE_CHECKING:
     from starlette.requests import Request
 
+    from nous.application.chat.turn_hub import TurnHub
+
 logger = get_logger(__name__)
 
 
@@ -112,7 +114,13 @@ async def chat_endpoint(request: Request) -> JSONResponse:
 
 
 async def chat_event_stream(request: Request, persona: str, last_seq: int = 0):
-    """SSE generator: snapshot_after リプレイ（id: <seq> 付き）→ ライブ push → keepalive 15s。"""
+    """SSE generator: snapshot_after リプレイ（id: <epoch>:<seq> 付き）→ ライブ push → keepalive 15s。
+
+    id にプロセス単位の epoch を接頭する。サーバー再起動で seq が 1 に巻き戻る
+    ため、素の seq を Last-Event-ID として保持するクライアントは再起動後に
+    全イベントを「古い」と誤判して凍る。epoch 付き id により基線リセットを
+    検出できる（turn.js の _handleHubMessage）。
+    """
     from nous.application.chat.service import get_turn_hub
 
     hub = get_turn_hub()
@@ -121,7 +129,7 @@ async def chat_event_stream(request: Request, persona: str, last_seq: int = 0):
         last = last_seq
         for seq, sse in hub.snapshot_after(persona, last_seq):
             last = seq
-            yield f"id: {seq}\n{sse}"
+            yield f"id: {hub.epoch}:{seq}\n{sse}"
         while True:
             if await request.is_disconnected():
                 break
@@ -134,7 +142,7 @@ async def chat_event_stream(request: Request, persona: str, last_seq: int = 0):
             if seq <= last:
                 continue  # リプレイ済み（subscribe と snapshot の競合分）
             last = seq
-            yield f"id: {seq}\n{sse}"
+            yield f"id: {hub.epoch}:{seq}\n{sse}"
     except asyncio.CancelledError:
         raise  # finally の unsubscribe のみ行い、キャンセルは外へ伝播させる
     except Exception as e:
@@ -153,16 +161,43 @@ async def chat_events(request: Request) -> StreamingResponse:
 
         return StreamingResponse(not_found(), media_type="text/event-stream")
 
-    try:
-        last_seq = int(request.query_params.get("last_seq") or 0)
-    except ValueError:
-        last_seq = 0
+    from nous.application.chat.service import get_turn_hub
+
+    last_seq = _parse_last_seq(request.query_params.get("last_seq"), get_turn_hub())
 
     return StreamingResponse(
         chat_event_stream(request, persona, last_seq),
         media_type="text/event-stream; charset=utf-8",
         headers={"Cache-Control": "no-cache", "X-Accel-Buffering": "no"},
     )
+
+
+def _parse_last_seq(raw: str | None, hub: TurnHub) -> int:
+    """last_seq クエリの解析。"<epoch>:<seq>" は現行 epoch 一致時のみ seq を採用。
+
+    不一致（サーバー再起動後の古い基線）や非数値は 0 = 全 ring 再生。
+    素の数値（旧形式）は従来通りの seq として扱う。
+    """
+    raw = str(raw or "0").strip()
+    if ":" in raw:
+        ep, _, s = raw.partition(":")
+        return int(s) if ep == hub.epoch and s.isdigit() else 0
+    return int(raw) if raw.isdigit() else 0
+
+
+async def chat_events_epoch(request: Request) -> JSONResponse:
+    """GET /api/chat/{persona}/events/epoch — 現行の hub epoch（再起動検出 probe 用）。
+
+    SSE 再接続後に turn が生きているクライアントは、接続断の間にサーバーが
+    再起動していた（= イベントが永遠に届かない）可能性をこの probe で確かめ、
+    変わっていれば即座に turn を回復処理へ回す。
+    """
+    from nous.application.chat.service import get_turn_hub
+
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return JSONResponse({"detail": "Persona not found"}, status_code=404)
+    return JSONResponse({"epoch": get_turn_hub().epoch})
 
 
 async def chat_approval(request: Request) -> JSONResponse:

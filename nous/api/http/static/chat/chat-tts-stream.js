@@ -3,6 +3,7 @@
 "use strict";
 var T = N.Chat.ttsStream = N.Chat.ttsStream || {};
 var _stream = null;
+var _engineDown = false; // 503（音声合成サーバー停止）を一度検知したら、このセッションでは合成を試みない
 function _voiceInput() {
   var el = document.getElementById("chat-voice-model");
   return (el && el.value) ? el.value : undefined;
@@ -52,6 +53,7 @@ T.startStream = function(persona) {
 };
 T.finish = function(allText, msgEl) {
   var stream = _stream;
+  if (_engineDown) return Promise.resolve(null); // エンジン停止中は無音で降参（リロードで再試行）
   if (!stream || stream.stopped) return Promise.resolve(null); // cleared session: skip synthesis
   var text = _strip(allText);
   if (!text) return Promise.resolve(null);
@@ -105,7 +107,11 @@ T.finish = function(allText, msgEl) {
     return pump();
   }).catch(function(e) {
     if (e && e.name === "AbortError") return null;
-    if (typeof console !== "undefined") console.warn("[TTS-stream] fetch failed:", e && e.message);
+    if (e && String(e.message || "").indexOf("503") !== -1) {
+      // サーバー停止中。以後のメッセージで毎回 503 を叩かないよう落 chip を立てる。
+      _engineDown = true;
+      if (typeof console !== "undefined") console.warn("[TTS-stream] \u97f3\u58f0\u5408\u6210\u30b5\u30fc\u30d0\u30fc\u505c\u6b62\u4e2d\u306e\u305f\u3081\u3001\u3053\u306e\u30bb\u30c3\u30b7\u30e7\u30f3\u3067\u306f\u97f3\u58f0\u3092\u30b9\u30ad\u30c3\u30d7\u3057\u307e\u3059");
+    } else if (typeof console !== "undefined") console.warn("[TTS-stream] fetch failed:", e && e.message);
     return null;
   });
 };

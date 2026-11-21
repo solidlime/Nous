@@ -98,6 +98,20 @@ sequenceDiagram
 
 再接続用に `_chatLastSeq` を持つ。SSE の `id:` を覚えておき、切断後の URL に
 `?last_seq=N` を付けて開き直すと、取りこぼした分だけが replay される。
+`id:` は `<epoch>:<seq>` 形式（epoch = プロセス単位の基線）。サーバー再起動で
+seq が 1 に戻っても epoch が変わるので、クライアントは「古い基線で捨てるべき
+event」ではなく「基線リセット」として扱える（後述 §4）。
+
+### サーバー再起動と孤立ターンの回復
+
+再起動直後に開いていたタブは「再接続はしたが、もう存在しないリングに向かって
+`last_seq` を握っている」状態になる。再接続完了時に `/events/epoch` を probe し、
+epoch が変わっていて**ターン実行中**なら `_recoverOrphanedTurn()` で直ちに
+（入力を戻し、履歴を再取得して）回復する。ターン開始前なら何もしない（新しい
+基線で次の event を待つだけ）。さらに 5 秒周期の watchdog が、ターン実行中に
+**10 分間一切の event が来ない**ケース（probe も通じない経路断など）を同様に回復
+する。これにより「サーバー再起動後、開いていたタブが記憶処理中...のまま固まる」
+事故（2026-11-21 実機発生）を構造的に潰している。
 
 ### キャンセル
 
@@ -134,11 +148,16 @@ sequenceDiagram
   - リングバッファ **600 件**（`buffer_size`）に `(seq, sse文字列)` を保持
   - 購読者ごとの `asyncio.Queue` **256 件**（`queue_size`、あふれたら drop-oldest）
   - `_seqs[persona]` で単調増加の seq を振る
+  - プロセス単位の `epoch`（起動時乱数）を持ち、event id は `<epoch>:<seq>`
   - `_running` で「同時 1 ターン」を保証
 - ストリームは 3 段:
-  1. `snapshot_after(last_seq)` を `id: <seq>` 付きで replay
+  1. `snapshot_after(last_seq)` を `id: <epoch>:<seq>` 付きで replay
+     （`last_seq` に `<epoch>:<seq>` が渡された場合、epoch 不一致なら 0 扱い =
+     全量 replay して基線を作り直させる — サーバー再起動後の古い基線の救済）
   2. ライブ push（`seq <= last` は捨てる。subscribe と snapshot の競合対策）
   3. 15 秒無通信なら `: keepalive`
+- 補助 endpoint `GET /api/chat/{persona}/events/epoch` は `{"epoch": "..."}` を返す。
+  クライアントの再接続 probe がこれで基線変化を検知する。
 - ワーカースレッドから publish されたときは `call_soon_threadsafe` で配る
   （内省などスレッド由来のイベントを取りこぼさないため）。
 
@@ -402,7 +421,8 @@ session.flush()   # done を出す前に必ずディスクへ
 | --- | --- |
 | 二重送信 | 409 → フロントが保留キュー（backoff 付き） |
 | クライアント切断 | サーバーは完遂。`flush` は `finally` で実行 |
-| SSE 切断 | `last_seq` で再接続 → 欠けた分を replay |
+| SSE 切断 | `last_seq` で再接続 → 欠けた分を replay。サーバー再起動後は epoch 変化を `/events/epoch` probe で検知して基線を作り直す（ターン実行中なら即回復） |
+| サーバー再起動中にターンが途切れる | クライアント watchdog（10 分無 event）または epoch probe が `_recoverOrphanedTurn()` で入力を戻し履歴を再取得 |
 | プロバイダ失敗 | `ErrorSSE` → 本文は空 → `_empty_turn_text` で 1 行残す |
 | `max_tokens` 打ち切り | 自動継続 3 回まで |
 | ツール予算切れ | 宣言は続け、実行だけ止めて「上限」を結果として返す |
