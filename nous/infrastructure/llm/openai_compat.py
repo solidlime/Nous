@@ -225,12 +225,11 @@ class OpenAICompatProvider(LLMProvider):
                     kwargs["max_tokens"] = max(max_tokens, budget + 1024)
                     kwargs["extra_body"] = {"thinking": {"type": "enabled", "budget_tokens": budget}}
                 else:
-                    # ponytail: hybrid reasoning モデル (DeepSeek V4 等) は effort だけでは thinking が
-                    # 有効化されない。OpenAI互換サーバーは未知キーを黙って無視するため、両トグルを併送
-                    # (DeepSeek 公式: thinking, vLLM/Alibaba 系: enable_thinking)。
-                    # Anthropic 互換 (上記分岐) は未知キーを無視しないため併送対象外。
+                    # LiteLLM ゲートウェイ等は Anthropic 専用の thinking を未知パラメータとして 400 で弾く
+                    # (opencode_go: "does not support parameters: ['thinking']")。OpenAI 互換の
+                    # enable_thinking だけを送る。同単体で reasoning_tokens が出ることは実機確認済み。
                     kwargs["reasoning_effort"] = reasoning_effort
-                    kwargs["extra_body"] = {"thinking": {"type": "enabled"}, "enable_thinking": True}
+                    kwargs["extra_body"] = {"enable_thinking": True}
                 # 推論モデル (o1/o3/o4-mini 等) は max_tokens 非対応のため
                 # OpenAI系パスでは max_completion_tokens に載せ替える。
                 # Anthropic互換パスは Messages API 仕様で max_tokens のまま。

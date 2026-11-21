@@ -62,13 +62,13 @@ class TestOpenAICompatReasoning:
 
     @pytest.mark.asyncio
     async def test_reasoning_sends_effort_and_extra_body(self):
-        """reasoning 指定 → reasoning_effort + extra_body トグル併送 (DeepSeek V4 / vLLM 対応)."""
+        """reasoning 指定 → reasoning_effort + enable_thinking を送る (Anthropic 専用 thinking は送らない)."""
         provider = self._make_provider(base_url="https://api.commandcode.ai/provider/v1")
         async for _ in provider.stream(messages=[], system="", reasoning_effort="high"):
             pass
         kwargs = self._capture_kwargs(provider)
         assert kwargs["reasoning_effort"] == "high"
-        assert kwargs["extra_body"] == {"thinking": {"type": "enabled"}, "enable_thinking": True}
+        assert kwargs["extra_body"] == {"enable_thinking": True}
 
     @pytest.mark.asyncio
     async def test_none_openrouter_disables_reasoning(self):
@@ -156,7 +156,7 @@ class TestOpenAICompatReasoning:
         kwargs = self._capture_kwargs(provider)
         assert kwargs["reasoning_effort"] == "low"
         assert "reasoning" not in kwargs
-        assert kwargs["extra_body"] == {"thinking": {"type": "enabled"}, "enable_thinking": True}
+        assert kwargs["extra_body"] == {"enable_thinking": True}
 
     @pytest.mark.asyncio
     async def test_anthropic_compat_sends_budget_thinking(self):
@@ -193,13 +193,13 @@ class TestOpenAICompatReasoning:
 
     @pytest.mark.asyncio
     async def test_openrouter_non_anthropic_uses_effort_and_extra_body(self):
-        """OpenRouter + 非 Anthropic モデル → effort + thinking/enable_thinking 併送を維持."""
+        """OpenRouter + 非 Anthropic モデル → effort + enable_thinking を送る."""
         provider = self._make_provider(base_url="https://openrouter.ai/api/v1", model="deepseek/deepseek-v4-flash")
         async for _ in provider.stream(messages=[], system="", reasoning_effort="high"):
             pass
         kwargs = self._capture_kwargs(provider)
         assert kwargs["reasoning_effort"] == "high"
-        assert kwargs["extra_body"] == {"thinking": {"type": "enabled"}, "enable_thinking": True}
+        assert kwargs["extra_body"] == {"enable_thinking": True}
 
 
 class TestOpenAICompatCoT:
