@@ -93,7 +93,7 @@ def render_dashboard(persona: str | None = None) -> str:
         "graph": render_graph_tab,
         "chat": lambda: render_chat_shell(persona or ""),
     }
-    tab_contents = "\n".join([(fn() if (fn := _ssr_tabs.get(t["id"])) else render_lazy_tab(t["id"])) for t in tabs])
+    tab_contents = "\n".join([(fn() if (fn := _ssr_tabs.get(t["id"])) else render_lazy_tab(t)) for t in tabs])
 
     import re
 

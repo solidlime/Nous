@@ -33,13 +33,11 @@ LAZY_MANIFEST: dict = {
         "/static/components/mem-modal.js",
     ],
     "tabs": {
+        # #132: no bundling chunk. ready.js already loads ``scripts`` in order,
+        # so a tab's own sources are written here directly — the old
+        # overview/memories/misc chunks made every visit fetch every tab.
         "overview": {
-            "scripts": ["/static/features/overview.chunk.js"],
-            "ready": "Nous.Features.Overview.chunk.load",
-            "deps": ["chart"],
-            # B2: chunk前の原典。manifestがSSRに埋め込まれるため
-            # 契約文字列（test_wiki_router.py）もここで維持される。
-            "sources": [
+            "scripts": [
                 "/static/features/overview/overview-blocks.js",
                 "/static/features/overview/overview-inventory.js",
                 "/static/features/overview/overview-core.js",
@@ -47,39 +45,24 @@ LAZY_MANIFEST: dict = {
                 "/static/features/overview/overview-charts.js",
                 "/static/features/overview/overview-context.js",
             ],
+            "deps": ["chart"],
         },
         "memories": {
-            "scripts": ["/static/features/memories.chunk.js"],
-            "ready": "Nous.Features.Memories.chunk.load",
-            "deps": ["chart"],
-            "sources": [
+            "scripts": [
                 "/static/features/memories/memories-core.js",
                 "/static/features/memories/memories-list.js",
                 "/static/features/memories/memories-search.js",
                 "/static/features/memories/memories-edit.js",
             ],
+            "deps": ["chart"],
         },
-        "wiki": {
-            "scripts": ["/static/features/misc.chunk.js"],
-            "ready": "Nous.Features.Misc.chunk.load",
-            "sources": ["/static/features/wiki.js"],
-        },
-        "projects": {
-            "scripts": ["/static/features/misc.chunk.js"],
-            "ready": "Nous.Features.Misc.chunk.load",
-            "sources": ["/static/features/projects.js"],
-        },
+        "wiki": {"scripts": ["/static/features/wiki.js"]},
+        "projects": {"scripts": ["/static/features/projects.js"]},
         # chat owns its 31 sources + the avatar module, so it ships a loader
         "chat": {"scripts": ["/static/chat/chat.chunk.js"], "ready": "Nous.Chat.chunk.load"},
-        "activity": {
-            "scripts": ["/static/features/misc.chunk.js"],
-            "ready": "Nous.Features.Misc.chunk.load",
-            "sources": ["/static/features/activity.js"],
-        },
+        "activity": {"scripts": ["/static/features/activity.js"]},
         "settings": {
-            "scripts": ["/static/features/misc.chunk.js"],
-            "ready": "Nous.Features.Misc.chunk.load",
-            "sources": [
+            "scripts": [
                 "/static/features/settings/settings-validation.js",
                 "/static/features/settings/settings-save.js",
                 "/static/features/settings/settings-ui.js",
@@ -88,16 +71,12 @@ LAZY_MANIFEST: dict = {
             ],
         },
         "timeline": {
-            "scripts": ["/static/features/misc.chunk.js"],
-            "ready": "Nous.Features.Misc.chunk.load",
+            "scripts": ["/static/features/timeline.js"],
             "deps": ["vis-timeline", "vis-timeline-css"],
-            "sources": ["/static/features/timeline.js"],
         },
         "graph": {
-            "scripts": ["/static/features/misc.chunk.js"],
-            "ready": "Nous.Features.Misc.chunk.load",
+            "scripts": ["/static/features/graph.js"],
             "deps": ["vis-network"],
-            "sources": ["/static/features/graph.js"],
         },
     },
 }
@@ -152,13 +131,23 @@ _TAB_CONTENT_IDS = {
 }
 
 
-def render_lazy_tab(tab_id: str) -> str:
-    """Return an empty tab panel for a lazily loaded tab."""
-    content_id = _TAB_CONTENT_IDS.get(tab_id)
-    inner = f'\n            <div id="{content_id}"></div>' if content_id else ""
-    return (
-        '        <section id="tab-' + tab_id + '" class="tab-panel" role="tabpanel">' + inner + "\n        </section>"
+def render_lazy_tab(tab: dict) -> str:
+    """Return the shell of a lazily loaded tab panel: head + content slot.
+
+    #131: the head is built from the ``dashboard.py`` tab dict (id/lucide/label)
+    so a panel that ships no SSR body still shows its title band — the
+    alternative (per-tab hand-written shells) is what dropped it for memories.
+    """
+    tab_id = html.escape(tab["id"], quote=True)
+    icon = f'<i data-lucide="{html.escape(tab["lucide"], quote=True)}"></i>' if tab.get("lucide") else ""
+    head = (
+        '            <div class="tab-head">\n'
+        f"                <h2><span>{icon}</span> {html.escape(tab.get('label', ''))}</h2>\n"
+        "            </div>"
     )
+    content_id = _TAB_CONTENT_IDS.get(tab["id"])
+    inner = f'\n            <div id="{content_id}"></div>' if content_id else ""
+    return f'        <section id="tab-{tab_id}" class="tab-panel" role="tabpanel">\n{head}{inner}\n        </section>'
 
 
 # ---------------------------------------------------------------------------
