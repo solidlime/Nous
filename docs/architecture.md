@@ -117,11 +117,13 @@ nous/
 ```text
 POST /api/chat/{persona}            202 {turn_id} / 409（同時1ターン）
     ↓ サーバー内タスクで完遂（クライアント切断に影響されない）
-PrepareStep → PromptBuildStep → CompressStep → InferenceStep → RepairStep
+PrepareStep → PromptBuildStep → CompressStep → InferenceStep
     ↓ 本文 delta は EventBus を通さず TurnHub のリングバッファへ
 GET /api/chat/{persona}/events?last_seq=N   replay + live + keepalive 15s
     ↓
-PostProcessStep（DoneSSE の後に記憶抽出・状態更新）
+DoneSSE →（end_turn: ターン枠を解放）
+    ↓ ターン枠の外（_spawn_turn）
+PostProcessStep（記憶抽出・状態更新）
 ```
 
 ## 設計パターン

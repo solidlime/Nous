@@ -71,16 +71,10 @@ sequenceDiagram
         S->>H: done
         H-->>F: done
         F->>F: typing 解除・確定描画・pending 送信
-        S->>P: RepairStep（キャラ違反なら再生成）
-        opt 違反あり
-            S->>D: replace_response + flush
-            S->>H: response_replaced
-            H-->>F: response_replaced（吹き出しを差し替え）
-        end
-        S->>P: PostProcessStep
+        S->>S: end_turn(persona)（ここでターン枠を解放）
+        S->>P: PostProcessStep（ターン枠の外・別タスク）
         S->>H: memory_activity など
         S->>D: MemoryLLM の結果を保存
-        S->>H: end_turn(persona)
     end
 ```
 
@@ -281,30 +275,29 @@ while True:
 チャンク境界でタグが切れても漏れないよう未閉じタグは保留し、
 閉じが来ないまま上限（20k 字）を超えたら諦める。
 
-### 5.8 `RepairStep` — キャラ判定と再生成（done の後）
+### 5.8 後処理（`PostProcessStep` — done の後、ターン枠の外）
 
-`repair.py`。**永続化と `done` の後に**毎ターン応答を検証し、逸脱していれば
-再生成する（`character_repair_max_attempts`）。
+`post.py`。記憶抽出（MemoryLLM）・状態更新・要約を行う。
 
-判定は外部 LLM の往復なので、`done` を待たせると体感の終端がその分遅れる。
-だから先に完了を伝え、修復は後追いにする（#58）:
+**done の後に走るが、ターン枠は既に解放済み**。`chat_turn` の `finally` が
+`end_turn` する時点で後処理は `_spawn_turn` で切り離されているので、後処理の
+7〜24 秒の間も次の送信は 409 にならない（以前はここが直列で、体感の終端と
+実際の終端がずれていた）。
+
+SSE はターンセッションではなく `TurnHub` へ直接 publish する:
 
 ```python
 yield DoneSSE(...).to_sse()                       # 先に完了
-async for ev in RepairStep().run(...):           # 判定はこの後
-    session.replace_response(turn_ctx.assistant_msg_id, turn_ctx.full_response)
-    session.flush()
-    ev.assistant_msg_id = turn_ctx.assistant_msg_id
-    yield ev.to_sse()                            # response_replaced
+_spawn_turn(_run_post_process(ctx, config, session, turn_ctx, debug=debug))
 ```
 
-`ResponseReplacedSSE` は `assistant_msg_id` を運ぶ。フロントは `done` で turn セッションを
-閉じているので、`turn.js` が `applyReplaceAfterTurn()` で msg_id の吹き出しを直接探して
-差し替える。
+後処理側の `finally` で `session.flush()` するので、クライアント切断でも
+記憶の書き込みは落ちない。
 
-`session.replace_response()` は content と **segments の text を 1 本に畳む**。
-`edit_message` は先頭の text セグメントしか更新しないため、text→tool→text の
-ターンでリロードすると修復前の文が混ざる。
+> 毎ターンのキャラ一貫性判定（`RepairStep` / `character_judge`）は 2026-11 に
+> 全廃した。判定は毎ターン外部 LLM を 2〜5 往復叩き、得られるのは
+> `{"violation": "none"}` だけだった。`ResponseReplacedSSE` と drift 記憶の
+> 生成・注入も同じ経路で消えている。
 
 ### 5.9 空応答のフォールバック
 
@@ -374,16 +367,16 @@ session.flush()   # done を出す前に必ずディスクへ
 | `memory_activity` | 後処理（1 ターン 1 回） | 記憶パネル |
 | `context_compressed` | 圧縮発生 | 「圧縮した」バッジ |
 | `session_summarized` | 退避の要約完了 | 履歴の要約表示 |
-| `response_replaced` | 修復で再生成（`done` の後） | 本文の差し替え（`assistant_msg_id` で対象を探す） |
 | `context_update` | 状態変化 | 状態パネル更新 |
 | `inventory_update` | 装備変化 | 装備パネル更新 |
 | `debug_info` | `debug=true` のみ | デバッグ表示 |
 | `approval_requested` | 承認待ちツール（120 秒で deny） | モーダル |
 | `error` | 失敗 | エラー表示 |
-| `done` | ターン完了（後処理の途中） | typing 解除・履歴確定・保留送信 |
+| `done` | 本文の終端（後処理はターン枠の外で続く） | typing 解除・履歴確定・保留送信 |
 
-`done` は**ターンの最後ではない**。その後にキャラ判定（`response_replaced` の可能性）と
-記憶抽出が続くので、フロントは「本文は揃ったが、あとで差し替え・記憶更新があり得る」前提で動く。
+`done` は**本文の終端**であって、ターンの最後ではない。その後に記憶抽出
+（`memory_activity`）が続くが、`end_turn` は `done` の直後に走るので次の送信は
+待たされない。本文の差し替えは起きない（判定器を廃止した）。
 
 ---
 
@@ -414,9 +407,8 @@ session.flush()   # done を出す前に必ずディスクへ
 | `max_tokens` 打ち切り | 自動継続 3 回まで |
 | ツール予算切れ | 宣言は続け、実行だけ止めて「上限」を結果として返す |
 | ツール記法の漏れ | 本文から除去＋復旧（実行可能なら実行） |
-| キャラ逸脱 | `RepairStep` で再生成、`response_replaced` を通知 |
 | 記憶検索の失敗 | 例外を握って空で続行（会話を止めない） |
-| 後処理の失敗 | `ErrorSSE` を 1 回出して終了（本文は既に保存済み） |
+| 後処理の失敗 | `error` を 1 回 publish して終了（本文は既に保存済み） |
 
 ---
 
