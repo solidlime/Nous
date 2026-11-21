@@ -106,6 +106,39 @@ Aggregated dashboard payload for a persona.
 - `stats.timeline` — `[{date, count}]` array for the last N days (default 14)
 - `knowledge_graph_url` — URL to the knowledge graph HTML, or `null`
 
+この一括版は互換のために残してある。v4 の UI は下の v2 分割版だけを叩く。
+
+### `GET /api/v2/overview/{persona}`
+
+Overview タブの初回描画用。KPI・state memories・wiki 要約・goal 要約だけを返す
+（recent / blocks / items / 画像は含まない）。
+
+`stats` / `context` は v1 の `stats` / `info` と同じ形。`wiki` は
+`{pages, projects, reading[]}` で `reading` は更新順の先頭5件。`goals` は
+`{total, active}`。
+
+### `GET /api/v2/recent/{persona}`
+
+直近の記憶。`?limit=`（既定10・最大50）、`?full=1` で本文を200字切りしない完全版を返す。
+
+### `GET /api/v2/blocks/{persona}` / `equipment` / `items` / `goals`
+
+一括版からセクション単位で切り出したもの。レスポンスは `{"persona": ..., "<セクション名>": [...]}` で、
+キー以外の形は v1 と同一。存在しない persona は v1 と同じ 404。
+4本とも同じ形なので以下にまとめて挙げる。
+
+### `GET /api/v2/equipment/{persona}`
+
+### `GET /api/v2/items/{persona}`
+
+### `GET /api/v2/goals/{persona}`
+
+### `GET /api/v2/images/{persona}`
+
+`images` は形が違う: `{persona, latest_self_portrait, generated_images[]}`。
+`generated_images` は最大20件で、`url` は
+`/api/chat/{persona}/persona/images/{filename}`。
+
 ---
 
 ## Memory Browsing
@@ -354,6 +387,13 @@ Activity タブの上部に 1 行で出る。
 ---
 
 ## Chat Persona
+
+### `GET /api/chat/{persona}/layout`
+
+Chat タブの内側（記憶パネル・本体・サイドバー）だけを返す。v4 は shell を
+SSR し、chat.chunk.js がこの HTML を空の `#chat-layout` へ注入してから chat の
+各 script を読む（script が自分の DOM を見つけられる順序を守るため、wrapper も
+asset タグも含めない）。存在しない persona は 404。
 
 ### `POST /api/chat/{persona}/approval`
 
