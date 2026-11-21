@@ -457,3 +457,21 @@ session.flush()   # done を出す前に必ずディスクへ
 | 記法の復旧 | `nous/infrastructure/llm/tool_markup.py`, `openai_compat.py` |
 | SSE 型 | `nous/application/chat/events.py` |
 | 会話の永続化 | `chat/tree_session.py`, `sqlite/schema.py` |
+
+## 遅延要因の全解消（2026-11-21）
+
+7件の遅延要因を洗い出し、6件を修正した（⑤ MCP プールは TTL キャッシュ済み、⑥ 段の並列化は副作用が大きいため対象外）。
+
+| # | 要因 | 対応 | コミット |
+|---|---|---|---|
+| ① | done 後も `end_turn` まで枠を保持し、次の送信が 409 で待たされる | 後処理を done の外（background task）へ出した | `0bfd0165` |
+| ② | キャラ判定が毎ターン 2〜5 往復（修復ループ含む） | 判定器・修復・設定・UI・SSE・drift 記憶を全廃 | `0bfd0165` |
+| ③ | PrepareStep の減衰4連が毎回 `get_context` を再フェッチ | 実際に減衰した時だけ取り直す | `0bfd0165` |
+| ④ | `_build_relationship_context` が `created_at` 未索引で全走査 ×2 | (persona, 日付) でキャッシュ | `0bfd0165` |
+| ⑦ | 減衰が発動しないターンでも書き込みパスを通る | ③ の短絡で解消 | `0bfd0165` |
+
+**加えて、ターンが必ず 400 で失敗していた原因を修正**（`d6bd6872`）:
+reasoning 有効時、OpenAI 互換分岐が Anthropic 専用の `thinking` を送っており、
+LiteLLM が上流（opencode_go）の非対応パラメータとして `UnsupportedParamsError` の 400 で弾いていた。
+実機プローブで `reasoning_effort` 単体は 200 / `thinking` 単体は 400 / `enable_thinking` 単体は 200 と確定したため、
+`enable_thinking` だけを送るようにした。Anthropic 互換分岐の budget 付き `thinking` は必須なのでそのまま。
