@@ -274,8 +274,9 @@ def _enrich_image_prompts(ctx, images: list[dict]) -> None:
             # shortcut: JSON1 前提の絞り込み。古い sqlite / 壊れた JSON 行では
             # json_extract が落ちるので v1 と同じ全走査へ退避する
             rows = db.execute(
+                # marks は ? の並びだけ。filename は params で束縛する
                 "SELECT metadata FROM messages WHERE metadata LIKE '%image_generation%' "
-                f"AND json_extract(metadata, '$.filename') IN ({marks}) ORDER BY rowid",
+                f"AND json_extract(metadata, '$.filename') IN ({marks}) ORDER BY rowid",  # nosec B608
                 names,
             ).fetchall()
         except Exception:
