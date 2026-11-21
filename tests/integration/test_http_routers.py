@@ -233,12 +233,18 @@ class TestDashboardEndpoints:
 
     async def test_dashboard_has_no_inline_scripts(self, client):
         """#92 再発防止: JS は <script src> (defer) 列挙のみで配信し、
-        セクション HTML へのインライン埋め込みを禁止する。"""
+        セクション HTML へのインライン埋め込みを禁止する。
+        ただし type="application/json" のデータブロック（lazy-manifest）は
+        実行可能コードではないため対象外。"""
         import re
 
         resp = await client.get(f"/dashboard/{PERSONA}")
         assert resp.status_code == 200
-        inline = re.findall(r"<script(?![^>]*\bsrc=)", resp.text)
+        inline = [
+            tag
+            for tag in re.findall(r"<script(?![^>]*\bsrc=)[^>]*>", resp.text)
+            if 'type="application/json"' not in tag
+        ]
         assert inline == [], f"inline <script> tags found: {len(inline)}"
 
     async def test_api_dashboard_returns_json(self, client):
@@ -1169,3 +1175,36 @@ class TestCompatLegacySwitch:
         assert body["data"] is None
         assert body["error"]["code"] == "INTERNAL"
         assert "state unavailable" in body["error"]["message"]
+
+
+class TestChatLayout:
+    """GET /api/chat/{persona}/layout — v4 lazy chat body (BLOCK-1/2 回帰網)."""
+
+    async def test_layout_returns_inner_only(self, client):
+        """200 + inner 本体を含み、wrapper・資産タグを含まない（BLOCK-1/2）。"""
+        resp = await client.get(f"/api/chat/{PERSONA}/layout")
+        assert resp.status_code == 200
+        html = resp.text
+        # inner 本体
+        assert 'id="chat-input"' in html
+        assert 'id="chat-messages"' in html
+        assert 'id="chat-layout"' not in html  # shell 側が SSR する
+        assert 'id="tab-chat"' not in html  # 二重化防止（BLOCK-1）
+        assert "highlight.min.js" not in html  # chunk が JS で読む（BLOCK-2）
+        assert "avatar.css" not in html
+
+    async def test_layout_invalid_persona_400(self, client):
+        """pattern 不正 persona は 400（middleware 検証）。"""
+        resp = await client.get("/api/chat/bad!persona/layout")
+        assert resp.status_code == 400
+
+    async def test_dashboard_ssrs_chat_shell(self, client):
+        """dashboard が chat shell（空 #chat-layout + tab-head）を SSR する。"""
+        resp = await client.get(f"/dashboard/{PERSONA}")
+        assert resp.status_code == 200
+        html = resp.text
+        assert 'id="tab-chat"' in html
+        assert 'id="chat-layout"' in html
+        assert 'id="chat-persona-avatar"' in html  # prefix の tab-head
+        # 75KB inner は first-paint に載せない
+        assert 'id="chat-input"' not in html

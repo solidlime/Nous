@@ -173,7 +173,7 @@ async function loadActivity(reset = false) {
 
         if (events.length === 0 && ACT.offset === 0) {
             safeSetHTML(feed, N.Components.skeleton.emptyState('activity', 'Activity', 'No session activity recorded yet.'));
-            if (typeof lucide !== 'undefined') lucide.createIcons();
+            N.Core.refreshIcons();
             return;
         }
 
@@ -209,7 +209,7 @@ async function loadActivity(reset = false) {
             loadMoreEl.remove();
         }
 
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        N.Core.refreshIcons();
     } catch (e) {
         console.error('activity load failed:', e);
         safeSetHTML(feed, N.Components.skeleton.errorCard('Failed to load activity', function(){ loadActivity(true); }));
@@ -280,7 +280,7 @@ function renderActivityFeed() {
     }
 
     safeSetHTML(feed, html);
-    if (typeof lucide !== 'undefined') lucide.createIcons();
+    N.Core.refreshIcons();
 }
 
 function toggleActivitySession(sid) {
@@ -315,7 +315,7 @@ function toggleActivitySession(sid) {
                 h += '</div></div>';
             }
             safeSetHTML(body, h);
-            if (typeof lucide !== 'undefined') lucide.createIcons();
+            N.Core.refreshIcons();
         }
     } else {
         sessionEl.classList.remove('open');

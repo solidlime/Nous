@@ -26,7 +26,7 @@ async function loadOverview() {
         const data = await api('/api/dashboard/' + encodeURIComponent(S.persona));
         if (!data || Object.keys(data).length === 0) {
             safeSetHTML(el, N.Components.skeleton.emptyState('pie-chart', 'Overview', 'No stats available for this persona yet.'));
-            if (typeof lucide !== 'undefined') lucide.createIcons();
+            N.Core.refreshIcons();
             return;
         }
         // ── Self-portrait in hero section ──
@@ -60,7 +60,14 @@ async function loadOverview() {
             genImagesHtml += '</div>';
             genImagesHtml += '</div>';
         }
-        S.dashCache = data;
+        // v4/B6: dashCache はセクション別。このローダが埋めるキーだけを書く。
+        if (!S.dashCache) S.dashCache = { overview: null, items: null, blocks: null, images: null };
+        S.dashCache.overview = { persona: data.persona, stats: data.stats, context: data.context,
+            state_memories: data.state_memories, goals: data.goals };
+        S.dashCache.items = data.items || [];
+        S.dashCache.blocks = data.blocks || [];
+        S.dashCache.images = { latest_self_portrait: data.latest_self_portrait,
+            generated_images: data.generated_images };
         const wikiPages = await wikiPromise;
         const stats = data.stats || {};
         const ctx = data.context || {};
@@ -339,11 +346,11 @@ async function loadOverview() {
             portraitEl2.style.display = 'none';
         }
 
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        N.Core.refreshIcons();
     } catch (e) {
         console.error('overview load failed:', e);
         safeSetHTML(el, N.Components.skeleton.errorCard('Failed to load dashboard stats', function(){ loadOverview(); }));
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        N.Core.refreshIcons();
     }
 }
 /* N.Features.Overview.loadOverview registered below */

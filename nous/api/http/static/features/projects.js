@@ -127,7 +127,7 @@ function init() {
     }
 }
 
-document.addEventListener('DOMContentLoaded', function() {
+N.Core.whenReady(function() {
     init();
     var container = document.querySelector('main.main-content');
     if (container) {

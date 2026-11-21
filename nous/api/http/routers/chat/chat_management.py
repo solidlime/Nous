@@ -3,7 +3,7 @@ from __future__ import annotations
 import json
 from typing import TYPE_CHECKING, Any
 
-from starlette.responses import JSONResponse, Response
+from starlette.responses import HTMLResponse, JSONResponse, Response
 
 from nous.api.http.deps import _PERSONA_PATTERN
 from nous.api.http.routers.chat.chat_stream import _resolve_request
@@ -601,6 +601,23 @@ async def list_mcp_tools(request: Request) -> JSONResponse:
     if not ctx:
         return JSONResponse({"error": "Persona not found"}, status_code=404)
     return JSONResponse(await _do_list_mcp_tools(persona, ctx))
+
+
+async def get_chat_layout(request: Request) -> HTMLResponse:
+    """GET /api/chat/{persona}/layout — chat tab inner markup for lazy first visit.
+
+    Returns the inner only (memory panel + main + sidebar, no wrapper, no
+    asset tags): chat.chunk.js injects it into the SSR'd empty #chat-layout
+    BEFORE loading any chat script, so script-time bindings find their DOM
+    (innerHTML would neither execute <script> nor apply <link>). The shell
+    (wrapper + tab-head) is server-rendered by dashboard.py.
+    """
+    from nous.api.http.sections.chat import render_chat_inner
+
+    persona, ctx = _resolve_request(request)
+    if not ctx:
+        return HTMLResponse("<div>Persona not found</div>", status_code=404)
+    return HTMLResponse(render_chat_inner(persona))
 
 
 async def get_chat_commitments(request: Request) -> JSONResponse:

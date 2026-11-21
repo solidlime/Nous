@@ -106,7 +106,7 @@ function _endSession(reason) {
   if (session.seekBar && document.contains(session.seekBar)) session.seekBar.remove();
   if (session.btn && document.contains(session.btn)) {
     safeSetHTML(session.btn, '<i data-lucide="volume-2"></i>');
-    if (typeof lucide !== "undefined") lucide.createIcons();
+    N.Core.refreshIcons();
   }
   _playbackSession = null;
 }
@@ -134,7 +134,7 @@ function _showPlayPrompt(containerDiv, audio, btn) {
       if (btn) {
         btn.classList.add("playing");
         safeSetHTML(btn, '<i data-lucide="pause"></i>');
-        if (typeof lucide !== "undefined") lucide.createIcons();
+        N.Core.refreshIcons();
       }
     }).catch(function(err2) {
       console.error("[TTS] Play prompt failed:", err2);
@@ -169,7 +169,7 @@ function _setupAudio(audio, audioUrl, btn, containerDiv) {
     btn.classList.add("playing");
     safeSetHTML(btn, '<i data-lucide="pause"></i>');
     btn.disabled = false;
-    if (typeof lucide !== "undefined") lucide.createIcons();
+    N.Core.refreshIcons();
   }
   
   audio.onended = function() {
@@ -326,7 +326,7 @@ async function playTts(btn, text) {
     if (_playbackSession.audio.paused) {
       _playbackSession.audio.play();
       safeSetHTML(btn, '<i data-lucide="pause"></i>');
-      if (typeof lucide !== "undefined") lucide.createIcons();
+      N.Core.refreshIcons();
       return;
     }
   }
@@ -335,7 +335,7 @@ async function playTts(btn, text) {
   if (_playbackSession && _playbackSession.btn === btn && !_playbackSession.audio.paused) {
     _playbackSession.audio.pause();
     safeSetHTML(btn, '<i data-lucide="play"></i>');
-    if (typeof lucide !== "undefined") lucide.createIcons();
+    N.Core.refreshIcons();
     return;
   }
   
@@ -367,13 +367,13 @@ async function playTts(btn, text) {
       console.warn("[TTS] Synthesis failed:", resp.error || "unknown");
       safeSetHTML(btn, '<i data-lucide="volume-2"></i>');
       btn.disabled = false;
-      if (typeof lucide !== "undefined") lucide.createIcons();
+      N.Core.refreshIcons();
     }
   } catch (e) {
     console.error("[TTS] Request error:", e.message);
     safeSetHTML(btn, '<i data-lucide="volume-2"></i>');
     btn.disabled = false;
-    if (typeof lucide !== "undefined") lucide.createIcons();
+    N.Core.refreshIcons();
   }
 }
 

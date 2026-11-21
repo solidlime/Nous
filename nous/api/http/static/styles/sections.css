@@ -626,6 +626,7 @@ mark.wiki-hit { background:rgba(250,204,21,0.35); color:inherit; border-radius:3
 }
 
 
+/* @shell:begin */
 /* ============================================================
    MISSION DECK — shell (rail / app-body / command bar)
    追記のみ。既存規則は変更しない。
@@ -716,6 +717,7 @@ body:has(#tab-chat.active) .md-cmdbar { display: none; }
     .tab-bar-logo { display: none; }
 }
 
+/* @shell:end */
 /* ============================================================
    MISSION DECK — md-* overview components
    モック output/dashboard-a-hifi.html から移植。変数は variables.css

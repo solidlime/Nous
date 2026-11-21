@@ -6,6 +6,7 @@ from nous.api.http.routers.persona.persona_dashboard import (
     dashboard_page,
     dashboard_page_persona,
 )
+from nous.api.http.routers.persona.persona_dashboard_v2 import register_persona_v2_routes
 from nous.api.http.routers.persona.persona_health import health, list_personas
 
 __all__ = ["register_persona_routes"]
@@ -25,3 +26,4 @@ def register_persona_routes(mcp) -> None:
     mcp.custom_route("/api/personas/{persona}", methods=["DELETE"])(delete_persona)
     # d5: card.png削除（内部使用ゼロ）。profile PUTはscripts/seed.pyが使用中のため残す。
     mcp.custom_route("/api/personas/{persona}/profile", methods=["PUT"])(update_persona_profile)
+    register_persona_v2_routes(mcp)

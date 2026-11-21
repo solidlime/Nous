@@ -96,6 +96,11 @@ def render_chat_main() -> str:
                 </div>"""
 
 
+_CHAT_CLOSERS = """
+            </div>
+        </section>"""
+
+
 def render_chat_layout_suffix() -> str:
     """Return the closing HTML (layout close, highlight.js, media viewer, section close)."""
     return """
@@ -110,3 +115,13 @@ def render_chat_layout_suffix() -> str:
                  shared by Chat attachments and Overview Generated Images; must not
                  live inside a tab panel or it leaks / hides across tab switches). -->
         </section>"""
+
+
+def render_chat_shell(persona: str = "") -> str:
+    """v4 first-paint shell: prefix + empty #chat-layout + closers (no assets).
+
+    資産タグ（highlight/avatar.css/chat-mode module）は innerHTML 注入では
+    実行・適用されないため、遅延パスでは chat.chunk.js が JS で読み込む。
+    ここには含めない。
+    """
+    return render_chat_layout_prefix(persona) + _CHAT_CLOSERS

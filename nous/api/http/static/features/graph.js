@@ -430,7 +430,7 @@ function renderNetwork(container, nodes, edges) {
         if (graphNetwork) { graphNetwork.destroy(); graphNetwork = null; }
         if (loading) loading.style.display = 'none';
         safeSetHTML(container, N.Components.skeleton.emptyState('share-2', 'Knowledge Graph', 'No connections found. Memories with relationships will appear here.'));
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        N.Core.refreshIcons();
         return;
     }
 

@@ -380,7 +380,7 @@
     if (btn) {
       btn.disabled = true;
       safeSetHTML(btn, '<i data-lucide="loader"></i> 保存中...');
-      if (typeof lucide !== "undefined") lucide.createIcons();
+      N.Core.refreshIcons();
     }
     try {
       const cfg = await api(
@@ -398,7 +398,7 @@
       if (btn) {
         btn.disabled = false;
         safeSetHTML(btn, '<i data-lucide="save"></i> 設定を保存');
-        if (typeof lucide !== "undefined") lucide.createIcons();
+        N.Core.refreshIcons();
       }
     }
   }

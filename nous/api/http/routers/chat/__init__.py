@@ -19,6 +19,7 @@ from nous.api.http.routers.chat.chat_management import (  # noqa: F401
     execute_chat_tool,
     get_chat_commitments,
     get_chat_config,
+    get_chat_layout,
     get_config_defaults,
     list_mcp_tools,
     memory_image_serve,
@@ -42,6 +43,7 @@ def register_chat_routes(mcp) -> None:
     mcp.custom_route("/api/chat/{persona}", methods=["POST"])(chat_endpoint)
     mcp.custom_route("/api/chat/{persona}/events", methods=["GET"])(chat_events)
     mcp.custom_route("/api/chat/{persona}/approval", methods=["POST"])(chat_approval)
+    mcp.custom_route("/api/chat/{persona}/layout", methods=["GET"])(get_chat_layout)
     mcp.custom_route("/api/chat/{persona}/commitments", methods=["GET"])(get_chat_commitments)
     mcp.custom_route("/api/chat/{persona}/sessions/{session_id}", methods=["GET"])(get_chat_session)
     mcp.custom_route("/api/chat/{persona}/sessions/{session_id}", methods=["DELETE"])(delete_chat_session)

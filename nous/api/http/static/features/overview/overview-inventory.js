@@ -54,15 +54,23 @@ async function saveNewItem() {
     }
 }
 
-function openEditItemModal(itemName) {
-    var item = null;
-    if (S.dashCache && S.dashCache.items) {
-        var items = S.dashCache.items;
-        for (var i = 0; i < items.length; i++) {
-            if (items[i].name === itemName) { item = items[i]; break; }
+async function openEditItemModal(itemName) {
+    // v4/B6: items はセクション別キャッシュ。未取得なら v2 分割 API で埋める。
+    if (!S.dashCache) S.dashCache = { overview: null, items: null, blocks: null, images: null };
+    if (!S.dashCache.items || !S.dashCache.items.length) {
+        try {
+            S.dashCache.items = (await api('/api/v2/items/' + encodeURIComponent(S.persona))).items || [];
+        } catch (e) {
+            toast('Failed to load items: ' + e.message, 'error');
+            return;
         }
     }
-    if (!item) { toast('Item not found in cache', 'error'); return; }
+    var item = null;
+    var items = S.dashCache.items;
+    for (var i = 0; i < items.length; i++) {
+        if (items[i].name === itemName) { item = items[i]; break; }
+    }
+    if (!item) { toast('Item not found', 'error'); return; }
     document.getElementById('edit-item-original-name').value = itemName;
     document.getElementById('edit-item-name').value = item.name || '';
     document.getElementById('edit-item-category').value = item.category || '';

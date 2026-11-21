@@ -4,7 +4,8 @@
    onchange/onload/onerror); every interactive element carries data-*
    attributes instead, routed here via document-level listeners
    (chat-memory-panel.js precedent: data-* + closest + addEventListener).
-   Loaded LAST in render_head so window.Nous exists. Runtime N.*
+   Loaded LAST in render_head so window.Nous exists (v3 wording; now
+   concatenated into shell.js — generated file, rebuild via build-css.mjs). Runtime N.*
    lookups only — no captured references (defer order independent).
    ================================================================= */
 ;(function() {
@@ -208,13 +209,18 @@
   // Persona avatar fallback (replaces inline onload/onerror on
   // #chat-persona-avatar). Listeners cover later src swaps via SSE;
   // the init checks cover empty src + already-settled images.
+  // NOTE: auth.js (N.Core.auth) is a lazy shared chunk — shell.js より
+  // 後に走る。shell 時に署名はできないので、その場合は bound にせず
+  // loadChat の再フック（N.Core.bindAvatar）に委ねる。bound フラグを
+  // auth ガードより先に立てると冪等ガードが再フックを締め出すため順序厳守。
   // ------------------------------------------------------------------
   function bindAvatar() {
     var avatar = document.getElementById("chat-persona-avatar");
     if (!avatar || avatar._avatarBound) return;
+    var rawSrc = avatar.getAttribute("src");
+    if (rawSrc && !N.Core.auth) { avatar.style.display = "none"; return; }
     avatar._avatarBound = true;
     /* #102: サーバ埋め込みの src=/api/... は img なので鍵を URL で受け取る。 */
-    var rawSrc = avatar.getAttribute("src");
     if (rawSrc && avatar.src !== N.Core.auth.sign(rawSrc)) {
       avatar.src = N.Core.auth.sign(rawSrc);
     }
@@ -227,4 +233,8 @@
     }
   }
   bindAvatar();
+  // v4: avatar は shell SSR 要素（#chat-layout の外）のため shell 時に bind
+  // できる。ただし auth.js 未ロードで portrait ありの場合は署名できず
+  // 早期 return するので、その完成は loadChat の再フックが担う（冪等）。
+  if (N.Core) N.Core.bindAvatar = bindAvatar;
 })();

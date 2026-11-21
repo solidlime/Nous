@@ -1,13 +1,107 @@
-"""Base layout components for the Nous Dashboard.
-
-Provides the shared HTML head, navigation bar, utility JavaScript,
-and the overall page shell that section-specific renderers plug into.
-"""
-
 import html
 import json
 
 from nous import __version__
+
+# ---------------------------------------------------------------------------
+# 0. Lazy manifest — single source of truth for everything off the first-paint
+#    path (v4). static/core/ready.js reads this tag and fetches a tab's sources
+#    the first time the tab is opened.
+# ---------------------------------------------------------------------------
+LAZY_MANIFEST: dict = {
+    "v": 4,
+    "css": "/static/styles/tabs-lazy.css",
+    "deps": {
+        "chart": "https://cdn.jsdelivr.net/npm/chart.js@4",
+        "marked": "https://cdn.jsdelivr.net/npm/marked@12/marked.min.js",
+        "dompurify": "https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js",
+        "vis-network": "https://unpkg.com/vis-network/standalone/umd/vis-network.min.js",
+        "vis-timeline": "https://unpkg.com/vis-timeline/standalone/umd/vis-timeline-graph2d.min.js",
+        "vis-timeline-css": "https://unpkg.com/vis-timeline/styles/vis-timeline-graph2d.min.css",
+        "lucide": "/static/vendor/lucide.min.js",
+    },
+    # loaded before any tab's own sources
+    "base": ["lucide", "marked", "dompurify"],
+    # cores that are not in shell.js but are shared by tabs
+    "shared": [
+        "/static/core/constants.js",
+        "/static/core/time.js",
+        "/static/core/auth.js",
+        "/static/core/modal.js",
+        "/static/components/chart.js",
+        "/static/components/memory-card.js",
+        "/static/components/mem-modal.js",
+    ],
+    "tabs": {
+        "overview": {
+            "scripts": ["/static/features/overview.chunk.js"],
+            "ready": "Nous.Features.Overview.chunk.load",
+            "deps": ["chart"],
+            # B2: chunk前の原典。manifestがSSRに埋め込まれるため
+            # 契約文字列（test_wiki_router.py）もここで維持される。
+            "sources": [
+                "/static/features/overview/overview-blocks.js",
+                "/static/features/overview/overview-inventory.js",
+                "/static/features/overview/overview-core.js",
+                "/static/features/overview/overview-stats.js",
+                "/static/features/overview/overview-charts.js",
+                "/static/features/overview/overview-context.js",
+            ],
+        },
+        "memories": {
+            "scripts": ["/static/features/memories.chunk.js"],
+            "ready": "Nous.Features.Memories.chunk.load",
+            "deps": ["chart"],
+            "sources": [
+                "/static/features/memories/memories-core.js",
+                "/static/features/memories/memories-list.js",
+                "/static/features/memories/memories-search.js",
+                "/static/features/memories/memories-edit.js",
+            ],
+        },
+        "wiki": {
+            "scripts": ["/static/features/misc.chunk.js"],
+            "ready": "Nous.Features.Misc.chunk.load",
+            "sources": ["/static/features/wiki.js"],
+        },
+        "projects": {
+            "scripts": ["/static/features/misc.chunk.js"],
+            "ready": "Nous.Features.Misc.chunk.load",
+            "sources": ["/static/features/projects.js"],
+        },
+        # chat owns its 31 sources + the avatar module, so it ships a loader
+        "chat": {"scripts": ["/static/chat/chat.chunk.js"], "ready": "Nous.Chat.chunk.load"},
+        "activity": {
+            "scripts": ["/static/features/misc.chunk.js"],
+            "ready": "Nous.Features.Misc.chunk.load",
+            "sources": ["/static/features/activity.js"],
+        },
+        "settings": {
+            "scripts": ["/static/features/misc.chunk.js"],
+            "ready": "Nous.Features.Misc.chunk.load",
+            "sources": [
+                "/static/features/settings/settings-validation.js",
+                "/static/features/settings/settings-save.js",
+                "/static/features/settings/settings-ui.js",
+                "/static/features/settings/settings-form.js",
+                "/static/features/settings/settings-core.js",
+            ],
+        },
+        "timeline": {
+            "scripts": ["/static/features/misc.chunk.js"],
+            "ready": "Nous.Features.Misc.chunk.load",
+            "deps": ["vis-timeline", "vis-timeline-css"],
+            "sources": ["/static/features/timeline.js"],
+        },
+        "graph": {
+            "scripts": ["/static/features/misc.chunk.js"],
+            "ready": "Nous.Features.Misc.chunk.load",
+            "deps": ["vis-network"],
+            "sources": ["/static/features/graph.js"],
+        },
+    },
+}
+
 
 # ---------------------------------------------------------------------------
 # 1. render_head
@@ -15,113 +109,56 @@ from nous import __version__
 
 
 def render_head() -> str:
-    """Return the full <head>…</head> block (meta, CDN scripts, all CSS)."""
-    return r"""<head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Nous Dashboard</title>
-    <link rel="icon" type="image/png" href="/static/icon.png">
-    <link rel="apple-touch-icon" href="/static/icon.png">
-    <!-- Inter font for non-Apple devices (Apple devices use SF Pro via system stack) -->
-    <link rel="preconnect" href="https://fonts.googleapis.com">
-    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap" rel="stylesheet">
-    <script src="https://cdn.jsdelivr.net/npm/chart.js@4" defer></script>
-    <script src="https://unpkg.com/vis-network/standalone/umd/vis-network.min.js" defer></script>
-    <link href="https://unpkg.com/vis-timeline/styles/vis-timeline-graph2d.min.css" rel="stylesheet" />
-    <script src="https://unpkg.com/vis-timeline/standalone/umd/vis-timeline-graph2d.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/marked@12/marked.min.js" defer></script>
-    <script src="https://cdn.jsdelivr.net/npm/dompurify@3/dist/purify.min.js" defer></script>
-    <script src="/static/vendor/lucide.min.js" defer></script>
-    <link rel="stylesheet" href="/static/styles/variables.css">
-    <link rel="stylesheet" href="/static/styles/reset.css">
-    <link rel="stylesheet" href="/static/styles/layout.css">
-    <link rel="stylesheet" href="/static/styles/theme.css">
-    <link rel="stylesheet" href="/static/styles/components.css">
-    <link rel="stylesheet" href="/static/styles/chat.css">
-    <link rel="stylesheet" href="/static/styles/chat-mobile.css">
-    <link rel="stylesheet" href="/static/styles/utilities.css">
-    <!-- sections.css は必ず最後・unlayered を維持（埋め込み <style> と等価な強さ。link 順・@layer 無登録を崩さない） -->
-    <link rel="stylesheet" href="/static/styles/sections.css">
-    <!-- Nous Core Modules (Phase 1: Foundation) -->
-    <script src="/static/core/namespace.js" defer></script>
-    <script src="/static/core/constants.js" defer></script>
-    <script src="/static/core/store.js" defer></script>
-    <script src="/static/core/dom.js" defer></script>
-    <script src="/static/core/time.js" defer></script>
-    <script src="/static/core/api.js" defer></script>
-    <script src="/static/core/auth.js" defer></script>
-    <script src="/static/core/toast.js" defer></script>
-    <script src="/static/core/modal.js" defer></script>
-    <script src="/static/core/theme.js" defer></script>
-    <script src="/static/core/sse.js" defer></script>
-    <!-- UI Components (Phase 5) — registered as N.Components.* -->
-    <script src="/static/components/skeleton.js" defer></script>
-    <script src="/static/components/memory-card.js" defer></script>
-    <script src="/static/components/mem-modal.js" defer></script>
-    <script src="/static/components/chart.js" defer></script>
-    <!-- Base application shell — must load before feature scripts -->
-    <script src="/static/base.js" defer></script>
-    <!-- Chat modules (Phase 3) -->
-    <script src="/static/chat/chat-core.js" defer></script>
-    <!-- Chat modules (Phase 3) — chat-settings.js / chat-send.js /
-         chat-history.js / chat-memory-panel.js are thin facades; the
-         split implementations load as sub-chunks below (script order
-         = dependency order). -->
-    <script src="/static/chat/chat-settings.js" defer></script>
-    <script src="/static/chat/settings/reset.js" defer></script>
-    <script src="/static/chat/settings/apply.js" defer></script>
-    <script src="/static/chat/settings/apply-groups.js" defer></script>
-    <script src="/static/chat/settings/save.js" defer></script>
-    <script src="/static/chat/chat-settings-mcp.js" defer></script>
-    <script src="/static/chat/chat-settings-image.js" defer></script>
-    <script src="/static/chat/chat-markdown.js" defer></script>
-    <script src="/static/chat/chat-send.js" defer></script>
-    <script src="/static/chat/send/render.js" defer></script>
-    <script src="/static/chat/send/turn.js" defer></script>
-    <script src="/static/chat/send/pending.js" defer></script>
-    <script src="/static/chat/send/turn-events.js" defer></script>
-    <script src="/static/chat/chat-history.js" defer></script>
-    <script src="/static/chat/history/render.js" defer></script>
-    <script src="/static/chat/history/session.js" defer></script>
-    <script src="/static/chat/history/restore.js" defer></script>
-    <script src="/static/chat/chat-memory-panel.js" defer></script>
-    <script src="/static/chat/memory-panel/panel.js" defer></script>
-    <script src="/static/chat/memory-panel/wiring.js" defer></script>
-    <script src="/static/chat/memory-panel/wiring-stream.js" defer></script>
-    <script src="/static/chat/memory-panel/wiring-detail.js" defer></script>
-    <script src="/static/chat/memory-panel/detail.js" defer></script>
-    <script src="/static/chat/chat-tools.js" defer></script>
-    <script src="/static/chat/chat-equipment.js" defer></script>
-    <script src="/static/chat/chat-commands.js" defer></script>
-    <script src="/static/chat/chat-attachments.js" defer></script>
-    <script src="/static/chat/chat-tts.js" defer></script>
-    <script src="/static/chat/chat-tts-stream.js" defer></script>
-    <script src="/static/chat/chat-voice.js" defer></script>
-    <!-- Feature page scripts (defer so N.Core is available) -->
-    <script src="/static/features/overview/overview-blocks.js" defer></script>
-    <script src="/static/features/overview/overview-inventory.js" defer></script>
-    <script src="/static/features/overview/overview-core.js" defer></script>
-    <script src="/static/features/overview/overview-stats.js" defer></script>
-    <script src="/static/features/overview/overview-charts.js" defer></script>
-    <script src="/static/features/overview/overview-context.js" defer></script>
-    <script src="/static/features/memories/memories-core.js" defer></script>
-    <script src="/static/features/memories/memories-list.js" defer></script>
-    <script src="/static/features/memories/memories-search.js" defer></script>
-    <script src="/static/features/memories/memories-edit.js" defer></script>
-    <script src="/static/features/settings/settings-validation.js" defer></script>
-    <script src="/static/features/settings/settings-save.js" defer></script>
-    <script src="/static/features/settings/settings-ui.js" defer></script>
-    <script src="/static/features/settings/settings-form.js" defer></script>
-    <script src="/static/features/settings/settings-core.js" defer></script>
-    <script src="/static/features/graph.js" defer></script>
-    <script src="/static/features/timeline.js" defer></script>
-    <script src="/static/features/wiki.js" defer></script>
-    <script src="/static/features/projects.js" defer></script>
-    <script src="/static/features/activity.js" defer></script>
-    <!-- CSP delegation receivers (data-* + addEventListener) — load last -->
-    <script src="/static/core/delegation.js" defer></script>
-</head>"""
+    """Return the full <head> block.
+
+    v4 first paint is one stylesheet (shell-critical.css) and one script
+    (shell.js). Fonts (system stack), lucide, the CDN libraries and every
+    tab's sources are declared in LAZY_MANIFEST and fetched on demand by
+    static/core/ready.js when the tab is first opened.
+    """
+    # A "</script>" inside the JSON would end the tag early — escape the slash.
+    manifest = json.dumps(LAZY_MANIFEST, separators=(",", ":"), ensure_ascii=False).replace("</", "<\\/")
+    return (
+        "<head>\n"
+        '    <meta charset="UTF-8">\n'
+        '    <meta name="viewport" content="width=device-width, initial-scale=1.0">\n'
+        "    <title>Nous Dashboard</title>\n"
+        '    <link rel="icon" type="image/png" href="/static/icon.png">\n'
+        '    <link rel="apple-touch-icon" href="/static/icon.png">\n'
+        "    <!-- v4: first paint carries one CSS and one JS. Everything else --\n"
+        "         fonts, lucide, CDN libs, tab sources -- is the lazy manifest. -->\n"
+        '    <link rel="stylesheet" href="/static/styles/shell-critical.css">\n'
+        '    <script src="/static/shell.js" defer></script>\n'
+        '    <script type="application/json" id="lazy-manifest">' + manifest + "</script>\n"
+        "</head>"
+    )
+
+
+# ---------------------------------------------------------------------------
+# 1b. Lazy tab panels
+# ---------------------------------------------------------------------------
+# Only the overview tab is server-rendered now; the other panels ship empty and
+# their sources fill them on first visit. Two exceptions:
+#   * skeleton.js looks for a direct [id$="-content"] child, so the tabs that
+#     are not self-managed carry one (memories/settings, plus the panel divs
+#     projects/graph already own).
+#   * self-managed tabs (wiki/projects/chat/activity/timeline/graph) build
+#     their own DOM -- markup inserted here would be replaced by their loader.
+_TAB_CONTENT_IDS = {
+    "memories": "memories-content",
+    "settings": "settings-content",
+    "projects": "project-content",
+    "graph": "graph-content",
+}
+
+
+def render_lazy_tab(tab_id: str) -> str:
+    """Return an empty tab panel for a lazily loaded tab."""
+    content_id = _TAB_CONTENT_IDS.get(tab_id)
+    inner = f'\n            <div id="{content_id}"></div>' if content_id else ""
+    return (
+        '        <section id="tab-' + tab_id + '" class="tab-panel" role="tabpanel">' + inner + "\n        </section>"
+    )
 
 
 # ---------------------------------------------------------------------------

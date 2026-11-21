@@ -72,6 +72,7 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
     font-size: 0.78rem; color: var(--text-muted);
 }
 
+/* @shell:begin */
 /* ============================================================
    SKELETON LOADING — Apple HIG Style
    ============================================================ */
@@ -107,6 +108,7 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 /* #111: elapsed badge under a live skeleton — makes a slow fetch read as "slow", not "frozen" */
 .skeleton-elapsed { margin-top: 12px; text-align: center; font-size: 0.85rem; color: var(--text-muted); }
 
+/* @shell:end */
 /* ============================================================
    PROGRESS BAR — Apple HIG Style
    ============================================================ */
@@ -342,6 +344,7 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
     transform: scale(0.98);
 }
 
+/* @shell:begin */
 /* ============================================================
    TOAST NOTIFICATION — Apple HIG iOS Style
    ============================================================ */
@@ -386,6 +389,8 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
     }
 }
 
+/* @shell:end */
+/* @shell:begin */
 /* ============================================================
    MEMORY DETAIL MODAL — Apple HIG Style
    ============================================================ */
@@ -415,6 +420,7 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
 .mem-modal-row:last-child { border-bottom: none; }
 .mem-modal-key { color: var(--text-muted); min-width: 100px; flex-shrink: 0; }
 
+/* @shell:end */
 /* ============================================================
    EMPTY STATE — Apple HIG Style
    ============================================================ */
@@ -911,6 +917,7 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
     }
 }
 
+/* @shell:begin */
 /* ============================================================
    OVERVIEW MODALS — generated via safeSetHTML (DOMPurify strips
    style attributes, so all styling must live in these classes)
@@ -1053,6 +1060,7 @@ textarea.ov-field {
     box-sizing: border-box;
 }
 
+/* @shell:end */
 /* Equipment / inventory / highlight rows in generated overview HTML */
 .ov-equip-list {
     display: grid;

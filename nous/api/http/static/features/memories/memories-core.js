@@ -78,12 +78,22 @@ async function loadMemories(page) {
     var el = document.getElementById('memories-content');
     N.Components.skeleton.show('memories');
 
-    // --- Dashboard stats/stats/blocks/charts（Overview から移設）---
-    if (!S.dashCache) {
-        S.dashCache = await api('/api/dashboard/' + encodeURIComponent(S.persona));
-    }
-    const ds = S.dashCache;
-    const stats = ds.stats || {};
+    // --- Dashboard stats/blocks/goals/charts（Overview から移設）---
+    // v4/B6: dashCache はセクション別。v1 の全量 1 本（/api/dashboard）は引かず、
+    // stats= v2 overview、blocks/goals= v2 分割、7日分= 既存 /api/observations で賄う。
+    var _pid = encodeURIComponent(S.persona);
+    if (!S.dashCache) S.dashCache = { overview: null, items: null, blocks: null, images: null };
+    var dc = S.dashCache;
+    var _res = await Promise.all([
+        dc.overview || api('/api/v2/overview/' + _pid),
+        dc.blocks || api('/api/v2/blocks/' + _pid),
+        api('/api/observations/' + _pid + '?mode=recent&per_page=7'),
+        api('/api/v2/goals/' + _pid)
+    ]);
+    dc.overview = _res[0];
+    dc.blocks = _res[1].blocks || [];
+    const ds = { blocks: dc.blocks, recent: _res[2].memories || [], goals: _res[3].goals || [] };
+    const stats = dc.overview.stats || {};
 
     // Build stats HTML
     const tagDist = stats.tag_distribution || {};
@@ -218,14 +228,14 @@ async function loadMemories(page) {
         } else if (tgCtx) {
             safeSetHTML(tgCtx.parentElement, '<div>No tags yet</div>');
         }
-        if (typeof lucide !== 'undefined') lucide.createIcons();
+        N.Core.refreshIcons();
     }, 100);
 
     /* Build tag dropdown options from cache */
     var tagOptions = '<option value="">All Tags</option>';
     var allKnownTags = [];
-    if (S.dashCache && S.dashCache.stats && S.dashCache.stats.tag_distribution) {
-        Object.keys(S.dashCache.stats.tag_distribution).sort().forEach(function(t) {
+    if (stats.tag_distribution) {
+        Object.keys(stats.tag_distribution).sort().forEach(function(t) {
             tagOptions += '<option value="' + esc(t) + '"' + (S.mem.tag === t ? ' selected' : '') + '>' + esc(t) + '</option>';
             allKnownTags.push(t);
         });

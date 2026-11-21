@@ -154,4 +154,28 @@ describe('delegation forms + avatar', () => {
     avatar.dispatchEvent(new Event('error'));
     expect(avatar.style.display).toBe('none');
   });
+
+  it('defers avatar signing until auth exists (no throw, stays hidden, unbound)', () => {
+    // shell.js は auth.js より先に走る。portrait あり persona では
+    // shell 時の bindAvatar がこの経路を通る。
+    const N = window.Nous;
+    const savedAuth = N.Core.auth;
+    delete N.Core.auth;
+    try {
+      const avatar = document.getElementById('chat-persona-avatar');
+      delete avatar._avatarBound;
+      avatar.setAttribute('src', 'http://example.invalid/y.png');
+      avatar.style.display = '';
+      expect(() => N.Core.bindAvatar()).not.toThrow();
+      expect(avatar._avatarBound).toBeFalsy();
+      expect(avatar.style.display).toBe('none');
+      // auth 到着後の再フックで bound される
+      N.Core.auth = { sign: (u) => u };
+      N.Core.bindAvatar();
+      expect(avatar._avatarBound).toBe(true);
+    } finally {
+      if (savedAuth === undefined) delete N.Core.auth;
+      else N.Core.auth = savedAuth;
+    }
+  });
 });

@@ -201,7 +201,7 @@ function updateReflectionPanel(insights) {
   const header = document.getElementById("reflection-header");
   if (header) {
     safeSetHTML(header, '<i data-lucide="sparkles"></i> リフレクション');
-    if (typeof lucide !== "undefined") lucide.createIcons();
+    N.Core.refreshIcons();
   }
   const list = document.getElementById("memory-reflection-list");
   if (!list) return;

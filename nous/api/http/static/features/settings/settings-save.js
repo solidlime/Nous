@@ -285,7 +285,7 @@ function updateCategoryStatusBanners(rs) {
                     var body = card.querySelector('.cat-body');
                     if (body) body.insertAdjacentElement('beforebegin', div);
                 }
-                if (typeof lucide !== 'undefined') lucide.createIcons();
+                N.Core.refreshIcons();
             } else if (existing) {
                 existing.remove();
             }

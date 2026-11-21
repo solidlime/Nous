@@ -40,6 +40,11 @@ export function loadCore() {
   functionEval('dom.js');
   functionEval('time.js');
   functionEval('api.js');
+  /* shell.js ships ready.js (v4 lazy bootstrap). Feature files loaded directly
+     by a test call whenReady(fn) at top level; under jsdom their old
+     DOMContentLoaded listener never fired either, so a no-op keeps the same
+     "init does not run during load" behaviour. */
+  window.Nous.Core.whenReady = window.Nous.Core.whenReady || function () {};
 }
 
 /**

@@ -260,7 +260,7 @@ function renderSettings(el, settings, status) {
             var isPassword = input.type === 'password';
             input.type = isPassword ? 'text' : 'password';
             safeSetHTML(this, isPassword ? '<i data-lucide="eye-off"></i>' : '<i data-lucide="eye"></i>');
-            if (typeof lucide !== 'undefined') lucide.createIcons();
+            N.Core.refreshIcons();
         };
     });
 
@@ -285,7 +285,7 @@ function renderSettings(el, settings, status) {
                 btn.style.cursor = 'not-allowed';
                 safeSetHTML(btn, '<i data-lucide="save"></i> Apply Restart-Required Changes');
             }
-            if (typeof lucide !== 'undefined') lucide.createIcons();
+            N.Core.refreshIcons();
         }
 
         /* Attach change listeners to all restart-required fields */

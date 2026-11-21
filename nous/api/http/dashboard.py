@@ -6,10 +6,9 @@ its own module under ``sections/``.
 """
 
 from .sections.activity import render_activity_tab
-from .sections.base import render_layout_shell, render_nav
-from .sections.chat import render_chat_tab
+from .sections.base import render_layout_shell, render_lazy_tab, render_nav
+from .sections.chat import render_chat_shell
 from .sections.knowledge_graph import render_graph_tab
-from .sections.memories import render_memories_tab
 from .sections.overview import render_overview_tab
 from .sections.projects import render_project_tab
 from .sections.settings import render_settings_tab
@@ -78,19 +77,23 @@ def render_dashboard(persona: str | None = None) -> str:
 
     nav_html = render_nav(tabs)
 
-    tab_contents = "\n".join(
-        [
-            render_overview_tab(),
-            render_memories_tab(),
-            render_wiki_tab(),
-            render_project_tab(),
-            render_timeline_tab(),
-            render_graph_tab(),
-            render_chat_tab(persona or ""),
-            render_activity_tab(),
-            render_settings_tab(),
-        ]
-    )
+    # v4: overview + 6 small tabs are server-rendered (~11KB total markup).
+    # Chat ships its shell only (~1KB: wrapper + tab-head + empty #chat-layout);
+    # the 75KB inner (memory + main + sidebar) comes from
+    # /api/chat/{persona}/layout and is injected by chat.chunk.js BEFORE any
+    # chat script runs (innerHTML never executes <script>, and lazy scripts
+    # would bind to missing DOM — BLOCK-1/2).
+    _ssr_tabs = {
+        "overview": render_overview_tab,
+        "wiki": render_wiki_tab,
+        "projects": render_project_tab,
+        "activity": render_activity_tab,
+        "settings": render_settings_tab,
+        "timeline": render_timeline_tab,
+        "graph": render_graph_tab,
+        "chat": lambda: render_chat_shell(persona or ""),
+    }
+    tab_contents = "\n".join([(fn() if (fn := _ssr_tabs.get(t["id"])) else render_lazy_tab(t["id"])) for t in tabs])
 
     import re
 

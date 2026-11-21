@@ -5,13 +5,21 @@ var N = window.Nous;
    STATE
    ================================================================= */
 const PER_PAGE = 20;
+
+/* v4/B6: dashCache はセクション別。各ローダは自分が必要とするキーだけ埋める
+   （overview=KPI/recent/blocks/goals, items=inventory, blocks=core blocks,
+   images=portrait+generated）。全量 1 本前提のままだと memories/inventory が空になる。 */
+function emptyDashCache() {
+  return { overview: null, items: null, blocks: null, images: null };
+}
+
 const S = {
   persona: null,
   tab: localStorage.getItem("mmcp-tab") || "overview",
   charts: {},
   mem: { page: 1, tag: "", q: "", perPage: PER_PAGE },
   statusPoll: null,
-  dashCache: null,
+  dashCache: emptyDashCache(),
   initTime: Date.now(),
 };
 window.S = S;
@@ -48,7 +56,7 @@ function renderNoPersona(tab) {
   var c = N.Components.skeleton.panelContentEl(tab);
   if (!c) return;
   safeSetHTML(c, N.Components.skeleton.emptyState("user-plus", NO_PERSONA_MSG));
-  if (typeof lucide !== "undefined") lucide.createIcons();
+  N.Core.refreshIcons();
 }
 
 /* Persona storage helpers — write to both keys for backward compatibility */
@@ -98,7 +106,7 @@ function switchTab(tab) {
   loadTab(tab);
   // Lucide.createIcons() skips already-rendered <i> tags, so this is safe to call broadly
   setTimeout(() => {
-    if (typeof lucide !== "undefined") lucide.createIcons();
+    N.Core.refreshIcons();
   }, 100);
 }
 N.Core.switchTab = switchTab;
@@ -114,35 +122,52 @@ function resolvePathFn(path) {
   }
   return typeof obj === "function" ? obj : null;
 }
+/* Run a tab loader with its data-loader-args (fn is already resolved). */
+function callLoader(tab, btn, fn) {
+  /* #93: loaderArgs is a complete JSON array emitted by dashboard.py —
+     guard anyway so a bad value can't kill the switch after
+     showSkeleton() already ran. */
+  var args;
+  try {
+    args = btn.dataset.loaderArgs ? JSON.parse(btn.dataset.loaderArgs) : [];
+  } catch (e) {
+    /* #93: args parsing runs after showSkeleton(), so this cannot change
+       skeleton behavior — the warn exists because falling back to [] would
+       otherwise let the loader run silently with wrong arguments
+       (e.g. activity keeps its stale feed on reset=false). */
+    console.warn("bad data-loader-args:", tab, e);
+    args = [];
+  }
+  fn.apply(null, args);
+}
+
 function loadTab(tab) {
-  /* #93: no persona yet (defensive path — the server usually redirects to
-     the setup page): draw guidance instead of leaving showSkeleton()'s
+  /* #93: no persona yet (defensive path — the server usually redirects to the
+     setup page): draw guidance instead of leaving showSkeleton()'s
      skeleton up forever. */
   if (!S.persona && tab !== "settings") {
     renderNoPersona(tab);
     return;
   }
   var btn = Array.from(document.querySelectorAll(".tab-btn")).find(function(b) { return b.dataset.tab === tab; }) || null;
-  var fn = btn && btn.dataset.loader ? resolvePathFn(btn.dataset.loader) : null;
+  var path = btn && btn.dataset.loader ? btn.dataset.loader : "";
+  var fn = path ? resolvePathFn(path) : null;
   if (fn) {
-    /* #93: loaderArgs is a complete JSON array emitted by dashboard.py —
-       guard anyway so a bad value can't kill the switch after
-       showSkeleton() already ran. */
-    var args;
-    try {
-      args = btn.dataset.loaderArgs ? JSON.parse(btn.dataset.loaderArgs) : [];
-    } catch (e) {
-      /* #93: args parsing runs after showSkeleton(), so this cannot change
-         skeleton behavior — the warn exists because falling back to [] would
-         otherwise let the loader run silently with wrong arguments
-         (e.g. activity keeps its stale feed on reset=false). */
-      console.warn("bad data-loader-args:", tab, e);
-      args = [];
-    }
-    fn.apply(null, args);
-  } else {
-    console.warn("[loadTab] loader not found for tab:", tab);
+    callLoader(tab, btn, fn);
+    return;
   }
+  if (!path) {
+    console.warn("[loadTab] loader not found for tab:", tab);
+    return;
+  }
+  /* v4: a tab's sources are not in the document any more — they arrive on the
+     first visit (static/core/ready.js). Resolve the loader path again once
+     they land, then run it. */
+  return C.loadTabScripts(tab).then(function() {
+    var late = resolvePathFn(path);
+    if (late) callLoader(tab, btn, late);
+    else console.warn("[loadTab] loader not found for tab:", tab);
+  });
 }
 
 
@@ -169,7 +194,7 @@ async function init() {
       charts: {},
       mem: { page: 1, tag: "", q: "", perPage: PER_PAGE },
       statusPoll: null,
-      dashCache: null,
+      dashCache: emptyDashCache(),
       initTime: Date.now(),
     });
     // Bridge: bi-directional sync — S reads/writes go through store
@@ -224,7 +249,7 @@ async function init() {
     setStoredPersona(e.target.value);
     C.connectSSE(e.target.value);
     syncDeleteBtn();
-    S.dashCache = null;
+    S.dashCache = emptyDashCache();
     // Reset pagination/search without losing extended properties from memories.js
     Object.assign(S.mem, {
       page: 1,
@@ -548,7 +573,7 @@ function toggleShortcutHelp() {
     overlay.classList.add("show");
     overlay.querySelector(".shortcut-help-close").focus();
   });
-  if (typeof lucide !== "undefined") lucide.createIcons();
+  N.Core.refreshIcons();
 }
 
 /* Global ? key listener for shortcut help */

@@ -46,7 +46,7 @@ function buildEmotionLegend() {
         }
         safeSetHTML(sel, optionsHtml);
     }
-    setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
+    setTimeout(() => { N.Core.refreshIcons(); }, 50);
 }
 
 let _timeline = null;
@@ -91,7 +91,7 @@ async function loadTimeline() {
 
         if (allMemories.length === 0) {
             safeSetHTML(container, N.Components.skeleton.emptyState('clock', 'Timeline', 'No timed memories yet.'));
-            setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 50);
+            setTimeout(() => { N.Core.refreshIcons(); }, 50);
             return;
         }
 
@@ -133,7 +133,7 @@ async function loadTimeline() {
         };
 
         _timeline = new vis.Timeline(container, _timelineItems, options);
-        setTimeout(() => { if (typeof lucide !== 'undefined') lucide.createIcons(); }, 150);
+        setTimeout(() => { N.Core.refreshIcons(); }, 150);
 
         _timeline.on('select', function(props) {
             if (props.items.length > 0) {
@@ -160,7 +160,7 @@ async function loadTimeline() {
 /* N.Features.Timeline.loadTimeline registered below */
 
 // Initialize — watch tab activation via DOM class changes (replaces switchTab monkey-patch)
-document.addEventListener('DOMContentLoaded', () => {
+N.Core.whenReady(() => {
     buildEmotionLegend();
     const container = document.querySelector('main.main-content');
     if (container) {

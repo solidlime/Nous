@@ -314,7 +314,7 @@ function renderPage(page) {
       loadPage(slug);
     });
   });
-  if (typeof lucide !== "undefined") lucide.createIcons();
+  N.Core.refreshIcons();
 }
 
 function renderEmpty() {
@@ -490,5 +490,5 @@ N.Features.Wiki = {
   _state: WIKI,
 };
 
-document.addEventListener("DOMContentLoaded", refreshWiki);
+N.Core.whenReady(refreshWiki);
 })();

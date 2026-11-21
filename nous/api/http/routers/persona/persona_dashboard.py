@@ -81,8 +81,8 @@ async def dashboard_page_persona(request: Request) -> HTMLResponse:
     return HTMLResponse(await _do_dashboard_page(persona))
 
 
-async def _do_dashboard_data(persona: str, ctx) -> dict:
-    """Return dashboard data dict for persona."""
+def _build_stats_context(persona: str, ctx) -> tuple[dict, dict]:
+    """KPI 用 stats と persona コンテキスト（v1/v2 共通）。"""
     stats_result = ctx.memory_service.get_stats()
     stats = stats_result.value if stats_result.is_ok else {}
 
@@ -102,17 +102,37 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
     ):
         stats[_f] = context.get(_f)
 
-    # 現在地の滞在時間 — 直近の ``place.moved`` から（履歴が無ければ None を返さない）。
+    # 現在地の滞在時間 — 直近の place.moved から（履歴が無ければ None を返さない）。
     stats["place_since"] = _place_since(ctx, persona, stats.get("environment"))
-    recent_result = ctx.memory_service.get_recent(limit=50)
-    recent = [_memory_to_dict(m) for m in recent_result.value] if recent_result.is_ok else []
 
+    try:
+        total_count = stats.get("total_count", 0)
+        if total_count > 0:
+            linked_result = ctx.entity_repo.count_linked_memory_keys()
+            if linked_result.is_ok:
+                stats["linked_ratio"] = min(linked_result.value / total_count, 1.0)
+    except Exception:
+        logger.exception("dashboard_data: linked_ratio calculation failed")
+        # 非致命的、ダッシュボードはリンク比率なしで表示継続
+    return stats, context
+
+
+def _build_recent(ctx, limit: int) -> list[dict]:
+    recent_result = ctx.memory_service.get_recent(limit=limit)
+    return [_memory_to_dict(m) for m in recent_result.value] if recent_result.is_ok else []
+
+
+def _build_blocks(ctx) -> list:
     blocks_result = ctx.memory_service.list_blocks()
-    blocks = blocks_result.value if blocks_result.is_ok else []
+    return blocks_result.value if blocks_result.is_ok else []
 
+
+def _build_equipment(ctx) -> dict:
     equip_result = ctx.equipment_service.get_equipment()
-    equipment = equip_result.value if equip_result.is_ok else {}
+    return equip_result.value if equip_result.is_ok else {}
 
+
+def _build_items(ctx) -> list[dict]:
     items_result = ctx.equipment_service.search_items()
     items_raw = items_result.value if items_result.is_ok else []
     items = []
@@ -122,7 +142,10 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
             if k in d and d[k] is not None:
                 d[k] = d[k].isoformat()
         items.append(d)
+    return items
 
+
+def _build_goals(ctx) -> list[dict]:
     # Helper: sort goals by status priority (active first), then by recency
     _status_priority = {"active": 0, "fulfilled": 1, "achieved": 1, "cancelled": 2}
     _max_commitments = 30
@@ -139,7 +162,7 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
             -(m.created_at.timestamp() if m.created_at else 0),
         ),
     )
-    goals = [
+    return [
         {
             "content": m.content,
             "status": next((t for t in (m.tags or []) if t in ("active", "achieved", "cancelled")), "active"),
@@ -149,17 +172,9 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
         for m in _goals_sorted[:_max_commitments]
     ]
 
-    try:
-        total_count = stats.get("total_count", 0)
-        if total_count > 0:
-            linked_result = ctx.entity_repo.count_linked_memory_keys()
-            if linked_result.is_ok:
-                stats["linked_ratio"] = min(linked_result.value / total_count, 1.0)
-    except Exception:
-        logger.exception("dashboard_data: linked_ratio calculation failed")
-        # 非致命的、ダッシュボードはリンク比率なしで表示継続
 
-    # Relationship highlights from memory tags
+def _build_relationship_highlights(ctx) -> list[dict]:
+    """Relationship highlights from memory tags."""
     rel_highlights: list[dict] = []
     try:
         rel_result = ctx.memory_repo.find_relationship_highlights(limit=10)
@@ -177,8 +192,11 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
     except Exception:
         logger.exception("dashboard_data: relationship highlights failed")
         # 非致命的、ハイライトなしで表示継続
+    return rel_highlights
 
-    # State memories (speech/physical/mental) -- newest per tag for WebUI
+
+def _build_state_memories(ctx) -> dict:
+    """State memories (speech/physical/mental) -- newest per tag for WebUI."""
     state_memories: dict[str, dict] = {}
     for tag in ["physical_state", "mental_state"]:
         try:
@@ -196,8 +214,11 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
         except Exception:
             logger.exception("dashboard_data: state memories failed")
             # 非致命的、状態メモリなしで表示継続
+    return state_memories
 
-    # ── Latest self-portrait image ──
+
+def _latest_self_portrait(persona: str) -> str | None:
+    """最新の自画像 URL。無ければ None。"""
     latest_self_portrait: str | None = None
     try:
         images_dir = Path(persona_media_dir(get_settings().data_root, persona)) / "images"
@@ -209,8 +230,11 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
     except Exception:
         logger.exception("dashboard_data: self portrait lookup failed")
         # 非致命的、ポートレートなしで表示継続
+    return latest_self_portrait
 
-    # ── Generated images history (max 20, newest first) ──
+
+def _scan_generated_images(persona: str) -> list[dict]:
+    """生成画像の履歴（最新 20 件・新しい順）。prompt enrichment 前。"""
     generated_images: list[dict] = []
     try:
         images_dir = Path(persona_media_dir(get_settings().data_root, persona)) / "images"
@@ -230,43 +254,73 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
     except Exception:
         logger.exception("dashboard_data: generated images lookup failed")
         # 非致命的、画像履歴なしで表示継続
+    return generated_images
 
-    # ── Enrich generated_images with prompt data from message metadata ──
-    if generated_images:
+
+def _enrich_image_prompts(ctx, images: list[dict]) -> None:
+    """images に message metadata の prompt を足す（in place）。
+
+    走査は一覧に載っている filename（最大 20 件）に限定する。全 messages 走査は
+    履歴が伸びるほど重くなるため。meta の型フィルタと filename 重複の後勝ちは
+    v1 と同一。
+    """
+    if not images:
+        return
+    names = [img.get("filename", "") for img in images if img.get("filename")]
+    try:
+        db = ctx.connection.get_memory_db()
         try:
-            db = ctx.connection.get_memory_db()
-            rows = db.execute("SELECT metadata FROM messages WHERE metadata LIKE '%image_generation%'").fetchall()
-            prompt_lookup: dict[str, dict[str, str]] = {}
-            for (meta_str,) in rows:
-                try:
-                    meta = json.loads(meta_str)
-                    if meta.get("type") == "image_generation" and meta.get("filename"):
-                        prompt_lookup[meta["filename"]] = {
-                            "revised_prompt": meta.get("prompt", ""),
-                            "negative_prompt": meta.get("negative_prompt", ""),
-                        }
-                except (json.JSONDecodeError, TypeError):
-                    continue
-            for img in generated_images:
-                info = prompt_lookup.get(img.get("filename", ""), {})
-                img["revised_prompt"] = info.get("revised_prompt", "")
-                img["negative_prompt"] = info.get("negative_prompt", "")
+            marks = ",".join("?" * len(names))
+            # shortcut: JSON1 前提の絞り込み。古い sqlite / 壊れた JSON 行では
+            # json_extract が落ちるので v1 と同じ全走査へ退避する
+            rows = db.execute(
+                "SELECT metadata FROM messages WHERE metadata LIKE '%image_generation%' "
+                f"AND json_extract(metadata, '$.filename') IN ({marks}) ORDER BY rowid",
+                names,
+            ).fetchall()
         except Exception:
-            logger.debug("dashboard_data: prompt enrichment skipped")
+            rows = db.execute("SELECT metadata FROM messages WHERE metadata LIKE '%image_generation%'").fetchall()
+        prompt_lookup: dict[str, dict[str, str]] = {}
+        for (meta_str,) in rows:
+            try:
+                meta = json.loads(meta_str)
+                if meta.get("type") == "image_generation" and meta.get("filename"):
+                    prompt_lookup[meta["filename"]] = {
+                        "revised_prompt": meta.get("prompt", ""),
+                        "negative_prompt": meta.get("negative_prompt", ""),
+                    }
+            except (json.JSONDecodeError, TypeError):
+                continue
+        for img in images:
+            info = prompt_lookup.get(img.get("filename", ""), {})
+            img["revised_prompt"] = info.get("revised_prompt", "")
+            img["negative_prompt"] = info.get("negative_prompt", "")
+    except Exception:
+        logger.debug("dashboard_data: prompt enrichment skipped")
 
+
+def _build_generated_images(persona: str, ctx) -> list[dict]:
+    images = _scan_generated_images(persona)
+    _enrich_image_prompts(ctx, images)
+    return images
+
+
+async def _do_dashboard_data(persona: str, ctx) -> dict:
+    """Return dashboard data dict for persona（v1: 全セクション一括）。"""
+    stats, context = _build_stats_context(persona, ctx)
     return {
         "persona": persona,
         "stats": stats,
         "context": context,
-        "recent": recent,
-        "blocks": blocks,
-        "equipment": equipment,
-        "items": items,
-        "goals": goals,
-        "relationship_highlights": rel_highlights,
-        "state_memories": state_memories,
-        "latest_self_portrait": latest_self_portrait,
-        "generated_images": generated_images,
+        "recent": _build_recent(ctx, 50),
+        "blocks": _build_blocks(ctx),
+        "equipment": _build_equipment(ctx),
+        "items": _build_items(ctx),
+        "goals": _build_goals(ctx),
+        "relationship_highlights": _build_relationship_highlights(ctx),
+        "state_memories": _build_state_memories(ctx),
+        "latest_self_portrait": _latest_self_portrait(persona),
+        "generated_images": _build_generated_images(persona, ctx),
     }
 
 

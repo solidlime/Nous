@@ -59,7 +59,7 @@ async function loadSecurityDiagnostics() {
 /* N.Features.Settings.loadSettings registered below */
 
 /* ── Clean up status polling when leaving the settings tab ── */
-document.addEventListener('DOMContentLoaded', function() {
+N.Core.whenReady(function() {
     const origSwitchTab = N.Core.switchTab;
     if (typeof origSwitchTab === 'function') {
         N.Core.switchTab = function(tabId) {

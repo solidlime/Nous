@@ -4,9 +4,8 @@
    ================================================================= */
 ;(function(N) {
 var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast;
+var api = C.api, toast = C.toast;
 function hideCommandPopup() { return N.Chat.commands.hide(); }
-"use strict";
 var S = window.S;
 
 // --- Cookie helpers for panel state persistence ---
@@ -270,6 +269,13 @@ function _bindHelpIconListeners() {
 // ------------------------------------------------------------------
 async function loadChat() {
   if (!S.persona) return;
+  // v4: inner 注入は chat.chunk.js が script 実行より先に済ませている。
+  // fetch 失敗時は DOM が無いので何もしない（静かに return）。
+  if (!document.getElementById("chat-input")) return;
+  // avatar は shell SSR 要素なので shell 時に bind 済みのはずだが、
+  // portrait あり + auth 未ロードの場合は署名できず先送りされている
+  // ため、ここで掛け直す（bindAvatar 自体が冪等、bound 済みなら no-op）。
+  if (N.Core && N.Core.bindAvatar) N.Core.bindAvatar();
   // アバター（キャラチャットモード）はペルソナ確定後に初期化する。
   // 読込直後に applyCharacterMode() を走らせても S.persona が空で 404 になるため、ここが唯一の開始点。
   if (N.Chat.mode && N.Chat.mode.syncCharacterMode) N.Chat.mode.syncCharacterMode();
@@ -323,7 +329,7 @@ async function loadChat() {
       typeof N.Chat.memoryPanel.setWiringVisible === "function") {
     try {
       N.Chat.memoryPanel.setWiringVisible(CHAT.memoryPanelOpen);
-    } catch (_) {}
+    } catch {}
   }
 
   // ESC closes settings panel on mobile (moved from chat.js)
@@ -479,7 +485,7 @@ async function loadChatCommitments() {
     console.error("[loadChatCommitments] failed:", e);
     toast("リフレクション読込失敗: " + e.message, "error");
     if (typeof mp.updateReflection === "function") {
-      try { mp.updateReflection([]); } catch (_) {}
+      try { mp.updateReflection([]); } catch {}
     }
   }
 }
@@ -548,14 +554,14 @@ function toggleMemoryPanel() {
       typeof N.Chat.memoryPanel.setWiringVisible === "function") {
     try {
       N.Chat.memoryPanel.setWiringVisible(CHAT.memoryPanelOpen);
-    } catch (_) {}
+    } catch {}
   }
 }
 
 // ------------------------------------------------------------------
 // Debug panel
 // ------------------------------------------------------------------
-function renderDebugPanel(anchorEl, data) {
+function renderDebugPanel(_anchorEl, data) {
   try {
     console.group("[debug_info]");
     const SECTIONS = [
