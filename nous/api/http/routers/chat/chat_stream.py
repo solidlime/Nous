@@ -181,8 +181,8 @@ def _parse_last_seq(raw: str | None, hub: TurnHub) -> int:
     raw = str(raw or "0").strip()
     if ":" in raw:
         ep, _, s = raw.partition(":")
-        return int(s) if ep == hub.epoch and s.isdigit() else 0
-    return int(raw) if raw.isdigit() else 0
+        return int(s) if ep == hub.epoch and s.isascii() and s.isdigit() else 0
+    return int(raw) if raw.isascii() and raw.isdigit() else 0
 
 
 async def chat_events_epoch(request: Request) -> JSONResponse:

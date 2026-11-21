@@ -509,7 +509,12 @@ describe('epoch baseline (server restart recovery)', () => {
     expect(N.Chat.state.streaming).toBe(false);
     expect(N.Chat.history.restore).toHaveBeenCalledWith(false);
     expect(document.getElementById('chat-status').textContent).toBe('');
-    vi.useRealTimers();
+    // probe 採用は seq 基線のリセットを伴うこと: 新 epoch の低 seq event が
+    // 旧基線（この時点で 3）に握り潰されずに描画される（#136 の反実仮想）
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '新epochの誰か' }), 'e2:1');
+    vi.useRealTimers(); // jsdom rAF rides real timers
+    await raf();
+    expect(userBubbles().length).toBe(2); // 自ターンのエコー + 新epochの誰か
   });
 
   it('probe with a matching epoch leaves the live turn alone', async () => {

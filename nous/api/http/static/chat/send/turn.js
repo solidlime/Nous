@@ -362,8 +362,12 @@ function connectChatEvents(persona) {
           api("/api/chat/" + encodeURIComponent(_chatEventsPersona) + "/events/epoch", { suppressErrorToast: true })
             .then(function (d) {
               if (d && d.epoch && d.epoch !== _chatEpoch) {
-                // 基線だけでも採っておく（接続 URL は次回再接続で新 epoch 付きになる）
+                // in-band 経路（_handleHubMessage）と同じ両輪: epoch 採用と同時に
+                // seq 基線もリセットする。再起動直後の ring は空で SSE が沈黙する
+                // ため、probe が唯一の epoch 変化信号になる——ここで基線を残すと
+                // 旧 seq 基線が新 epoch の全 event を握り潰す（#136 の再生産）。
                 _chatEpoch = d.epoch;
+                _chatLastSeq = 0;
                 if (N.Chat._send.turn() && N.Chat._send.turn().startedAt < _reconnectedAt) {
                   _recoverOrphanedTurn("サーバーが再起動されたため応答が途切れました");
                 }
