@@ -71,13 +71,13 @@ def _seed_memories(n: int, persona: str = PERSONA) -> list[str]:
     keys = []
     for i in range(n):
         now = format_iso(get_now() - timedelta(hours=n - i))
-        key = "v2_mem_%03d" % i
+        key = f"v2_mem_{i:03d}"
         db.execute(
             """INSERT OR REPLACE INTO memories
                (key, content, created_at, updated_at, tags, importance,
                 emotion, emotion_intensity, privacy_level)
                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-            (key, "v2 テスト記憶 %d" % i, now, now, json.dumps(["test"]), 0.5, "joy", 0.5, "internal"),
+            (key, f"v2 テスト記憶 {i}", now, now, json.dumps(["test"]), 0.5, "joy", 0.5, "internal"),
         )
         keys.append(key)
     db.commit()
@@ -90,7 +90,7 @@ def _seed_wiki(pages: int = 3, project: str = "alpha", persona: str = PERSONA) -
 
     store = WikiStore(get_settings().data_root, persona)
     for i in range(pages):
-        store.write_page("v2-page-%d" % i, "V2 Page %d" % i, "本文", project=project if i % 2 == 0 else None)
+        store.write_page(f"v2-page-{i}", f"V2 Page {i}", "本文", project=project if i % 2 == 0 else None)
 
 
 # ---------------------------------------------------------------------------
@@ -208,5 +208,5 @@ async def test_sections_carry_only_their_own_key(client):
 async def test_sections_status_matches_v1_for_unknown_persona(client):
     v1 = (await client.get("/api/dashboard/no_such_persona_xyz")).status_code
     for name in ("blocks", "equipment", "items", "goals", "images"):
-        r = await client.get("/api/v2/%s/no_such_persona_xyz" % name)
+        r = await client.get(f"/api/v2/{name}/no_such_persona_xyz")
         assert r.status_code == v1, name

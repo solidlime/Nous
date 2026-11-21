@@ -92,10 +92,7 @@ def _messages_table(persona: str = PERSONA) -> None:
 
 def _add_message_meta(meta: dict | str, persona: str = PERSONA, compact: bool = False) -> None:
     db = _ctx(persona).connection.get_memory_db()
-    if isinstance(meta, str):
-        raw = meta
-    else:
-        raw = json.dumps(meta, separators=(",", ":")) if compact else json.dumps(meta)
+    raw = meta if isinstance(meta, str) else json.dumps(meta, separators=(",", ":")) if compact else json.dumps(meta)
     db.execute("INSERT INTO messages (metadata) VALUES (?)", (raw,))
     db.commit()
 
@@ -108,9 +105,13 @@ def _triples(images: list[dict]) -> list[tuple]:
 async def test_images_match_v1_exactly(client):
     _messages_table()
     _make_images(["a.png", "self_0001.png", "b.png"])
-    _add_message_meta({"type": "image_generation", "filename": "a.png", "prompt": "revised A", "negative_prompt": "neg A"})
+    _add_message_meta(
+        {"type": "image_generation", "filename": "a.png", "prompt": "revised A", "negative_prompt": "neg A"}
+    )
     _add_message_meta({"type": "image_generation", "filename": "b.png", "prompt": "old B", "negative_prompt": "old N"})
-    _add_message_meta({"type": "image_generation", "filename": "b.png", "prompt": "new B", "negative_prompt": "new N"}, compact=True)
+    _add_message_meta(
+        {"type": "image_generation", "filename": "b.png", "prompt": "new B", "negative_prompt": "new N"}, compact=True
+    )
     _add_message_meta({"type": "text", "filename": "a.png", "prompt": "must be ignored"})
     _add_message_meta("{not json")
 
@@ -124,12 +125,12 @@ async def test_images_match_v1_exactly(client):
 
 @pytest.mark.asyncio
 async def test_images_are_capped_at_20_and_urls_are_signed_paths(client):
-    names = ["img_%02d.png" % i for i in range(25)]
+    names = [f"img_{i:02d}.png" for i in range(25)]
     _make_images(names)
     v2 = (await client.get("/api/v2/images/" + PERSONA)).json()
     assert len(v2["generated_images"]) == 20
     for img in v2["generated_images"]:
-        assert img["url"] == "/api/chat/%s/persona/images/%s" % (PERSONA, img["filename"])
+        assert img["url"] == "/api/chat/{}/persona/images/{}".format(PERSONA, img["filename"])
 
 
 @pytest.mark.asyncio
