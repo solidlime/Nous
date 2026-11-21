@@ -347,11 +347,12 @@ class ChatConfigFileRepository:
         if not config.persona:
             raise ValueError("ChatConfig.persona is required to save")
         path = self._config_path(config.persona)
-        os.makedirs(os.path.dirname(path), exist_ok=True)
+        # 書込失敗は呼び出し側が扱う契約。ここで握ると設定が消えたのに成功扱いになる
+        os.makedirs(os.path.dirname(path), exist_ok=True)  # pi-lens-ignore: ast-grep:unchecked-throwing-call-python
         data = config.model_dump(mode="json")
         data["updated_at"] = format_iso(get_now())
         tmp_path = path + ".tmp"
-        with open(tmp_path, "w", encoding="utf-8") as f:
+        with open(tmp_path, "w", encoding="utf-8") as f:  # pi-lens-ignore: ast-grep:unchecked-throwing-call-python
             json.dump(data, f, indent=2, ensure_ascii=False)
         os.replace(tmp_path, path)
 
