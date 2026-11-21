@@ -12,7 +12,10 @@ WORKDIR /build
 COPY requirements-prod.txt ./
 
 # Install Python dependencies (ONNX Runtime replaces PyTorch — no torch needed)
-RUN pip install --no-cache-dir --no-build-isolation -r requirements-prod.txt
+# setuptools first: `--no-build-isolation` means sdist deps (e.g. langdetect) build
+# against the builder env, and python:3.12-slim no longer ships setuptools.
+RUN pip install --no-cache-dir setuptools && \
+    pip install --no-cache-dir --no-build-isolation -r requirements-prod.txt
 
 # Runtime stage: Copy only necessary files
 FROM python:3.12-slim
