@@ -130,3 +130,7 @@ class MemoryAuxiliaryRepository(Protocol):
         tags: list[str] | None = None,
         match_mode: str = "and",
     ) -> Result[list[tuple[Memory, float]], RepositoryError]: ...
+
+
+class MemoryQueryRepository(MemoryRepository, MemoryAuxiliaryRepository, Protocol):
+    """Combined read surface (core + auxiliary) — what MemoryQueryService actually receives."""

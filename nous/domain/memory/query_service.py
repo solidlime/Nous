@@ -2,11 +2,11 @@ from __future__ import annotations
 
 import contextlib
 import logging
-from typing import TYPE_CHECKING, TypedDict
+from typing import TYPE_CHECKING, TypedDict, cast
 
 if TYPE_CHECKING:
     from nous.domain.memory.entities import Memory
-    from nous.domain.memory.repository import MemoryRepository
+    from nous.domain.memory.repository import MemoryQueryRepository, MemoryRepository
 
 from nous.domain.config.chat_config import resolve_persona_chat_config
 from nous.domain.shared.errors import DomainError, MemoryNotFoundError
@@ -78,7 +78,8 @@ class MemoryQueryService:
     """Handles read operations, statistics, and recall boosting."""
 
     def __init__(self, repo: MemoryRepository) -> None:
-        self._repo = repo
+        # MemoryService wires the concrete SQLite repo, which implements both protocols
+        self._repo = cast("MemoryQueryRepository", repo)
 
     def get_memory(self, key: str) -> Result[Memory, DomainError]:
         """Retrieve a memory by key (excludes tombstoned memories)."""
