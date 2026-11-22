@@ -117,7 +117,7 @@ class TestOpenAICompatReasoning:
         推論モデル (o1/o3/o4-mini 等) は temperature 不許可のため.
         """
         provider = self._make_provider(base_url=None)
-        async for _ in provider.stream(messages=[], system="", temperature=0.7, top_p=0.9, reasoning_effort="high"):
+        async for _ in provider.stream(messages=[], system="", temperature=0.7, reasoning_effort="high"):
             pass
         kwargs = self._capture_kwargs(provider)
         assert "temperature" not in kwargs

@@ -185,7 +185,6 @@ class OpenAICompatProvider(LLMProvider):
         tools: list[ToolDefinition] | None = None,
         temperature: float = 0.7,
         max_tokens: int = 2048,
-        top_p: float | None = None,
         reasoning_effort: str | None = None,
     ) -> AsyncIterator[ChatEvent]:
         openai_tools = []
@@ -213,7 +212,7 @@ class OpenAICompatProvider(LLMProvider):
             }
             if reasoning_effort:
                 # 推論モデル (o1/o3/o4-mini 等) は temperature を許可しない (400 Unsupported parameter)。
-                # reasoning 指定時は sampling params (temperature/top_p) を送らない
+                # reasoning 指定時は sampling params (temperature) を送らない
                 base = self.base_url or ""
                 is_anthropic_compat = "api.anthropic.com" in base or (
                     "openrouter.ai" in base and (self.model or "").startswith("anthropic/")
@@ -237,8 +236,6 @@ class OpenAICompatProvider(LLMProvider):
                     kwargs["max_completion_tokens"] = kwargs.pop("max_tokens")
             else:
                 kwargs["temperature"] = temperature
-                if top_p is not None:
-                    kwargs["top_p"] = top_p
                 if "openrouter.ai" in (self.base_url or ""):
                     # 推論を要求していない呼び出しは推論させない (OpenRouter 統一 reasoning パラメータ)。
                     # free alias が reasoning モデル (cohere north-mini-code 等) にルーティングされ、
