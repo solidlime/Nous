@@ -1,6 +1,8 @@
 # 履歴ポリシー再設計（永続基線）+ プロンプト再構成（静的拡大・揮発後方退避）+ サンプリング内部化
 
 > **ステータス: 完了・本番適用済** (2026-11-22)。実装: 70a666a7 (Stage 0 削除・履歴 append-only 化・サンプリング設定撤去) + c8aa6c9b (top_p 輸送層完全撤去) + 3d8aa2dc/#011 (静的領域拡大)。Oracle PASS (m04545)。デプロイ: Portainer stack nous (bf31670a〜c8aa6c9b)。実機測定: system プロンプト 2 ターン md5 一致（バイト不変）・cached_tokens 8192/15929 tok (51%) を本番 done イベントで観測。残る 50% 交替ロスは core-coding-pool 2 デプロイメント・ラウンドロビン起因（opencode_go と goat の各 deepseek-v4.1-flash）— 専用エイリアスへの pin は未実施（litellm 再起動が必要なため別判断）。
+>
+> **追記 (2026-11-22T10:00Z): 上流キャッシュ TTL 実測で pin 不要と確定。** commandcode 側 deepseek-v4.1-flash で同一接頭辞 8,704/8,854 tok が 2/5/10/15 分後も全保持（~20分 gap で消滅、x-litellm-model-name ヘッダで上流識別しつつプール経由で計測）。通常の会話ペース（1〜5分/ターン）なら交互振りでも各上流の鮮度は TTL 内に収まり期待命中率 80〜90% — sticky 化の上乗せ僅か。加えて計測中に opencode 側 deepseek が不調となりトラフィックが影響ゼロで commandcode 側へ全振りしたことで、プール構成のままの2社フェイルオーバーが実証済み。**判定: ラウンドロビン維持（ユーザー指示 m05035「フェイルオーバーは維持したい」）。** 観測は done イベント usage の cached_tokens で継続。wiki: project-nous-chat-latency にも同一内容を記録済み。
 
 v2.1 (2026-11-22) — ルアン・メェイ再判断 (m04513 BLOCK) の指摘 #1〜#10 を反映。v2 からの追加変更:
 6. `max_stored_messages` 既定は 200 だった（compression_config.py:14、apply.js:223 の UI 既定も 200）→ 既定 1000 に引き上げ + cap evict と予算 evict の帰着先を分離宣言（両方 history_summary に合流させず、cap evict は従来通り記憶側のみ）。
