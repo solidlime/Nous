@@ -33,6 +33,9 @@ function connectWiring() {
         ? N.Chat.memoryPanel._wiring.wiringURL(N.Chat.memoryPanel._wiring.getPersona())
         : null;
     },
+    // 裏タブでは解放する（接続枠を前面タブの chat-events に譲る）。
+    // 表面に戻れば url() ゲートが再評価され、パネルが開いていれば再接続する。
+    closeOnHidden: true,
     handlers: {
       wiring: function (e) {
         N.Chat.memoryPanel._wiring.handleMessage(e.data);

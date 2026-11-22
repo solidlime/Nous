@@ -203,7 +203,9 @@ N.Core.api = async function api(path, opts) {
     }
     return await resp.json();
   } catch (e) {
-    console.error("API error:", path, e);
+    /* suppressErrorToast は「この失敗は想定内」の表明（背景 404 / エンジン断等）。
+       その場合は devtool への console.error も出さない。 */
+    if (!opts.suppressErrorToast) console.error("API error:", path, e);
     /* Cancel/timeout aborts are not user-facing failures — skip the global
        hook + api:error toast so navigation/timeout races don't flash a toast. */
     if (e && (e.name === "AbortError" || e.name === "TimeoutError")) {
@@ -476,6 +478,10 @@ function _open(name, reconnect) {
     if (rec.timer) clearTimeout(rec.timer);
     rec.timer = setTimeout(function () {
       rec.timer = null;
+      /* 裏タブでは closeOnHidden ストリームを再接続しない（hide 瞬間の
+         cancel を escape する経路を塞ぐ。turn 中の chat-events は
+         closeOnHidden() が false を返すので阻害されない）。 */
+      if (document.hidden && _hiddenWantsClose(rec)) return;
       _open(name, true);
     }, backoff);
   };
@@ -498,6 +504,13 @@ N.Core.streamSocket = function streamSocket(name) {
   return rec ? rec.socket : null;
 };
 
+/* Backoff 再接続待ち（socket null + pending timer）か — 枯渇と区別する
+   ための問い合わせ。stuck-connect watch は再接続中なら介入しない。 */
+N.Core.streamReconnecting = function streamReconnecting(name) {
+  var rec = _streams()[name];
+  return !!(rec && rec.timer);
+};
+
 N.Core.disconnectStream = function disconnectStream(name) {
   var rec = _streams()[name];
   if (!rec) return;
@@ -507,6 +520,39 @@ N.Core.disconnectStream = function disconnectStream(name) {
   }
   _closeSocket(rec);
 };
+
+/* ── Hidden-tab socket policy ──
+   ブラウザの origin 当たり接続枠（6）は全タブで共有する。裏タブが SSE
+   を掴んだままだと、前面タブの chat-events が readyState 0 のまま
+   永遠に繋がらず、送信が固まる（2026-11-22 実測: 2 タブ × 3 stream
+   = 枯渇、古いタブを閉じた途端に繋がった）。裏タブは SSE を離し、
+   表面に戻ったら url()/reconnectUrl() のゲートを通して再接続する。
+   closeOnHidden: true のストリームは即解放。関数形は「解放してよいか」
+   の判定（turn 進行中の chat-events は維持する、など）。 */
+function _hiddenWantsClose(rec) {
+  if (!rec || !rec.opts || !rec.opts.closeOnHidden) return false;
+  return typeof rec.opts.closeOnHidden === "function"
+    ? !!rec.opts.closeOnHidden()
+    : true;
+}
+
+document.addEventListener("visibilitychange", function () {
+  var hidden = document.hidden;
+  Object.keys(_streams()).forEach(function (name) {
+    var rec = _streams()[name];
+    if (!rec || !rec.opts) return;
+    if (hidden) {
+      if (_hiddenWantsClose(rec) && (rec.socket || rec.timer)) {
+        if (rec.timer) { clearTimeout(rec.timer); rec.timer = null; }
+        _closeSocket(rec);
+      }
+    } else if (!rec.socket && !rec.timer) {
+      /* url() が null を返すストリーム（閉じたパネル等）は _open 内部で
+         自ら何もしない — ゲートが再評価されるだけ。 */
+      _open(name, true);
+    }
+  });
+});
 
 /* ── Main event stream (all tabs) ── */
 var MAIN_EVENTS_URL = function MAIN_EVENTS_URL(persona) {
@@ -626,6 +672,8 @@ N.Core.connectSSE = function connectSSE(persona) {
       return p ? MAIN_EVENTS_URL(p) : null;
     },
     handlers: MAIN_HANDLERS,
+    // 裏タブでは解放する（接続枠を前面タブの chat-events に譲る）。
+    closeOnHidden: true,
     onConnecting: function () { _setSseStatus("connecting"); },
     onOpen: function () { _setSseStatus("connected"); },
     onError: function () { _setSseStatus("reconnecting"); },
@@ -1785,7 +1833,7 @@ document.addEventListener('keydown', function(e) {
   // NOTE: auth.js (N.Core.auth) is a lazy shared chunk — shell.js より
   // 後に走る。shell 時に署名はできないので、その場合は bound にせず
   // loadChat の再フック（N.Core.bindAvatar）に委ねる。bound フラグを
-  // sign より先に立てると冪等ガードが再フックを締め出すため順序厳守。
+  // auth ガードより先に立てると冪等ガードが再フックを締め出すため順序厳守。
   // ------------------------------------------------------------------
   function bindAvatar() {
     var avatar = document.getElementById("chat-persona-avatar");

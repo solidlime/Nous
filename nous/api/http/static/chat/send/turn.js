@@ -82,6 +82,7 @@ function _beginTurnSession(localMessage) {
   CHAT._firstContent = true;
   CHAT._userScrolledUp = false;
   _startWatchdog();
+  _startStuckConnectWatch();
   var els = _els();
   if (els.sendBtn) els.sendBtn.style.display = "none";
   if (els.cancelBtn) els.cancelBtn.style.display = "";
@@ -102,6 +103,7 @@ function _endTurnSession() {
   var t = _turn;
   _turn = null;
   _stopWatchdog();
+  _stopStuckConnectWatch();
   if (t && t.scrollListener && t.chatMessages) {
     t.chatMessages.removeEventListener("scroll", t.scrollListener);
   }
@@ -321,6 +323,74 @@ function _stopWatchdog() {
   if (_watchdogTimer) { clearInterval(_watchdogTimer); _watchdogTimer = null; }
 }
 
+/* ── Stuck-connect watch ──
+   送信したのに chat-events が open しない＝ブラウザの origin 接続枠（6）
+   が他ストリーム/他タブで握り尽くされている（readyState 0 は無音 —
+   error も fire しない）。closeOnHidden（純可視化・解放可の宣言）を持つ
+   stream の open socket を wiring → main → その他の順で譲り受ける。
+   段階の進行は「試行」ベースで数える（候補が socket を持たなくても次へ
+   進む — 成功は保証できない）。backoff 再接続待ち（自力復帰の timer）
+   には介入しない。自動復帰はしない: 切った物は次の visibilitychange
+   （タブ切替）または再読み込みで戻る。 */
+var _stuckWatchTimer = null;
+var _STUCK_CHECK_MS = 4000;
+var _stoleTried = [];   // steal 試行済み stream 名（成功不問）
+var _warnedStuck = false;
+
+function _chatStreamLive() {
+  // backoff timer pending = 自力復帰中 — open 待ちの無音枯渇とは別物。
+  if (C.streamReconnecting && C.streamReconnecting("chat-events")) return "reconnecting";
+  var es = C.streamSocket ? C.streamSocket("chat-events") : null;
+  return es && es.readyState === 1 ? "open" : "stuck";
+}
+
+function _stealCandidates() {
+  var names = ["wiring", "main"];
+  var streams = C._sseStreams || {};
+  Object.keys(streams).forEach(function (n) {
+    if (n !== "chat-events" && n !== "wiring" && n !== "main" &&
+        streams[n] && streams[n].opts && streams[n].opts.closeOnHidden) names.push(n);
+  });
+  return names;
+}
+
+function _stealOpenSocket(name) {
+  var es = C.streamSocket ? C.streamSocket(name) : null;
+  if (es && es.readyState === 1) {
+    C.disconnectStream(name);
+    return true;
+  }
+  return false;
+}
+
+function _startStuckConnectWatch() {
+  _stopStuckConnectWatch();
+  _stuckWatchTimer = setInterval(function () {
+    if (!_turn) { _stopStuckConnectWatch(); return; }
+    var state = _chatStreamLive();
+    if (state === "open") { _stopStuckConnectWatch(); return; }
+    if (state === "reconnecting") return;
+    var names = _stealCandidates();
+    for (var i = 0; i < names.length; i++) {
+      if (_stoleTried.indexOf(names[i]) === -1) {
+        _stoleTried.push(names[i]);
+        _stealOpenSocket(names[i]);
+        return;
+      }
+    }
+    if (!_warnedStuck) {
+      _warnedStuck = true;
+      toast("接続が詰まって応答を受け取れません。他のタブを閉じるか、このページを再読み込みしてください。", "error");
+    }
+  }, _STUCK_CHECK_MS);
+}
+
+function _stopStuckConnectWatch() {
+  if (_stuckWatchTimer) { clearInterval(_stuckWatchTimer); _stuckWatchTimer = null; }
+  _stoleTried = [];
+  _warnedStuck = false;
+}
+
 function connectChatEvents(persona) {
   _chatEventsPersona = persona || (window.S && window.S.persona) || null;
   // Persona switch voids any in-flight rendering (the container is
@@ -342,6 +412,9 @@ function connectChatEvents(persona) {
       var seqRef = _chatEpoch ? _chatEpoch + ":" + _chatLastSeq : String(_chatLastSeq);
       return "/api/chat/" + encodeURIComponent(_chatEventsPersona) + "/events?last_seq=" + seqRef;
     },
+    // 裏タブでも「turn 進行中」だけは維持する（返答のストリーム受信と TTS 停止
+    // を止めない）。idle なら解放し、表面に戻った時の全量 replay で追いつく。
+    closeOnHidden: function () { return !_turn; },
     handlers: {
       message: function (e) { _handleHubMessage(e); },
     },

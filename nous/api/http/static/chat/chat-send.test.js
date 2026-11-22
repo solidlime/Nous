@@ -113,7 +113,7 @@ afterEach(() => {
 });
 
 function chatStream() {
-  N.Core.connectSSE('p1'); // persona funnel — subscribes main + wiring-chat + chat-events
+  N.Core.connectSSE('p1'); // persona funnel — subscribes main + chat-events (wiring-chat は本番のみ)
   return instances.find((s) => s.url.indexOf('/api/chat/p1/events') === 0);
 }
 
@@ -584,6 +584,119 @@ describe('post-done status lifecycle', () => {
     await vi.advanceTimersByTimeAsync(610000);
     expect(N.Core.toast).toHaveBeenCalledWith('応答が途切れたため、このターンを打ち切り履歴を再取得しました', 'error');
     expect(N.Chat.state.streaming).toBe(false);
+    vi.useRealTimers();
+  });
+});
+
+// ------------------------------------------------------------------
+// Hidden-tab socket policy + stuck-connect watch — ブラウザの origin
+// 接続枠（6）は全タブ共有。裏タブが SSE を握ったままだと前面タブの
+// chat-events が readyState 0 のまま無音で詰む（2026-11-22 実測）。
+// ------------------------------------------------------------------
+describe('hidden-tab socket policy', () => {
+  function setHidden(hidden) {
+    Object.defineProperty(document, 'hidden', { configurable: true, get: () => hidden });
+    document.dispatchEvent(new Event('visibilitychange'));
+  }
+
+  it('an idle tab releases closeOnHidden streams (main + chat-events) on hide', () => {
+    const es = chatStream();
+    const mainEs = instances.find((s) => s.url.indexOf('/api/events/p1') === 0);
+    expect(es).toBeTruthy();
+    expect(mainEs).toBeTruthy();
+    setHidden(true);
+    expect(N.Core._sseStreams['main'].socket).toBeNull();
+    expect(mainEs.close).toHaveBeenCalled();
+    expect(N.Core._sseStreams['chat-events'].socket).toBeNull();
+    expect(es.close).toHaveBeenCalled();
+    setHidden(false); // restore for later tests
+  });
+
+  it('a live turn keeps chat-events connected while the tab is hidden', async () => {
+    const es = chatStream();
+    await sendTurn('裏タブ');
+    es.emit('message', JSON.stringify({ type: 'turn_started', user_message: '裏タブ' }), '1');
+    setHidden(true);
+    expect(N.Core._sseStreams['chat-events'].socket).not.toBeNull();
+    expect(es.close).not.toHaveBeenCalled();
+    setHidden(false);
+    N.Chat._send.endTurnSession();
+  });
+
+  it('returning to the tab reopens chat-events with the last_seq baseline', async () => {
+    const es = chatStream();
+    es.emit('message', JSON.stringify({ type: 'done', message: 'x' }), '7');
+    setHidden(true);
+    expect(N.Core._sseStreams['chat-events'].socket).toBeNull();
+    const before = instances.length;
+    setHidden(false);
+    const fresh = instances.slice(before).find((s) => s.url.indexOf('/api/chat/p1/events') === 0);
+    expect(fresh).toBeTruthy();
+    expect(fresh.url).toContain('last_seq=7');
+  });
+});
+
+describe('stuck-connect watch (browser connection budget)', () => {
+  it('steals open visualization sockets for chat-events, then advises', async () => {
+    vi.useFakeTimers();
+    // chat-events は存在するが open しない（readyState 0 — 接続枠待ちの無音状態）
+    const es = chatStream();
+    // 接続枠を握っている可視化ストリームを 2 本、明示的に open 状態で用意
+    N.Core.connectStream('wiring', { url: () => '/api/memory/wiring/stream?persona=p1', handlers: {} });
+    const wiringEs = instances[instances.length - 1];
+    wiringEs.readyState = 1;
+    N.Core.connectStream('main', { url: () => '/api/events/p1', handlers: {} });
+    const mainEs = instances[instances.length - 1];
+    mainEs.readyState = 1;
+    await sendTurn('詰まり');
+    await vi.advanceTimersByTimeAsync(4000); // 1 tick: wiring を諦めて chat-events に譲る
+    expect(wiringEs.close).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(4000); // still stuck: main も譲る
+    expect(mainEs.close).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(4000); // still stuck: 利用者に案内
+    expect(N.Core.toast).toHaveBeenCalledWith(expect.stringContaining('接続が詰まって'), 'error');
+    // chat-events が開けば監視終了 — 以降の tick で二重に close されない
+    es.readyState = 1;
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(wiringEs.close).toHaveBeenCalledTimes(1);
+    expect(mainEs.close).toHaveBeenCalledTimes(1);
+    vi.useRealTimers();
+  });
+
+  it('reaches the main steal and the toast when wiring has no socket (attempt-based chain)', async () => {
+    vi.useFakeTimers();
+    // wiring は閉じられている（memory panel 閉鎖・backoff 中など日常的な位相）。
+    // 旧実装は「wiring の steal が成功しない」限り main に到達できず、
+    // toast も出ないまま無音で固まった — 試行ベースで段階を進める回帰。
+    chatStream();
+    N.Core.connectStream('main', { url: () => '/api/events/p1', handlers: {} });
+    const mainEs = instances[instances.length - 1];
+    mainEs.readyState = 1;
+    await sendTurn('詰まり2');
+    await vi.advanceTimersByTimeAsync(4000); // tick1: wiring を試す（socket 無し — no-op）
+    expect(mainEs.close).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(4000); // tick2: main を譲り受ける
+    expect(mainEs.close).toHaveBeenCalledTimes(1);
+    await vi.advanceTimersByTimeAsync(4000); // tick3: 候補を試し尽くした → 案内
+    expect(N.Core.toast).toHaveBeenCalledWith(expect.stringContaining('接続が詰まって'), 'error');
+    vi.useRealTimers();
+  });
+
+  it('does not intervene while chat-events is in backoff reconnect (self-healing)', async () => {
+    vi.useFakeTimers();
+    // サーバー再起動直後の 5〜60 秒 backoff 中は自力復帰を待つ — 枯渇と
+    // 誤認して可視化ストリームを無駄に切らせない。
+    chatStream();
+    N.Core.connectStream('main', { url: () => '/api/events/p1', handlers: {} });
+    const mainEs = instances[instances.length - 1];
+    mainEs.readyState = 1;
+    await sendTurn('再起動直後');
+    const es = instances.find((s) => s.url.indexOf('/api/chat/p1/events') === 0);
+    es.onerror(new Error('x')); // drop → backoff timer pending
+    await vi.advanceTimersByTimeAsync(4000);
+    await vi.advanceTimersByTimeAsync(4000);
+    expect(mainEs.close).not.toHaveBeenCalled();
+    expect(N.Core.toast).not.toHaveBeenCalledWith(expect.stringContaining('接続が詰まって'), 'error');
     vi.useRealTimers();
   });
 });

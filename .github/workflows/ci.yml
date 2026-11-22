@@ -223,6 +223,12 @@ jobs:
       - name: Run vitest
         run: npm test --prefix nous/api/http/static
 
+      - name: Check generated shell.js is fresh
+        # shell.js は scripts/build-css.mjs の生成物 — ソース（core/sse.js 等）を
+        # 編集して再生を忘れると「本番は旧エンジンのまま、テストは新コード」
+        # という検証と実装の乘離が起きる（2026-11-22 事故）。
+        run: node scripts/build-css.mjs --check
+
       - name: Run JS lint
         run: npm run lint:js --prefix nous/api/http/static
 

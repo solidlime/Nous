@@ -193,6 +193,8 @@ function connectGraphFlash() {
             return '/api/memory/wiring/stream' +
                 (S.persona ? '?persona=' + encodeURIComponent(S.persona) : '');
         },
+        // 裏タブでは解放する（接続枠を前面タブの chat-events に譲る）。
+        closeOnHidden: true,
         handlers: {
             wiring: function (e) {
                 var ev;
@@ -1430,6 +1432,8 @@ function connectFireStream() {
             return '/api/memory/wiring/stream' +
                 (S.persona ? '?persona=' + encodeURIComponent(S.persona) : '');
         },
+        // 裏タブでは解放する（接続枠を前面タブの chat-events に譲る）。
+        closeOnHidden: true,
         handlers: {
             wiring: function (e) {
                 var ev;

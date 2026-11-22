@@ -75,3 +75,37 @@ kanban #136–#142。前提コード: origin/main 387c27b9（tree clean）。
 - MCP プールのターン毎再構築は前回の調査で設計判断（B6 で扱う範囲外）。
 - TTS エンジンそのもの（192.168.50.150:8088 が落ちている）は環境問題。
   クライアントの静音化のみ。
+
+---
+
+## 追記（2026-11-22）: 根因 #2 — ブラウザ接続枠枯渇
+
+bf31670a デプロイ後の実機 dogfood で、epoch 修正後に**まだ**固まる局面を発見。
+実測で根因を特定した:
+
+- ブラウザの origin 当たり接続枠（HTTP/1.1 で 6）は**全タブで共有**。
+- 各タブは main SSE + chat-events + (memory panel 開時) wiring + (graph 開後
+  残留) graph-flash を掴む。2 タブ × 3 本で枯渇。
+- 枯渇下の新規 EventSource は readyState 0 のまま**無音**（open も error
+  も fire しない — TCP 接続が受け入れられず queue に入る）。
+  古いタブを閉じた 12 秒後に繋がった実測で因果確定。
+- サーバ側は正常（ring に done が入っている）。クライアント受信問題。
+
+### 対策（3 層）
+1. **裏タブ解放（一次）**: sse.js に hidden-tab socket policy。`closeOnHidden`
+   を持つ stream（main/wiring/graph-flash、chat-events は turn 進行中のみ
+   例外扱い）は裏タブ化で切断、表面復帰で url() ゲート経由で再接続。
+   backoff timer が hidden 中に発火する抜け道も塞いだ。
+2. **stuck-connect watch（二次）**: 送信後 4 秒毎に chat-events を確認し、
+   open しなければ closeOnHidden ストリームの open socket を
+   wiring → main → その他の順で「試行ベース」で譲り受ける。
+   backoff 再接続待ち（自力復帰）には介入しない。候補を使い切ったら
+   toast で利用者に案内。切った物はタブ切替（visibilitychange）で復帰。
+3. **生成物同期の恒久化**: shell.js は build-css.mjs の生成物 — sse.js を
+   編集しても再生しないと本番に届かない（レビュー #1 の指摘）。
+   `--check` を CI frontend job に追加し再発防止。
+
+### 検証
+- vitest 427/427（裏タブ解放・試行ベース連鎖・backoff 非介入の 3 テスト追加）
+- lint:js / lint:css / build-css --check 全緑
+- 実機: 2 タブ枯渇を再現 → 古いタブを閉じると即復帰（before/after で確認済み）
