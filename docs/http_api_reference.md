@@ -405,6 +405,22 @@ asset タグも含めない）。存在しない persona は 404。
 
 ---
 
+### `GET /api/chat/{persona}/events/epoch`
+
+サーバー再起動検出用の轻量 probe（2026-11-22 追加）。クライアントは SSE
+再接続直後に呼び、応答の epoch が手元の基線と異なれば「再起動で ring の
+seq が 1 に巻き戻った」と判定して追跡中 turn の回復処理に入る。
+
+- 200 `{"epoch": "<12 hex>"}` — TurnHub のプロセス単位一意値
+- 404 — persona 不在
+
+`GET /api/chat/{persona}/events` の SSE `id:` は `"<epoch>:<seq>"` 形式で
+送出される（旧クライアント互換のため生 int の受け入れも維持）。
+`?last_seq=` は `<epoch>:<seq>` を受付け、epoch が不一致なら 0 扱いと
+なり ring 全量が再生される（クライアント側の skip 規則で冪等）。
+
+---
+
 ### `GET /api/chat/{persona}/persona/images/{file}`
 
 Serve a persona image (self portraits and expression images such as `expr_joy.png`).
