@@ -128,7 +128,7 @@ N.Core.disconnectStream = function disconnectStream(name) {
 function _hiddenWantsClose(rec) {
   if (!rec || !rec.opts || !rec.opts.closeOnHidden) return false;
   return typeof rec.opts.closeOnHidden === "function"
-    ? !!rec.opts.closeOnHidden()
+    ? rec.opts.closeOnHidden()
     : true;
 }
 
@@ -181,7 +181,7 @@ var MAIN_HANDLERS = {
       _scheduleMemoriesRefresh();
     } catch (err) { console.warn("[SSE parse] memory.deleted:", err.message); }
   },
-  "context.updated": function handleContextUpdated(e) {
+  "context.updated": function handleContextUpdated(_e) {
     N.Core.toast("\ud83d\udc64 \u30b3\u30f3\u30c6\u30ad\u30b9\u30c8\u66f4\u65b0\u3055\u308c\u307e\u3057\u305f", "info");
   },
   "context.emotion_changed": function handleEmotionChanged(e) {

@@ -58,6 +58,7 @@ class TestOpenAICompatReasoning:
         return provider
 
     def _capture_kwargs(self, provider: OpenAICompatProvider) -> dict:
+        # pi-lens-ignore: reportAttributeAccessIssue
         # _client は MagicMock 代入。/chat/completions/create は MethodType 型なので pyright が call_args を見つけられない
         return provider._client.chat.completions.create.call_args.kwargs  # pyright: ignore[reportAttributeAccessIssue]
 
