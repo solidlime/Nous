@@ -46,13 +46,11 @@ async def _collect_point_keys(mgr, collection: str) -> dict[str, str]:
 
 
 async def _delete_points(mgr, collection: str, point_ids: list) -> None:
-    from typing import cast
-
     from qdrant_client.models import ExtendedPointId, PointIdsList
 
     client = await mgr.get_client()
     for i in range(0, len(point_ids), 100):
-        batch = cast("list[ExtendedPointId]", point_ids[i : i + 100])
+        batch: list[ExtendedPointId] = list(point_ids[i : i + 100])
         await client.delete(
             collection_name=collection,
             points_selector=PointIdsList(points=batch),
