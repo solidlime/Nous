@@ -699,4 +699,18 @@ describe('stuck-connect watch (browser connection budget)', () => {
     expect(N.Core.toast).not.toHaveBeenCalledWith(expect.stringContaining('接続が詰まって'), 'error');
     vi.useRealTimers();
   });
+
+  it('bootstraps chat-events at chunk load even before pending.js runs (real load order)', () => {
+    // 本番 load order（chat.chunk.js の SCRIPTS 配列）: turn.js は pending.js
+    // より「先」に評価される — clearPending がまだ無い状態で bootstrap が
+    // 走る。レビュー #1 の回帰: guard 無しの当初版はここで TypeError が
+    // try/catch に飲まれ、chat-events が永久に未登録になっていた（テストの
+    // 直接呼び出しでは pending.js 読み込み済みのため緑のままだった）。
+    expect(N.Core._sseStreams['chat-events']).toBeUndefined();
+    delete N.Chat._send.clearPending; // turn.js 評価時点の本番状態を再現
+    loadFile('../chat/send/turn.js'); // 再評価（wrapper 二重設置は防御済み）
+    expect(N.Core._sseStreams['chat-events']).toBeTruthy();
+    const es = instances.find((s) => s.url.indexOf('/api/chat/p1/events') === 0);
+    expect(es).toBeTruthy();
+  });
 });

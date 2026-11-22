@@ -11,7 +11,6 @@
 var C = N.Core;
 var api = C.api, toast = C.toast;
 var showConfirm = C.showConfirm;
-"use strict";
 
 var CHAT = N.Chat.state;
 
@@ -392,13 +391,22 @@ function _stopStuckConnectWatch() {
 }
 
 function connectChatEvents(persona) {
-  _chatEventsPersona = persona || (window.S && window.S.persona) || null;
+  persona = persona || (window.S && window.S.persona) || null;
+  // 同一 persona で接続中（socket あり）または再接続待ち（timer あり）なら
+  // 二重登録しない — チャンク遅延読み込みの bootstrap と base.js の init
+  // funnel が両方走ったとき、接続を作り直してバックオフを台無しにしないため。
+  var rec = N.Core._sseStreams && N.Core._sseStreams["chat-events"];
+  if (persona && _chatEventsPersona === persona && rec && (rec.socket || rec.timer)) return;
+  _chatEventsPersona = persona;
   // Persona switch voids any in-flight rendering (the container is
   // wiped by the history restore that follows) and restarts the seq
   // baseline — the fresh snapshot is swallowed by the idle rules.
   N.Chat._send.endTurnSession();
   // A queued send belongs to the previous persona — drop it on switch.
-  N.Chat._send.clearPending();
+  // clearPending は pending.js で定義され、本番 load order ではこのファイルの
+  // 「後」に実行される — 遅延 chunk の bootstrap 時点では無いので置く。
+  // bootstrap 時点で queue は空（送信自体が pending.js 依存）なので省略安全。
+  if (N.Chat._send.clearPending) N.Chat._send.clearPending();
   _chatLastSeq = 0;
   _chatEpoch = null; // persona 切替は snapshot 再生から始まる — epoch 基線もリセット
   _sawDrop = false;
@@ -465,7 +473,9 @@ if (typeof N.Core.connectSSE === "function" && !N.Core._chatEventsConnectWrapped
     var _origConnect = N.Core.connectSSE;
     N.Core.connectSSE = function (persona) {
       var r = _origConnect.apply(this, arguments);
-      try { connectChatEvents(persona); } catch {}
+      try { connectChatEvents(persona); } catch (err) {
+        console.warn("[chat-events] connect failed:", err && err.message);
+      }
       return r;
     };
   })();
@@ -481,4 +491,18 @@ N.Chat._send.beginTurnSession = _beginTurnSession;
 N.Chat._send.endTurnSession = _endTurnSession;
 N.Chat._send.closeTextBubble = _closeTextBubble;
 N.Chat._send.emitChatSSE = _emitChatSSE;
+N.Chat._send.connectChatEvents = connectChatEvents;
+
+// 遅延チャンク読み込み（init funnel 後のタブ切替）: base.js の connectSSE が
+// 上の wrapper 設置前に済んでいた場合、chat-events は誰も登録しない。
+// persona が既に決まっていれば、ここで繋ぐ（実機 2026-11-22 で発生確認）。
+// 必ず N.Chat._send エクスポートの「後」に置くこと — connectChatEvents は
+// endTurnSession/clearPending を参照するので、これより前だと undefined で
+// turn.js の評価ごと死ぬ（テストが実際に捕まえた）。
+// 接続済みなら connectChatEvents 内のガードが skip する。
+if (window.S && window.S.persona) {
+  try { connectChatEvents(window.S.persona); } catch (err) {
+    console.warn("[chat-events] bootstrap failed:", err && err.message);
+  }
+}
 })(window.Nous);
