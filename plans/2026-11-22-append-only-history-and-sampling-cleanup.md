@@ -1,5 +1,7 @@
 # 履歴ポリシー再設計（永続基線）+ プロンプト再構成（静的拡大・揮発後方退避）+ サンプリング内部化
 
+> **ステータス: 完了・本番適用済** (2026-11-22)。実装: 70a666a7 (Stage 0 削除・履歴 append-only 化・サンプリング設定撤去) + c8aa6c9b (top_p 輸送層完全撤去) + 3d8aa2dc/#011 (静的領域拡大)。Oracle PASS (m04545)。デプロイ: Portainer stack nous (bf31670a〜c8aa6c9b)。実機測定: system プロンプト 2 ターン md5 一致（バイト不変）・cached_tokens 8192/15929 tok (51%) を本番 done イベントで観測。残る 50% 交替ロスは core-coding-pool 2 デプロイメント・ラウンドロビン起因（opencode_go と goat の各 deepseek-v4.1-flash）— 専用エイリアスへの pin は未実施（litellm 再起動が必要なため別判断）。
+
 v2.1 (2026-11-22) — ルアン・メェイ再判断 (m04513 BLOCK) の指摘 #1〜#10 を反映。v2 からの追加変更:
 6. `max_stored_messages` 既定は 200 だった（compression_config.py:14、apply.js:223 の UI 既定も 200）→ 既定 1000 に引き上げ + cap evict と予算 evict の帰着先を分離宣言（両方 history_summary に合流させず、cap evict は従来通り記憶側のみ）。
 7. `dynamic_temperature`/`emotion_temperature_scale` 削除の破壊半径を対象リストに追加（service.py:323-346 の EmotionDrivenSampler ブロック・:428 の effective_temp 引数・inference.py:64/96・nous/domain/sampling.py・test_sampling.py・test_chat_service.py:615-627・test_chat_pipeline.py:750-814）。
