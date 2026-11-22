@@ -7,12 +7,9 @@ import logging
 from typing import TYPE_CHECKING
 
 from nous.application.session.handover import build_handover, read_handover
-from nous.domain.memory.cue import due_cues
 from nous.domain.memory.service import ONE_SHOT_STATE_TAGS
-from nous.domain.profile.tokens import DEFAULT_PROFILE_MAX_TOKENS, estimate_tokens
 from nous.domain.shared.result import Failure, Success
 from nous.domain.shared.time_utils import get_now, relative_time_str
-from nous.infrastructure.sqlite.block_repo import PROFILE_BLOCK_NAMES
 
 logger = logging.getLogger(__name__)
 
@@ -35,7 +32,7 @@ async def _tool_get_context(
     ctx: AppContext, persona: str, project: str | None = None, session_effects: bool = True
 ) -> dict:
     """Get persona state and memory overview. Call FIRST at session start.
-    Lightweight: active commitments + essential story + body/emotion state (~500-800 tokens).
+    Lightweight: essential story + recent insights + body/emotion state (~500-800 tokens).
     project: 指定時は project:<slug> タグ付き記憶を PROJECT MEMORIES 節で表示（最大5件）。
     session_effects: 読取副作用（会話時刻の記録・one-shot 状態メモリの消費）を
     実行するか。監査 M8（v4.0）により正規入口は session_begin で、get_context は
@@ -79,8 +76,6 @@ async def _tool_get_context(
         )
 
     # Lightweight: essentials for seamless persona + conversation restoration
-    goals_result = ctx.memory_service.get_by_tags(["goal"])
-    goals = goals_result.value if isinstance(goals_result, Success) else []
     reflection_result = ctx.memory_service.get_by_tags(["reflection"])
     reflections = reflection_result.value if isinstance(reflection_result, Success) else []
     mm_result = ctx.memory_service.get_by_tags(["mental_model", "abstracted"])
@@ -171,7 +166,6 @@ async def _tool_get_context(
             or None
         )
 
-    # 期限が近い／切れた予定・約束は due_cues（goal 行の ⏰）が毎回ライブ計算で出す。
     time_since = ""
     if state.last_conversation_time:
         time_since = relative_time_str(state.last_conversation_time)
@@ -179,15 +173,6 @@ async def _tool_get_context(
     if session_effects:
         logger.warning("DEPRECATED: get_context performs session side effects; use session_begin instead (audit M8)")
         ctx.persona_service.record_conversation_time(persona)
-
-    # audit M2 — prospective memory: commitments whose deadline is inside the
-    # window are marked ⏰ on their line. 減衰ワーカー廃止で due_reminder の
-    # one-shot 生産者は無くなったため、時刻表示はこの due_cues 経路のみ。
-    # allow_overdue は意図的に True: MCP の概観は「いま期限切れのものも」見せる。
-    # ペルソナへの自動注入（context_loader）は False で過期を出さない——口を揃えない。
-    due_labels = {
-        m.key: label for m, label in due_cues(goals or [], get_now(), allow_overdue=True) if getattr(m, "key", None)
-    }
 
     # 状態記憶（physical_state/mental_state）を読む。消費はしない（#52）。
     one_shot_context: dict[str, str] = {}
@@ -202,7 +187,6 @@ async def _tool_get_context(
     result_text = _format_lightweight_response(
         state,
         top_memories,
-        goals,
         equipment,
         recent,
         time_since,
@@ -216,7 +200,6 @@ async def _tool_get_context(
         project_memories=project_memories,
         project_name=project or None,
         wiki_page_count=wiki_page_count,
-        due_labels=due_labels or None,
         open_question=open_question,
         handover=handover,
     )
@@ -227,7 +210,7 @@ async def _tool_get_context(
             "session_id": getattr(ctx, "session_id", None),
             "tool_name": "get_context",
             "params_summary": f"persona={persona}, project={project}",
-            "result_summary": f"Context formatted ({len(top_memories)} memories, {len(goals)} goals)",
+            "result_summary": f"Context formatted ({len(top_memories)} memories)",
             "success": True,
         },
     )
@@ -358,7 +341,6 @@ async def _tool_update_context(
         pi = dict(persona_info)
         if nickname:
             pi["nickname"] = nickname
-        # goals are extracted and persisted by PersonaService.update_persona_info internally
         result = ctx.persona_service.update_persona_info(persona, pi)
         if result.is_ok:
             updated.append("persona_info updated")
@@ -388,44 +370,3 @@ async def _tool_update_context(
     state_block = _format_state_block(state_result.value) if isinstance(state_result, Success) else ""
     summary = f"Context updated: {', '.join(updated)}"
     return {"ok": True, "result": f"{summary}\n{state_block}" if state_block else summary}
-
-
-# --- Profile tools (B-5) ---
-
-
-def _sanitize_profile_content(text: str) -> str:
-    """context_loader._sanitize_text と同じ流儀で異常 Unicode を除去する。"""
-    if not text:
-        return text
-    # 遅延 import: モジュールレベルだと chat.service 経由の循環 import になる
-    from nous.application.chat.pipeline.context_loader import _is_suspicious_cp
-
-    suspicious = [ch for ch in text if _is_suspicious_cp(ord(ch))]
-    if not suspicious:
-        return text
-    ratio = len(suspicious) / len(text)
-    if ratio > 0.1:
-        logger.warning("profile_update: discarding content with %.0f%% suspicious chars", ratio * 100)
-        return ""
-    logger.info("profile_update: removed %d suspicious chars (%.0f%%)", len(suspicious), ratio * 100)
-    return "".join(ch for ch in text if not _is_suspicious_cp(ord(ch)))
-
-
-@tool_called_audited("profile_update")
-async def _tool_profile_update(ctx: AppContext, persona: str, target: str, content: str) -> dict:
-    """Rewrite a profile block whole (target: "me" | "user"). Max ~3000 tokens."""
-    if target not in PROFILE_BLOCK_NAMES:
-        return {"ok": False, "error": f"Invalid target: {target} (must be 'me' or 'user')"}
-    content = _sanitize_profile_content(content)
-    if not content:
-        return {"ok": False, "error": "content must not be empty"}
-    tokens = estimate_tokens(content)
-    if tokens > DEFAULT_PROFILE_MAX_TOKENS:
-        return {
-            "ok": False,
-            "error": f"content too large: ~{tokens} tokens exceeds the limit of {DEFAULT_PROFILE_MAX_TOKENS}",
-        }
-    result = ctx.memory_service.upsert_profile_block(persona, target, content)
-    if not isinstance(result, Success):
-        return {"ok": False, "error": str(result.error)}
-    return {"ok": True, "result": f"Profile block '{target}' updated (~{tokens} tokens)"}

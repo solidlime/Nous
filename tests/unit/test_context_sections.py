@@ -1,4 +1,4 @@
-"""tests/unit/test_context_sections.py — _build_context_section の promise/importance セクションと
+"""tests/unit/test_context_sections.py — _build_context_section の importance セクションと
 prompt.py の優先順位文面のテスト。"""
 
 from __future__ import annotations
@@ -19,11 +19,10 @@ def _make_memory(content: str, tags: list[str] | None = None):
     return m
 
 
-def _make_ctx(promises=None, top_memories=None):
+def _make_ctx(top_memories=None):
     ctx = MagicMock()
     ctx.persona = "test"
     ctx.memory_service = MagicMock()
-    ctx.memory_service.get_by_tags.return_value = Success(promises or [])
     ctx.memory_service.get_top_by_importance.return_value = Success(top_memories or [])
     ctx.persona_service = MagicMock()
     ctx.persona_service.get_emotion_history.return_value = Success([])
@@ -52,31 +51,6 @@ async def _build(ctx, state, compress_mode="auto"):
     from nous.application.chat.pipeline.prepare import _build_context_section
 
     return await _build_context_section(ctx, state, compress_mode=compress_mode)
-
-
-class TestPromiseSection:
-    """promise タグの記憶が「前からの約束」として注入されること。"""
-
-    @pytest.mark.asyncio
-    async def test_promise_memories_injected(self):
-        ctx = _make_ctx(promises=[_make_memory("週末に試験結果を報告する")])
-        result = await _build(ctx, _make_state())
-        assert "前からの約束:" in result
-        assert "🤝 週末に試験結果を報告する" in result
-
-    @pytest.mark.asyncio
-    async def test_promise_fetched_with_promise_tag(self):
-        ctx = _make_ctx(promises=[_make_memory("x")])
-        await _build(ctx, _make_state())
-        ctx.memory_service.get_by_tags.assert_any_call(["promise"])
-
-    @pytest.mark.asyncio
-    async def test_promise_light_mode_skipped(self):
-        """light モードでは約束セクションをスキップする。"""
-        ctx = _make_ctx(promises=[_make_memory("週末の約束")])
-        result = await _build(ctx, _make_state(), compress_mode="light")
-        assert "前からの約束:" not in result
-        assert "週末の約束" not in result
 
 
 class TestTopImportanceSection:

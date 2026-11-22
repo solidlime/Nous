@@ -26,7 +26,6 @@ var TOOL_LABELS = {
   item_add: "持ち物を整えてる…",
   item_equip: "身支度してる…",
   item_search: "持ち物を探してる…",
-  goal_manage: "目標を確かめてる…",
   image_generate: "イメージを描き出してる…",
   list_skills: "スキルを確認してる…",
   invoke_skill: "スキルを呼び出す準備…",
@@ -42,7 +41,6 @@ function toolIcon(name) {
   if (/skill/.test(name)) return "sparkles";
   if (/^memory_/.test(name) || name === "get_context" || name === "update_context") return "brain";
   if (/^item_/.test(name)) return "backpack";
-  if (/^goal_/.test(name)) return "target";
   return "wrench";
 }
 

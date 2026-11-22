@@ -14,7 +14,7 @@ class JSONLExporter:
     """Export all persona data to a JSONL standard format.
 
     Each line is a self-contained JSON object with a ``type`` field
-    (``memory``, ``state``, ``item``, ``emotion``, ``block``,
+    (``memory``, ``state``, ``item``, ``emotion``,
     ``strength``, ``goal``, ``promise``, ``equipment_slot``,
     ``equipment_history``).
     """
@@ -49,14 +49,6 @@ class JSONLExporter:
                     db,
                     "SELECT * FROM memory_strength",
                     "strength",
-                )
-
-                # memory_blocks
-                count += self._export_table(
-                    f,
-                    db,
-                    "SELECT * FROM memory_blocks",
-                    "block",
                 )
 
                 # context_state (filtered by persona)

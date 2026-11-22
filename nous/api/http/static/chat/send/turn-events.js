@@ -140,9 +140,9 @@ function _handleChatEvent(evt) {
     if (els.statusEl) els.statusEl.textContent = "応答中...";
   } else if (evt.type === "memory_activity") {
     if (evt.preliminary) {
-      _mem("update")(evt.retrieved, undefined, undefined, undefined);
+      _mem("update")(evt.retrieved);
     } else {
-      _mem("update")(evt.retrieved, evt.saved, evt.goals, evt.promises);
+      _mem("update")(evt.retrieved, evt.saved);
     }
     if (_memoryActivityTimer) clearTimeout(_memoryActivityTimer);
     _memoryActivityTimer = setTimeout(function() { N.Chat.core.loadCommitments(); }, 500);

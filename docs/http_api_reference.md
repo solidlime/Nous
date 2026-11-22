@@ -110,28 +110,25 @@ Aggregated dashboard payload for a persona.
 
 ### `GET /api/v2/overview/{persona}`
 
-Overview タブの初回描画用。KPI・state memories・wiki 要約・goal 要約だけを返す
-（recent / blocks / items / 画像は含まない）。
+Overview タブの初回描画用。KPI・state memories・wiki 要約だけを返す
+（recent / items / 画像は含まない）。
 
 `stats` / `context` は v1 の `stats` / `info` と同じ形。`wiki` は
-`{pages, projects, reading[]}` で `reading` は更新順の先頭5件。`goals` は
-`{total, active}`。
+`{pages, projects, reading[]}` で `reading` は更新順の先頭5件。
 
 ### `GET /api/v2/recent/{persona}`
 
 直近の記憶。`?limit=`（既定10・最大50）、`?full=1` で本文を200字切りしない完全版を返す。
 
-### `GET /api/v2/blocks/{persona}` / `equipment` / `items` / `goals`
+### `GET /api/v2/equipment/{persona}` / `items`
 
 一括版からセクション単位で切り出したもの。レスポンスは `{"persona": ..., "<セクション名>": [...]}` で、
 キー以外の形は v1 と同一。存在しない persona は v1 と同じ 404。
-4本とも同じ形なので以下にまとめて挙げる。
+2本とも同じ形なので以下にまとめて挙げる。
 
 ### `GET /api/v2/equipment/{persona}`
 
 ### `GET /api/v2/items/{persona}`
-
-### `GET /api/v2/goals/{persona}`
 
 ### `GET /api/v2/images/{persona}`
 
@@ -421,6 +418,17 @@ seq が 1 に巻き戻った」と判定して追跡中 turn の回復処理に�
 
 ---
 
+### `GET /api/chat/{persona}/commitments`
+
+チャット画面の内省（Insights）パネルの供給源。`reflection` タグ付き記憶を更新順で
+最大5件返す。旧 `goals` キー（アクティブな目標）は 2026-11-22 の Goals 削除で
+廃止され、応答は `insights` 専用。
+
+- 200 `{"insights": [{"content": "...", "key": "...", "created_at": "2026-11-01T12:00:00"}]}`
+- 404 `{"error": "Persona not found"}` — persona 不在
+
+---
+
 ### `GET /api/chat/{persona}/persona/images/{file}`
 
 Serve a persona image (self portraits and expression images such as `expr_joy.png`).
@@ -452,7 +460,7 @@ The chat view swaps the persona avatar image to `url` on receipt.
 { "ok": true, "data": { "context": "...", "notes": ["..."] }, "error": null }
 ```
 
-`notes` はターン前に本人へ渡したい一言。今は2種類——長い沈黙を埋めるメモ（#37、`silence_hours` 以上間が空いたときだけ）と、期限付きの約束を自分から切り出す1行（#43）。無ければ空配列。生成に失敗しても `notes` には `warning: ...` が1行入るだけで、begin 自体は成功する。
+`notes` はターン前に本人へ渡したい一言。今は1種類——長い沈黙を埋めるメモ（#37、`silence_hours` 以上間が空いたときだけ）。無ければ空配列。生成に失敗しても `notes` には `warning: ...` が1行入るだけで、begin 自体は成功する。
 
 `?compat=legacy` を付けると v4.0 以前のフラット形式（`{ok, result}`）を返し、
 `compat=legacy used: POST /api/session/{persona}/begin` を WARNING で1行出す。
@@ -461,77 +469,6 @@ The chat view swaps the persona avatar image to `url` on receipt.
 state 取得に失敗したときは、`compat=legacy` でも封筒を返す
 （`500` / `{ok:false, data:null, error:{code:"INTERNAL"}}`）。旧形式で返すと
 `ok:false` は返せても `error` を JSON 化できる保証がないため、失敗の形は新しい封筒に一本化する。
-
----
-
-## Core Memory Blocks
-
-Named Memory Blocks（`memory_blocks` テーブル、`block_name` 主キー）を操作する。
-**v4.0 では LLM のツール面（MCP）には公開されておらず、`get_context()` / `session_begin()` の
-出力にも自動注入されない** — HTTP API（この節）とペルソナダッシュボード専用の機能。
-LLM が扱うペルソナ状態は `update_context()` を使う。
-
-### `GET /api/blocks/{persona}`
-
-List all Core Memory Blocks for a persona.
-
-**Response:**
-
-```json
-{
-  "persona": "herta",
-  "blocks": [
-    {
-      "block_name": "user_model",
-      "content": "Pythonエンジニア。簡潔な説明を好む。FastAPIプロジェクト進行中。",
-      "block_type": "custom",
-      "max_tokens": 500,
-      "priority": 0,
-      "created_at": "2025-07-15T12:00:00",
-      "updated_at": "2025-07-15T12:00:00",
-      "metadata": {}
-    }
-  ]
-}
-```
-
-一覧は `priority` の降順で返る。**慣例的なブロック名**（自由な名前も可）:
-
-| Name | Purpose |
-|------|---------|
-| `persona_state` | Persona's current internal state and ongoing goals |
-| `user_model` | What the agent knows/infers about the user |
-| `active_context` | Current session focus, open questions, ongoing topics |
-
-Custom block names are also allowed.
-
-### `POST /api/blocks/{persona}`
-
-Write (create or overwrite) a Core Memory Block.
-
-**Request body:**
-
-```json
-{
-  "block_name": "user_model",
-  "content": "Pythonエンジニア。簡潔な説明を好む。FastAPIプロジェクト進行中。",
-  "block_type": "custom",
-  "max_tokens": 500,
-  "priority": 0
-}
-```
-
-`block_name` と `content` は必須（無いと 400）。`block_type` / `max_tokens` / `priority` は任意。
-
-**Response:** `{ "ok": true, "block_name": "user_model" }`
-
-### `DELETE /api/blocks/{persona}/{block_name}`
-
-Delete a Core Memory Block by name.
-
-**Path params:** `block_name` — name of the block to delete (supports slashes via `:path`)
-
-**Response:** `{ "ok": true }`
 
 ---
 

@@ -51,11 +51,11 @@ Nous は MCP クライアント（Claude Code・Claude Desktop・自作エージ
 
 ### 人格が分かれている
 
-1 つのサーバーで複数のペルソナを扱えます。記憶・プロフィール・装備・関係性・目標はペルソナごとに完全に分離され、`data/persona/<name>/` の下に置かれます。同じユーザーと話していても、A の記憶が B に漏れることはありません。
+1 つのサーバーで複数のペルソナを扱えます。記憶・プロフィール・装備・関係性はペルソナごとに完全に分離され、`data/persona/<name>/` の下に置かれます。同じユーザーと話していても、A の記憶が B に漏れることはありません。
 
 ### 状態を持っている
 
-感情（喜び・不安・照れ・退屈など）と身体（疲労・体温・心拍・痛み）は、時間経過で減衰しながら保持されます。`update_context` で更新し、`session_begin` でセッション開始時にまとめて読み出します。目標と約束も別枠で管理され、未完了のものはコンテキストに載り続けます。
+感情（喜び・不安・照れ・退屈など）と身体（疲労・体温・心拍・痛み）は、時間経過で減衰しながら保持されます。`update_context` で更新し、`session_begin` でセッション開始時にまとめて読み出します。
 
 ### 覚えたことを編纂する
 
@@ -151,7 +151,7 @@ WebUI は `http://localhost:26262/` にあります。9 つのタブはすべて
 | タブ | 内容 |
 |---|---|
 | **Overview** | プロフィール、関係性、感情と体調、装備スロット |
-| **Memories** | 記憶統計、コアメモリブロック、目標、タグ分布、直近 7 日の推移 |
+| **Memories** | 記憶統計、タグ分布、直近 7 日の推移 |
 | **Wiki** | 編纂済みページの閲覧・編集・再編纂・履歴 |
 | **Projects** | `project:<slug>` タグ付き記憶の一覧 |
 | **Chat** | ストリーミングチャット、記憶の自動取り込み、会話設定 |
@@ -172,7 +172,7 @@ WebUI は `http://localhost:26262/` にあります。9 つのタブはすべて
 
 ## MCP ツール
 
-20 個のツールをフラット名で公開しています。`tools/list` で同じ一覧が取れます。
+18 個のツールをフラット名で公開しています。`tools/list` で同じ一覧が取れます。
 
 | カテゴリ | ツール | 説明 |
 |---|---|---|
@@ -185,7 +185,6 @@ WebUI は `http://localhost:26262/` にあります。9 つのタブはすべて
 | **コンテキスト** | `session_begin` | セッション開始時の状態＋記憶概要（最初に呼ぶ） |
 | | `get_context` | `session_begin` の互換別名 |
 | | `update_context` | 感情・体調・環境・関係性の更新 |
-| | `profile_update` | 自己像（`me`）とユーザー像（`user`）のブロックを置換 |
 | **アイテム** | `item_add` | 持ち物の追加 |
 | | `item_equip` | 装備スロットに装備（外見に反映） |
 | | `item_unequip` | 装備を外す |
@@ -195,7 +194,6 @@ WebUI は `http://localhost:26262/` にあります。9 つのタブはすべて
 | | `wiki_grep` | 本文の正規表現検索 |
 | | `wiki_write` | ページ作成（`sources` に出典の記憶キーを書く） |
 | | `wiki_delete` | ページ削除（`index` は保護） |
-| **目標** | `goal_manage` | 目標の作成・一覧・達成・取消 |
 
 チャット経路だけで使う組み込みツール（`move` / `invoke_skill` / `list_skills` / `search_tools` / `image_generate`）は MCP には出していません。
 
@@ -245,7 +243,7 @@ MCP クライアント / WebUI
    ▼                   ▼               ▼
 domain/            application/    infrastructure/
 記憶・ペルソナ      チャットパイプライン  SQLite (WAL)
-検索・装備・目標    WikiWorker       Qdrant
+検索・装備          WikiWorker       Qdrant
                                    LLM / TTS / 画像生成
 ```
 
@@ -347,7 +345,7 @@ lint は ruff（E, F, W, I, N, UP, B, A, SIM, TCH）、型検査は mypy、セ�
 |---|---|
 | [docs/architecture.md](docs/architecture.md) | 技術スタック、ディレクトリ構造、設計パターン |
 | [docs/http_api_reference.md](docs/http_api_reference.md) | REST API の全エンドポイントと認証 |
-| [docs/memory_features.md](docs/memory_features.md) | 記憶の機能一覧（ブロック、進化、矛盾検出、圧縮） |
+| [docs/memory_features.md](docs/memory_features.md) | 記憶の機能一覧（進化、矛盾検出、圧縮） |
 | [docs/llm_usage_guide.md](docs/llm_usage_guide.md) | エージェント側から見た使い方 |
 | [docs/backup_restore.md](docs/backup_restore.md) | バックアップと復元 |
 | [docs/sandbox.md](docs/sandbox.md) | サンドボックス実行（オプション） |

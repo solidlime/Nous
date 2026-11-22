@@ -107,7 +107,7 @@ async def test_overview_has_kpi_but_no_heavy_sections(client):
     assert data["persona"] == PERSONA
     assert data["stats"]["total_count"] == 3
     assert "pages" in data["wiki"] and "projects" in data["wiki"]
-    for heavy in ("recent", "blocks", "items", "equipment", "generated_images", "latest_self_portrait"):
+    for heavy in ("recent", "items", "equipment", "generated_images", "latest_self_portrait"):
         assert heavy not in data, heavy
 
 
@@ -174,10 +174,8 @@ async def test_v1_dashboard_keeps_50_recent_and_all_sections(client):
         "stats",
         "context",
         "recent",
-        "blocks",
         "equipment",
         "items",
-        "goals",
         "relationship_highlights",
         "state_memories",
         "latest_self_portrait",
@@ -194,19 +192,15 @@ async def test_v1_dashboard_keeps_50_recent_and_all_sections(client):
 @pytest.mark.asyncio
 async def test_sections_carry_only_their_own_key(client):
     _seed_memories(1)
-    blocks = (await client.get("/api/v2/blocks/" + PERSONA)).json()
     items = (await client.get("/api/v2/items/" + PERSONA)).json()
     equipment = (await client.get("/api/v2/equipment/" + PERSONA)).json()
-    goals = (await client.get("/api/v2/goals/" + PERSONA)).json()
-    assert set(blocks) == {"persona", "blocks"}
     assert set(items) == {"persona", "items"}
     assert set(equipment) == {"persona", "equipment"}
-    assert set(goals) == {"persona", "goals"}
 
 
 @pytest.mark.asyncio
 async def test_sections_status_matches_v1_for_unknown_persona(client):
     v1 = (await client.get("/api/dashboard/no_such_persona_xyz")).status_code
-    for name in ("blocks", "equipment", "items", "goals", "images"):
+    for name in ("equipment", "items", "images"):
         r = await client.get(f"/api/v2/{name}/no_such_persona_xyz")
         assert r.status_code == v1, name

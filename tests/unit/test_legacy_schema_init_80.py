@@ -92,7 +92,12 @@ def test_legacy_emotion_and_block_rows_get_real_persona(tmp_path: Path) -> None:
 
 
 def test_backfill_keeps_existing_persona_block_on_conflict(tmp_path: Path) -> None:
-    """同名ブロックが既に実 persona に在るとき PK 衝突で落ちないこと（UPDATE OR IGNORE）."""
+    """同名ブロックが既に実 persona に在るとき PK 衝突で落ちないこと（UPDATE OR IGNORE）.
+
+    memory_blocks は新規 DB に作られないため、v11 以前の旧 DB 上で検証する。
+    """
+    _legacy_db(tmp_path)
+
     manager = SQLiteConnection(str(tmp_path), _PERSONA)
     manager.initialize_schema()
     conn = manager.get_memory_db()

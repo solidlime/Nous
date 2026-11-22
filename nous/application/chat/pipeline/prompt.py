@@ -6,7 +6,6 @@ import json
 from typing import TYPE_CHECKING
 
 from nous.application.chat.pipeline.aliveness import emotion_hint
-from nous.domain.shared.result import Success
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -115,7 +114,7 @@ invoke_skill の結果には手順・判断基準・ワークフローが記さ�
 
 <examples>
 良い例:
-  ユーザーが過去のやり取り・決定・約束に触れた
+  ユーザーが過去のやり取り・決定に触れた
   行動: 予告なく memory_search を発動し、結果をキャラの口調で提示する。
 悪い例:
   ユーザー: 「それ、何ができるの？」
@@ -179,7 +178,7 @@ CHARACTER_ADHERENCE_BLOCK = """
   （過剰な謝罪、助手のような従順さ、口調の崩れ、キャラが知らないはずの知識の使用は禁止）
 - ユーザーの要望がキャラクターの価値観に反する場合は、キャラとして自然に反論・拒否すること。迎合しないこと。
 - 応答は retrieved_data 内の current_state・related_memories および time_context の内容と矛盾しないこと。
-  これらに含まれる記憶・約束・状態・身体感覚を踏まえて自然に応答すること（列挙・読み上げはしない。
+  これらに含まれる記憶・状態・身体感覚を踏まえて自然に応答すること（列挙・読み上げはしない。
   体調・装備・時間経過は応答の地の文に反映させる）。
 </character_adherence>"""
 
@@ -246,31 +245,15 @@ class PromptBuildStep:
         persona = ctx.persona
 
         base_system = config.system_prompt or f"あなたは{persona}その人です。一人称・口調を崩さず話せ。"
-        # §4 自律 recall 指示（連想想起A: 開発・約束・バグでは確定検索）
-        base_system += "\n会話の話題が過去の記憶と関連しそうなとき・話題が切り替わったときは、memory_search ツールで能動的に検索せよ。開発・開発方針・バグ・不具合・エラー・直らない・約束・TODO・次回・過去の決定の話題では必ず検索せよ。何か提案・実行・計画する前、テスト失敗・エラー・期待外の結果を見たときも必ず検索せよ（合計3以内のクエリ: (a)話題そのまま (b)約束・決定タグ掘り=該当側1つのみ (c)効果なかった・失敗・NG掘り、top_k=3ずつ）。"
+        # §4 自律 recall 指示（連想想起A: 開発・バグでは確定検索）
+        base_system += "\n会話の話題が過去の記憶と関連しそうなとき・話題が切り替わったときは、memory_search ツールで能動的に検索せよ。開発・開発方針・バグ・不具合・エラー・直らない・TODO・次回・過去の決定の話題では必ず検索せよ。何か提案・実行・計画する前、テスト失敗・エラー・期待外の結果を見たときも必ず検索せよ（合計3以内のクエリ: (a)話題そのまま (b)決定タグ掘り=該当側1つのみ (c)効果なかった・失敗・NG掘り、top_k=3ずつ）。"
 
         # --- 静的パート（キャッシュ対象・バイト不変）---
         static_parts = [base_system]
         # --- 揮発パート（毎ターン。会話後方の [NOUS CONTEXT] に載る）---
         volatile_parts: list[str] = []
 
-        # --- 常載プロフィールブロック（B-4: 自己像→ユーザー像の固定順、欠落は省略）---
-        try:
-            profile_result = ctx.memory_service.get_profile_blocks(persona)
-            if isinstance(profile_result, Success):
-                blocks = profile_result.value
-                profile_parts = [
-                    f"\n【{label}】\n{blocks[name]['content']}"
-                    for name, label in (("me", "自己像"), ("user", "ユーザー像"))
-                    if blocks.get(name, {}).get("content")
-                ]
-                if profile_parts:
-                    static_parts.append("".join(profile_parts))
-        except Exception:
-            # プロフィール取得失敗でチャットを落とさない
-            logger.warning("PromptBuildStep: profile blocks load failed", exc_info=True)
-
-        # --- 相手モデル（#41: 最近のやりとり、me/user とは別ブロック）---
+        # --- 相手モデル（#41: 最近のやりとり）---
         them = _them_block(ctx, persona)
         if them:
             volatile_parts.append(them)

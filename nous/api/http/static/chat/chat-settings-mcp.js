@@ -5,7 +5,7 @@
    ================================================================= */
 ;(function(N) {
 var C = N.Core;
-var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
+var safeSetHTML = C.safeSetHTML;
 "use strict";
 var S = window.S;
 
@@ -195,11 +195,9 @@ const BUILTIN_TOOLS = [
   { name: "memory_search", desc: "記憶を検索する" },
   { name: "memory_update", desc: "既存の記憶を書き換える" },
   { name: "update_context", desc: "感情・状態を更新する" },
-  { name: "profile_update", desc: "ユーザーのプロフィールを更新する" },
   { name: "invoke_skill", desc: "スキルを発動する" },
   { name: "list_skills", desc: "スキル一覧を取得する" },
   { name: "search_tools", desc: "ツールを検索する" },
-  { name: "goal_manage", desc: "目標を管理する" },
   { name: "item_add", desc: "持ち物を追加する" },
   { name: "item_equip", desc: "持ち物を装備する" },
   { name: "item_search", desc: "持ち物を検索する" },

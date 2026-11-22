@@ -68,8 +68,6 @@ class TestHookProjectTagForced:
         ctx = _mock_ctx(_settings())
         result = {
             "facts": [{"content": "マダムは紅茶が好き", "importance": 0.7, "tags": ["preference"]}],
-            "goals": [],
-            "promises": [],
             "context_update": {},
         }
         with patch(
@@ -86,8 +84,6 @@ class TestHookProjectTagForced:
         ctx = _mock_ctx(_settings())
         result = {
             "facts": [{"content": "マダムは紅茶が好き", "importance": 0.7}],
-            "goals": [],
-            "promises": [],
             "context_update": {},
         }
         with patch(
@@ -104,8 +100,6 @@ class TestHookProjectTagForced:
         ctx = _mock_ctx(_settings())
         result = {
             "facts": [{"content": "既存タグあり", "importance": 0.5, "tags": ["project:kanban"]}],
-            "goals": [],
-            "promises": [],
             "context_update": {},
         }
         with patch(
@@ -122,8 +116,6 @@ class TestHookProjectTagForced:
         ctx = _mock_ctx(_settings())
         result = {
             "facts": [{"content": "スラッシュ付き", "importance": 0.5, "tags": ["note"]}],
-            "goals": [],
-            "promises": [],
             "context_update": {},
         }
         with patch(
@@ -141,8 +133,6 @@ class TestHookProjectTagForced:
         ctx = _mock_ctx(_settings())
         result = {
             "facts": [{"content": "大文字混在", "importance": 0.5, "tags": ["note"]}],
-            "goals": [],
-            "promises": [],
             "context_update": {},
         }
         with patch(
@@ -159,8 +149,6 @@ class TestHookProjectTagForced:
         ctx = _mock_ctx(_settings())
         result = {
             "facts": [{"content": "プロジェクト無しは残す", "importance": 0.5, "tags": ["note"]}],
-            "goals": [],
-            "promises": [],
             "context_update": {},
         }
         with patch(
@@ -171,37 +159,6 @@ class TestHookProjectTagForced:
         kwargs = ctx.memory_service.create_memory.await_args.kwargs
         assert kwargs["tags"] == ["note"]
 
-    async def test_goal_create_gets_project_tag(self):
-        from nous.application.hooks.memory_extraction import run_hook_extraction
-
-        ctx = _mock_ctx(_settings())
-        result = {
-            "facts": [],
-            "goals": [{"action": "create", "content": "goal1"}],
-            "promises": [],
-            "context_update": {},
-        }
-        with patch(
-            "nous.application.hooks.memory_extraction.MemoryLLM.process",
-            new=AsyncMock(return_value=result),
-        ):
-            await run_hook_extraction(ctx, "herta", _turn_event_with_project("nous"), "sess_p1")
-        kwargs = ctx.memory_service.create_memory.await_args.kwargs
-        assert kwargs["tags"] == ["project:nous", "goal", "active"]
-
-    async def test_set_tags_preserves_existing_project_tag(self):
-        from nous.application.hooks.memory_extraction import _set_tags
-
-        ctx = _mock_ctx(_settings())
-        existing = MagicMock(tags=["project:nous", "goal", "active"])
-        ctx.memory_service.get_memory.return_value = Success(existing)
-        ctx.memory_service.update_memory.return_value = Success(True)
-        assert _set_tags(ctx, "mem_p1", ["goal", "achieved"])
-        tags = ctx.memory_service.update_memory.call_args.kwargs["tags"]
-        assert "project:nous" in tags
-
-
-class TestMcpCreateProjectTag:
     @pytest.mark.asyncio
     async def test_create_with_project_param(self, mock_app_context):
         from nous.api.mcp import _tools_memory as m

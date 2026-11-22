@@ -14,11 +14,6 @@ var S = window.S;
 /* ---- Slash command definitions ---- */
 const SLASH_COMMANDS = [
   { name: "/memory", desc: "記憶を作成", example: "/memory 今日は楽しかった" },
-  {
-    name: "/goal",
-    desc: "目標を作成",
-    example: "/goal プロジェクトを完成させる",
-  },
   { name: "/help", desc: "コマンド一覧を表示", example: "/help" },
   { name: "/search", desc: "記憶を検索", example: "/search 昨日の会話" },
   { name: "/image", desc: "画像を生成", example: "/image 猫の写真" },

@@ -6,7 +6,6 @@ import sqlite3
 
 import pytest
 
-from nous.infrastructure.sqlite.connection import SQLiteConnection
 from nous.infrastructure.sqlite.migrations import _migrate_memory_blocks_persona_v11
 
 _LEGACY_DDL = (
@@ -87,11 +86,3 @@ class TestMemoryBlocksPersonaMigration:
 
     def test_missing_table_is_noop(self, tmp_db):
         _migrate_memory_blocks_persona_v11(tmp_db, "test")  # 例外なし
-
-    def test_fresh_schema_has_persona_pk(self, tmp_path):
-        conn = SQLiteConnection(data_dir=str(tmp_path), persona="test")
-        conn.initialize_schema()
-        db = conn.get_memory_db()
-        cols = [r["name"] for r in db.execute("PRAGMA table_info(memory_blocks)").fetchall()]
-        assert cols[0] == "persona"
-        assert conn  # keep ref alive

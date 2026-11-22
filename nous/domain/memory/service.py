@@ -351,58 +351,6 @@ class MemoryService:
         return self._query_service.get_memory_index()
 
     # ------------------------------------------------------------------
-    # Block management
-    # ------------------------------------------------------------------
-
-    def write_block(
-        self,
-        block_name: str,
-        content: str,
-        persona: str = "default",
-        **opts: object,
-    ) -> Result[None, DomainError]:
-        """Write a named memory block."""
-        if not block_name or not block_name.strip():
-            return Failure(MemoryValidationError("Block name must not be empty"))
-        if not content:
-            return Failure(MemoryValidationError("Block content must not be empty"))
-        return self._repo.save_block(
-            block_name=block_name.strip(),
-            content=content,
-            block_type=str(opts.get("block_type", "custom")),
-            max_tokens=int(opts.get("max_tokens", 500)),
-            priority=int(opts.get("priority", 0)),
-            metadata=opts.get("metadata") if isinstance(opts.get("metadata"), dict) else None,
-            persona=persona,
-        )
-
-    def list_blocks(self, persona: str = "default") -> Result[list[dict], DomainError]:
-        """List all memory blocks for a persona."""
-        return self._repo.list_blocks(persona)
-
-    def delete_block(self, block_name: str, persona: str = "default") -> Result[None, DomainError]:
-        """Delete a named memory block."""
-        return self._repo.delete_block(block_name, persona)
-
-    # ------------------------------------------------------------------
-    # Profile blocks (常載プロフィールドキュメント) — B-2
-    # ------------------------------------------------------------------
-
-    def get_profile_blocks(self, persona: str = "default") -> Result[dict[str, dict], DomainError]:
-        """Get the常載 profile blocks (``me``/``user``) for a persona."""
-        result = self._repo.get_profile_blocks(persona)  # type: ignore[attr-defined]
-        if not result.is_ok:
-            return Failure(result.error)
-        return Success(result.value)
-
-    def upsert_profile_block(self, persona: str, name: str, content: str) -> Result[None, DomainError]:
-        """Upsert a profile block (all-or-nothing rewrite)."""
-        if not content:
-            return Failure(MemoryValidationError("Profile content must not be empty"))
-        result = self._repo.upsert_profile_block(persona, name, content)  # type: ignore[attr-defined]
-        return Success(None) if result.is_ok else Failure(result.error)
-
-    # ------------------------------------------------------------------
     # Smart Recent + Search Log + Gap Alert
     # ------------------------------------------------------------------
 

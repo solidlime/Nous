@@ -14,7 +14,6 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from nous.api.mcp._tools_goal import _tool_goal_manage
 from nous.api.mcp._tools_item import _tool_item_add, _tool_item_equip, _tool_item_search
 from nous.api.mcp._tools_memory import (
     _tool_memory_create,
@@ -141,7 +140,7 @@ class TestRegistryPublishInvariant:
 
 
 # ---------------------------------------------------------------------------
-# (c) audit: all 13 MCP tool functions publish on success AND failure
+# (c) audit: all 12 MCP tool functions publish on success AND failure
 # ---------------------------------------------------------------------------
 
 TOOLS = {
@@ -156,7 +155,6 @@ TOOLS = {
     "item_add": _tool_item_add,
     "item_equip": _tool_item_equip,
     "item_search": _tool_item_search,
-    "goal_manage": _tool_goal_manage,
     "invoke_skill": _tool_invoke_skill,
 }
 
@@ -187,8 +185,6 @@ def _success_call(tool_name: str, ctx):
         return asyncio.run(_tool_item_equip(ctx, PERSONA, equipment={"top": "dress"}))
     if tool_name == "item_search":
         return asyncio.run(_tool_item_search(ctx, PERSONA, query="sword"))
-    if tool_name == "goal_manage":
-        return asyncio.run(_tool_goal_manage(ctx, PERSONA, operation="list"))
     if tool_name == "invoke_skill":
         with patch("nous.domain.skill.SkillRepository.load_from_dir") as load:
             load.return_value = [SimpleNamespace(name="s", content="do things")]
@@ -235,9 +231,6 @@ def _failure_call(tool_name: str, ctx):
     if tool_name == "item_search":
         ctx.equipment_service.search_items.return_value = Failure(RepositoryError("db down"))
         return asyncio.run(_tool_item_search(ctx, PERSONA, query="sword"))
-    if tool_name == "goal_manage":
-        ctx.memory_service.get_by_tags.return_value = Failure(RepositoryError("db down"))
-        return asyncio.run(_tool_goal_manage(ctx, PERSONA, operation="list"))
     if tool_name == "invoke_skill":
         # no skills anywhere → returned failure {"ok": False}
         return asyncio.run(_tool_invoke_skill(ctx, PERSONA, name="missing_skill", task="t"))

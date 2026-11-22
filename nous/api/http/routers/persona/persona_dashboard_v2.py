@@ -11,10 +11,8 @@ from typing import TYPE_CHECKING
 from starlette.responses import JSONResponse
 
 from nous.api.http.routers.persona.persona_dashboard import (
-    _build_blocks,
     _build_equipment,
     _build_generated_images,
-    _build_goals,
     _build_items,
     _build_recent,
     _build_state_memories,
@@ -68,16 +66,8 @@ def _wiki_summary(persona: str) -> dict:
     return {"pages": len(pages), "projects": len(projects), "reading": reading}
 
 
-def _goals_summary(ctx) -> dict:
-    goals = _build_goals(ctx)
-    return {
-        "total": len(goals),
-        "active": sum(1 for g in goals if (g.get("status") or "active") == "active"),
-    }
-
-
 def _overview(persona: str, ctx) -> dict:
-    """KPI だけの軽量ペイロード（recent / blocks / items / 画像は載せない）。"""
+    """KPI だけの軽量ペイロード（recent / items / 画像は載せない）。"""
     stats, context = _build_stats_context(persona, ctx)
     return {
         "persona": persona,
@@ -85,7 +75,6 @@ def _overview(persona: str, ctx) -> dict:
         "context": context,
         "state_memories": _build_state_memories(ctx),
         "wiki": _wiki_summary(persona),
-        "goals": _goals_summary(ctx),
     }
 
 
@@ -129,10 +118,8 @@ def _handler(build):
 
 overview = _handler(lambda request, persona, ctx: _overview(persona, ctx))
 recent = _handler(_recent)
-blocks = _handler(lambda request, persona, ctx: {"persona": persona, "blocks": _build_blocks(ctx)})
 equipment = _handler(lambda request, persona, ctx: {"persona": persona, "equipment": _build_equipment(ctx)})
 items = _handler(lambda request, persona, ctx: {"persona": persona, "items": _build_items(ctx)})
-goals = _handler(lambda request, persona, ctx: {"persona": persona, "goals": _build_goals(ctx)})
 images = _handler(lambda request, persona, ctx: _images(persona, ctx))
 
 
@@ -140,8 +127,6 @@ def register_persona_v2_routes(mcp) -> None:
     """分割 API（/api/v2/...）。"""
     mcp.custom_route("/api/v2/overview/{persona}", methods=["GET"])(overview)
     mcp.custom_route("/api/v2/recent/{persona}", methods=["GET"])(recent)
-    mcp.custom_route("/api/v2/blocks/{persona}", methods=["GET"])(blocks)
     mcp.custom_route("/api/v2/equipment/{persona}", methods=["GET"])(equipment)
     mcp.custom_route("/api/v2/items/{persona}", methods=["GET"])(items)
-    mcp.custom_route("/api/v2/goals/{persona}", methods=["GET"])(goals)
     mcp.custom_route("/api/v2/images/{persona}", methods=["GET"])(images)

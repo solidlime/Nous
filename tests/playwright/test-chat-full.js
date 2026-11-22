@@ -206,30 +206,6 @@ async function run() {
   }
 
   // ============================================================
-  // TEST 6: 目標操作
-  // ============================================================
-  console.log("\n[TEST 6] 目標操作...");
-  try {
-    const inp = await waitForChatInput(page, 10000);
-    await inp.fill("新しい目標を追加して：すべてのテストを通す");
-    await sleep(200);
-    await inp.press("Shift+Enter");
-
-    const ok = await waitForSSEComplete(page, 60000);
-    await sleep(2000);
-    const errs = await checkToastError(page);
-    if (ok && errs.length === 0) {
-      results.passed.push("TEST 6: 目標操作成功");
-      console.log("  PASS");
-    } else {
-      results.failed.push("TEST 6: " + (errs.join(", ") || "timeout"));
-      console.log("  FAIL");
-    }
-  } catch (e) {
-    results.failed.push("TEST 6: 例外: " + e.message);
-  }
-
-  // ============================================================
   // TEST 7: バックエンド API - /api/chat/{persona}/commitments
   // ============================================================
   console.log("\n[TEST 7] /api/chat/herta/commitments...");

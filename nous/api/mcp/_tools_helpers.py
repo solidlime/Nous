@@ -50,8 +50,6 @@ _NEAR_DUP_THRESHOLD = 0.85
 # 「~500-800 tok」を大きく上回っていた。以下を節ごとの件数+文字数上限として固定し、
 # 最悪ケースを ≤ 800 tok（≤ 2,000 字）へ引き戻す。
 _MAX_TOTAL_CHARS = 2000
-_MAX_COMMITMENTS = 5
-_MAX_COMMITMENT_CHARS = 80
 _MAX_INSIGHTS = 2
 _MAX_INSIGHT_CHARS = 120
 _MAX_SUMMARIES = 2
@@ -63,7 +61,7 @@ _MAX_PROJECT_CHARS = 160
 # ── tool.called self-publication (F3 invariant) ──
 # Invariant: MCP tools publish their own tool.called events on ALL paths;
 # ToolRegistry skips MCP tools.  Tools that already publish inline
-# (memory_read/search/stats, get_context, goal_manage, item_*) keep their
+# (memory_read/search/stats, get_context, item_*) keep their
 # rich summaries; the 5 tools below had zero self-publication and use the
 # audited wrapper to guarantee coverage on every success/failure path.
 
@@ -378,7 +376,6 @@ def _enforce_total_budget(body: str, trailer: str) -> str:
 def _format_lightweight_response(
     state: PersonaState,
     top_memories: list,
-    goals: list,
     equipment: dict,
     recent: list,
     time_since: str = "",
@@ -391,7 +388,6 @@ def _format_lightweight_response(
     one_shot_context: dict[str, str] | None = None,
     project_memories: list | None = None,
     project_name: str | None = None,
-    due_labels: dict[str, str] | None = None,
     wiki_page_count: int | None = None,
     open_question: str | None = None,
     handover: str | None = None,
@@ -403,7 +399,7 @@ def _format_lightweight_response(
     """
     lines: list[str] = []
 
-    # 節跨ぎ dedupe 用の正規化済み seen set。節の構築順（active goals → recent →
+    # 節跨ぎ dedupe 用の正規化済み seen set。節の構築順（recent →
     # essential story → insights/patterns → summaries → project）で共有する。
     seen: set[str] = set()
 
@@ -494,21 +490,6 @@ def _format_lightweight_response(
     if equipped:
         eq_parts = [f"{slot}: {name}" for slot, name in equipped.items()]
         lines.append("You are wearing: " + ", ".join(eq_parts))
-
-    # Active commitments (compact)
-    active_goals = [g for g in goals if "active" in (g.tags or [])]
-    if active_goals:
-        active_goals = _dedupe_memories(active_goals, seen)
-    if active_goals:
-        lines.append("\n⚠️ YOUR ACTIVE COMMITMENTS:")
-        for g in active_goals[:_MAX_COMMITMENTS]:
-            ts = relative_time_str(g.created_at) if getattr(g, "created_at", None) else ""
-            ts_str = f" ({ts})" if ts else ""
-            # audit M2 — prospective cue: the deadline this commitment fired on
-            due = (due_labels or {}).get(getattr(g, "key", ""), "")
-            due_str = f" ⏰ {due}" if due else ""
-            snippet = _truncate_snippet(g.content, _MAX_COMMITMENT_CHARS, getattr(g, "key", ""))
-            lines.append(f"  🎯 {snippet}{ts_str}{due_str}")
 
     # Recent memories — conversation continuity across sessions
     if recent:

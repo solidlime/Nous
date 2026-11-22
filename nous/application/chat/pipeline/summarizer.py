@@ -14,7 +14,7 @@ if TYPE_CHECKING:
 logger = get_logger(__name__)
 
 SUMMARIZE_PROMPT = """Summarize the conversation history below, in {language}.
-Prioritize: user statements, decisions, preferences, promises, emotional events.
+Prioritize: user statements, decisions, preferences, emotional events.
 Keep the summary within approximately {summarize_target_chars} characters.
 
 Conversation history:

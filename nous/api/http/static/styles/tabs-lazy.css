@@ -206,10 +206,6 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
     text-transform: none; letter-spacing: 0;
 }
 .memory-muted-text { font-size: 0.82rem; color: var(--text-muted); }
-.memory-block-row { padding: 10px 0; border-bottom: 1px solid var(--glass-border); }
-.memory-block-head { display: flex; align-items: center; gap: 8px; margin-bottom: 4px; }
-.memory-block-name { font-weight: 600; color: var(--accent-purple); font-size: 0.85rem; }
-.memory-block-actions { display: flex; gap: 6px; margin-left: auto; }
 .badge-count { opacity: 0.7; }
 .profile-chip { padding: 5px 14px; font-size: 0.78rem; }
 .profile-chip-builtin {
@@ -222,10 +218,6 @@ html.light .badge-yellow { color: var(--accent-yellow); } html.light .badge-red 
     padding: 5px 8px; font-size: 0.72rem;
     border-top-left-radius: 0; border-bottom-left-radius: 0; border-left: none;
 }
-.goal-row { display: flex; align-items: center; gap: 8px; padding: 6px 0; }
-.goal-text { flex: 1; font-size: 0.85rem; color: var(--text-secondary); }
-.goal-time { font-size: 0.72rem; color: var(--text-muted); white-space: nowrap; }
-.goals-scroll { max-height: 240px; overflow-y: auto; padding-right: 4px; }
 .chart-box { height: 220px; position: relative; }
 .stat-accent-green { color: var(--accent-green); }
 .stat-accent-blue { color: var(--accent-blue); }

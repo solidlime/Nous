@@ -1,4 +1,4 @@
-"""``session_begin`` の notes — 沈黙の間を埋める（#37）／約束を自分から切り出す（#43）。
+"""``session_begin`` の notes — 沈黙の間を埋める（#37）。
 
 どちらも begin の戻り値 ``notes: list[str]`` に 1 行ずつ載るだけ。生成に失敗しても
 begin は成功させる（失敗は ``warning:`` 行として notes に残す）。
@@ -10,7 +10,6 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING
 
-from nous.domain.memory.cue import PROMISE_TAGS, due_cues
 from nous.domain.shared.result import Success
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.llm.base import LLMMessage
@@ -29,7 +28,6 @@ logger = get_logger(__name__)
 SILENCE_TAG = "life:between"
 DEFAULT_SILENCE_HOURS = 6.0
 SILENCE_MAX_CHARS = 200
-PROMISE_MAX_CHARS = 80
 
 _SILENCE_PROMPT = """\
 あなたは{persona}。{hours:.1f}時間ぶりに相手が戻ってくる。
@@ -122,19 +120,3 @@ async def _generate(ctx: AppContext, persona: str, gap: float) -> str | None:
         return None
     flat = " ".join((text or "").split())
     return flat[:SILENCE_MAX_CHARS] or None
-
-
-def promise_note(ctx: AppContext) -> str | None:
-    """期限付きの約束があれば「自分から切り出す」1行（#43）。無ければ None。"""
-    try:
-        result = ctx.memory_service.get_by_tags(list(PROMISE_TAGS))
-    except Exception:  # noqa: BLE001 — begin は落とさない
-        return None
-    if not getattr(result, "is_ok", False):
-        return None
-    due = due_cues(getattr(result, "value", None) or [], get_now(), allow_overdue=True)
-    if not due:
-        return None
-    memory, label = due[0]
-    text = " ".join(str(memory.content).split())[:PROMISE_MAX_CHARS]
-    return f"⏳ 自分から切り出す: {text} ({label})"

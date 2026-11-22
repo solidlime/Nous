@@ -1,4 +1,4 @@
-"""Chat memory panel — retrieved memories, saved memories, reflection, goals, equipment."""
+"""Chat memory panel — retrieved memories, saved memories, reflection, equipment."""
 
 
 def render_chat_memory_panel() -> str:
@@ -28,22 +28,6 @@ def render_chat_memory_panel() -> str:
                         <div class="memory-section-header" id="reflection-header"><i data-lucide="sparkles"></i> リフレクション</div>
                         <div id="memory-reflection-list">
                             <div class="memory-empty">リフレクション洞察がここに表示されます</div>
-                        </div>
-                    </div>
-
-                    <!-- Active goals -->
-                    <div class="memory-panel-section">
-                        <div class="memory-section-header"><i data-lucide="target"></i> アクティブな目標</div>
-                        <div id="memory-goals-list">
-                            <div class="memory-empty">チャット中に自動更新されます</div>
-                        </div>
-                    </div>
-
-                    <!-- Promises -->
-                    <div class="memory-panel-section">
-                        <div class="memory-section-header"><i data-lucide="handshake"></i> 約束</div>
-                        <div id="memory-promises-list">
-                            <div class="memory-empty">チャット中に自動更新されます</div>
                         </div>
                     </div>
 

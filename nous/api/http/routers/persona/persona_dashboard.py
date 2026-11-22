@@ -122,11 +122,6 @@ def _build_recent(ctx, limit: int) -> list[dict]:
     return [_memory_to_dict(m) for m in recent_result.value] if recent_result.is_ok else []
 
 
-def _build_blocks(ctx) -> list:
-    blocks_result = ctx.memory_service.list_blocks()
-    return blocks_result.value if blocks_result.is_ok else []
-
-
 def _build_equipment(ctx) -> dict:
     equip_result = ctx.equipment_service.get_equipment()
     return equip_result.value if equip_result.is_ok else {}
@@ -143,34 +138,6 @@ def _build_items(ctx) -> list[dict]:
                 d[k] = d[k].isoformat()
         items.append(d)
     return items
-
-
-def _build_goals(ctx) -> list[dict]:
-    # Helper: sort goals by status priority (active first), then by recency
-    _status_priority = {"active": 0, "fulfilled": 1, "achieved": 1, "cancelled": 2}
-    _max_commitments = 30
-
-    goals_result = ctx.memory_repo.get_by_tags(["goal"])
-    _goals_raw = goals_result.value if goals_result.is_ok else []
-    _goals_sorted = sorted(
-        _goals_raw,
-        key=lambda m: (
-            _status_priority.get(
-                next((t for t in (m.tags or []) if t in ("active", "achieved", "cancelled")), "active"),
-                99,
-            ),
-            -(m.created_at.timestamp() if m.created_at else 0),
-        ),
-    )
-    return [
-        {
-            "content": m.content,
-            "status": next((t for t in (m.tags or []) if t in ("active", "achieved", "cancelled")), "active"),
-            "created_at": m.created_at.isoformat() if m.created_at else None,
-            "key": m.key,
-        }
-        for m in _goals_sorted[:_max_commitments]
-    ]
 
 
 def _build_relationship_highlights(ctx) -> list[dict]:
@@ -314,10 +281,8 @@ async def _do_dashboard_data(persona: str, ctx) -> dict:
         "stats": stats,
         "context": context,
         "recent": _build_recent(ctx, 50),
-        "blocks": _build_blocks(ctx),
         "equipment": _build_equipment(ctx),
         "items": _build_items(ctx),
-        "goals": _build_goals(ctx),
         "relationship_highlights": _build_relationship_highlights(ctx),
         "state_memories": _build_state_memories(ctx),
         "latest_self_portrait": _latest_self_portrait(persona),

@@ -94,9 +94,7 @@ class MemoryActivitySSE:
 
     retrieved: list  # list of {"content": str, "score": float, "importance": float}
     saved: list  # list of {"content": str, "tags": list}
-    goals: list | None = None  # list of {"content": str} newly saved goals
-    promises: list | None = None  # list of {"content": str} newly saved promises
-    preliminary: bool = False  # True: fast pre-retrieval; frontend must not clear saved/goals
+    preliminary: bool = False  # True: fast pre-retrieval; frontend must not clear saved
 
     def to_sse(self) -> str:
         return _sse_encode(
@@ -104,8 +102,6 @@ class MemoryActivitySSE:
             {
                 "retrieved": self.retrieved,
                 "saved": self.saved,
-                "goals": self.goals or [],
-                "promises": self.promises or [],
                 "preliminary": self.preliminary,
             },
         )

@@ -6,11 +6,10 @@ from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 from nous.application.chat.pipeline.aliveness import emotion_band, place_hint, safe_bands
-from nous.domain.memory.cue import due_cues, event_cued_memories
 from nous.domain.persona.body import body_action_hint
 from nous.domain.persona.emotion_trend import build_emotion_trend_narrative
 from nous.domain.shared.result import Success
-from nous.domain.shared.time_utils import get_now, relative_time_str
+from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -245,55 +244,6 @@ async def _build_context_section(
 
     # === Tier 3: 参照情報 ===
     query_text = (getattr(turn_ctx, "user_message", "") or "") if turn_ctx else ""
-    try:
-        goals_result = ctx.memory_service.get_by_tags(["goal"])
-        goals = goals_result.value if isinstance(goals_result, Success) else []
-        active_goals = [g for g in goals if "active" in (g.tags or [])]
-        if active_goals:
-            commit_lines: list[str] = []
-            for g in active_goals:
-                ts = (
-                    relative_time_str(getattr(g, "updated_at", None) or g.created_at)
-                    if getattr(g, "created_at", None)
-                    else ""
-                )
-                ts_str = f" ({ts})" if ts else ""
-                commit_lines.append(f"  🎯 [Goal] {g.content}{ts_str}")
-            t3.append("いまの約束:\n" + "\n".join(commit_lines))
-
-        # audit M2 — 先見的記憶: 「今この瞬間」が cue になるコミットメントだけを前面に出す。
-        # 時間 cue（期限が窓内）とイベント cue（今回の発話にエンティティが登場）の 2 種類。
-        # 期限切れは注入しない（未達成なら「いまの約束」に残る。二重に急かさない）。
-        if active_goals:
-            cue_lines: list[str] = []
-            cued_keys: set[str] = set()
-            for mem, label in due_cues(active_goals, get_now(), allow_overdue=False):
-                cued_keys.add(mem.key)
-                cue_lines.append(f"  ⏰ [期限] {mem.content[:120]} ({label})")
-            for mem in event_cued_memories(active_goals, query_text):
-                if mem.key in cued_keys:
-                    continue
-                cue_lines.append(f"  ⚡ [言及] {mem.content[:120]}")
-            if cue_lines:
-                t3.append("いま思い出すべき約束:\n" + "\n".join(cue_lines))
-    except Exception as e:
-        logger.debug("Failed to fetch goals: %s", e)
-
-    # 前からの約束（promise タグの記憶、直近5件）— light モードではスキップ
-    if not _is_light:
-        try:
-            promise_result = ctx.memory_service.get_by_tags(["promise"])
-            if isinstance(promise_result, Success) and promise_result.value:
-                promises = [m for m in promise_result.value[:5] if m.content]
-                if promises:
-                    sanitized = [
-                        _sanitize_text(m.content[:200] + "..." if len(m.content) > 200 else m.content) for m in promises
-                    ]
-                    sanitized = [p for p in sanitized if p]
-                    if sanitized:
-                        t3.append("前からの約束:\n" + "\n".join(f"  🤝 {p}" for p in sanitized))
-        except Exception as e:
-            logger.debug("Failed to fetch promises: %s", e)
 
     # 重要な記憶（importance 上位）— アイデンティティ中核のため light モードでも3件に減らして残す
     try:

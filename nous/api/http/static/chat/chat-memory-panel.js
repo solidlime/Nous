@@ -5,7 +5,7 @@
      memory-panel/wiring.js        — synapse fire feed + fire-limit
      memory-panel/wiring-stream.js — wiring SSE connect/persona/visibility
      memory-panel/wiring-detail.js — fire detail modal viewer
-     memory-panel/detail.js        — goal/promise panel detail modal
+     memory-panel/detail.js        — panel row → memory modal routing
    See sections/base.py for the script-tag order. This file is kept
    as a thin forwarder so existing HTML script references keep
    working; it registers nothing.

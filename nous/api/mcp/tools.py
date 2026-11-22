@@ -32,7 +32,7 @@ def _envelope_wrap(result: object) -> str:
             return tool_error(ToolErrorCode.INTERNAL, result.removeprefix("Error: ").strip())
         return tool_ok(result)
     if isinstance(result, dict):
-        # Legacy {"ok": bool, ...} dicts (get_context / update_context / goal_manage).
+        # Legacy {"ok": bool, ...} dicts (get_context / update_context).
         extra = {k: v for k, v in result.items() if k not in ("ok", "result", "error")}
         if result.get("ok"):
             return tool_ok(result.get("result", ""), **extra)
@@ -46,7 +46,6 @@ def _envelope_wrap(result: object) -> str:
 
 
 # ── Re-export core implementations from sub-modules ──
-from nous.api.mcp._tools_goal import _tool_goal_manage  # noqa: E402, F401
 from nous.api.mcp._tools_helpers import (  # noqa: E402, F401
     _build_time_comment,
     _format_lightweight_response,
@@ -71,7 +70,6 @@ from nous.api.mcp._tools_memory import (  # noqa: E402, F401
 )
 from nous.api.mcp._tools_persona import (  # noqa: E402, F401
     _tool_get_context,
-    _tool_profile_update,
     _tool_session_begin,
     _tool_update_context,
 )
@@ -97,12 +95,10 @@ TOOL_DISPATCH: dict[str, Any] = {
     "memory_search": _tool_memory_search,
     "memory_stats": _tool_memory_stats,
     "update_context": _tool_update_context,
-    "profile_update": _tool_profile_update,
     "item_add": _tool_item_add,
     "item_equip": _tool_item_equip,
     "item_search": _tool_item_search,
     "item_unequip": _tool_item_unequip,
-    "goal_manage": _tool_goal_manage,
     "wiki_read": _tool_wiki_read,
     "wiki_write": _tool_wiki_write,
     "wiki_ls": _tool_wiki_ls,
@@ -393,16 +389,6 @@ def register_tools(mcp: MCPServer) -> None:
         )
         return _envelope_wrap(r)
 
-    # profile_update (B-5)
-    @_tool("profile_update")
-    async def profile_update(target: str, content: str) -> str:
-        """自己像/ユーザー像プロフィールブロックを全体リライトする。
-        target: "me"（自己像）| "user"（ユーザー像）。
-        content: ブロック全文（上限 3000 token 目安。超過時はエラー）。
-        抽出・追記ではなく置換である。既存内容は失われる。"""
-        p = _resolve_persona()
-        return _envelope_wrap(await _tool_profile_update(AppContextRegistry.get(p), p, target=target, content=content))
-
     # ── Item tools (split from unified item) ──
 
     @_tool("item_add")
@@ -450,44 +436,6 @@ def register_tools(mcp: MCPServer) -> None:
         Valid slots match the equipment system; appearance is rebuilt automatically."""
         p = _resolve_persona()
         return _envelope_wrap(await _tool_item_unequip(AppContextRegistry.get(p), p, slots=slots))
-
-    # goal_manage
-    @_tool("goal_manage")
-    async def goal_manage(
-        operation: str,
-        content: str = "",
-        importance: float = 0.75,
-        scope: str = "self",
-        memory_key: str | None = None,
-        tags: list[str] | None = None,
-    ) -> str:
-        """Manage goals and interpersonal commitments.
-        operation: create/list/achieve/cancel.
-        create → requires: content, scope (self/interpersonal), optional: importance, tags.
-        list → requires: scope. optional: tags.
-        achieve/cancel → requires: memory_key. content: optional (not needed when memory_key provided).
-        tags: 追加タグ（例: project:nous）。create 時は goal/active に加えて付与、list 時は絞り込みに使用。
-        Goals stored as memories with tags=["goal","active/achieved/cancelled"]."""
-        p = _resolve_persona()
-        r = await _tool_goal_manage(
-            AppContextRegistry.get(p),
-            p,
-            operation=operation,
-            content=content,
-            importance=importance,
-            scope=scope,
-            memory_key=memory_key,
-            tags=tags,
-        )
-        if r.get("ok"):
-            if "key" in r:
-                return _envelope_wrap(f"Goal created: {r['key']}")
-            if "status" in r:
-                return _envelope_wrap(f"Goal {r['status']}: {r['content']}")
-            if "result" in r:
-                return _envelope_wrap(r["result"])
-            return _envelope_wrap("Goal done")
-        return _envelope_wrap(r)
 
     # wiki_read
     @_tool("wiki_read")

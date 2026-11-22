@@ -418,16 +418,8 @@ def _iso_or_raw(value):
 
 
 async def _do_get_commitments(persona: str, ctx) -> dict:
-    """Return active goals and latest reflection insights."""
-    goals: list[dict] = []
+    """Return latest reflection insights."""
     insights: list[dict] = []
-
-    try:
-        goal_result = ctx.memory_service.get_by_tags(["goal", "active"])
-        if goal_result.is_ok and goal_result.value:
-            goals = [{"content": m.content, "key": m.key} for m in goal_result.value]
-    except Exception as e:  # 目標/洞察の取得失敗は非致命的
-        logger.warning("get_chat_commitments: goals failed: %s", e)
 
     try:
         reflection_result = ctx.memory_service.get_by_tags(["reflection"])
@@ -450,10 +442,10 @@ async def _do_get_commitments(persona: str, ctx) -> dict:
                 }
                 for m in sorted_refs[:5]
             ]
-    except Exception as e:  # 目標/洞察の取得失敗は非致命的
+    except Exception as e:  # insights の取得失敗は非致命的
         logger.warning("get_chat_commitments: insights failed: %s", e)
 
-    return {"goals": goals, "insights": insights}
+    return {"insights": insights}
 
 
 async def _do_execute_chat_tool(persona: str, ctx, body: dict) -> dict:
@@ -620,7 +612,7 @@ async def get_chat_layout(request: Request) -> HTMLResponse:
 
 
 async def get_chat_commitments(request: Request) -> JSONResponse:
-    """GET /api/chat/{persona}/commitments — return active goals and insights."""
+    """GET /api/chat/{persona}/commitments — return latest reflection insights."""
     persona, ctx = _resolve_request(request)
     if not ctx:
         return JSONResponse({"error": "Persona not found"}, status_code=404)

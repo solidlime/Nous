@@ -14,7 +14,7 @@ class SQLiteRepository:
     Subclasses set ``_db_method`` to ``"get_memory_db"`` or
     ``"get_inventory_db"`` to select the correct SQLite database.
 
-    Mixins (e.g. SQLiteBlockMixin, SQLiteStrengthMixin) inherit ``_db``
+    Mixins (e.g. SQLiteStrengthMixin) inherit ``_db``
     from the concrete repository — they do *not* need their own ``_db_method``.
     """
 

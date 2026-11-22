@@ -53,56 +53,6 @@ async def _wiring_stream_gen(request: Request, poll_interval: float = 0.5):
 
 
 def register_memory_routes(mcp) -> None:
-    @mcp.custom_route("/api/blocks/{persona}", methods=["GET"])
-    async def list_blocks_http(request: Request) -> JSONResponse:
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"blocks": []})
-        result = ctx.memory_service.list_blocks(persona=persona)
-        blocks = result.value if isinstance(result, Success) else []
-        return JSONResponse({"persona": persona, "blocks": blocks})
-
-    @mcp.custom_route("/api/blocks/{persona}", methods=["POST"])
-    async def create_block_http(request: Request) -> JSONResponse:
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"error": "Persona not found"}, status_code=404)
-        try:
-            body = await request.json()
-        except (json.JSONDecodeError, TypeError):
-            return JSONResponse({"error": "Invalid JSON body"}, status_code=400)
-        if not isinstance(body, dict):
-            return JSONResponse({"error": "Body must be a JSON object"}, status_code=400)
-        block_name = body.get("block_name", "").strip()
-        content = body.get("content", "").strip()
-        if not block_name or not content:
-            return JSONResponse({"error": "block_name and content required"}, status_code=400)
-        result = ctx.memory_service.write_block(
-            block_name,
-            content,
-            persona=persona,
-            block_type=body.get("block_type", "custom"),
-            max_tokens=body.get("max_tokens") or 500,
-            priority=body.get("priority", 0),
-        )
-        if isinstance(result, Success):
-            return JSONResponse({"ok": True, "block_name": block_name})
-        return error_from_result(result)
-
-    @mcp.custom_route("/api/blocks/{persona}/{block_name:path}", methods=["DELETE"])
-    async def delete_block_http(request: Request) -> JSONResponse:
-        persona = _resolve_persona_from_request(request)
-        ctx = _safe_get_context(persona)
-        if not ctx:
-            return JSONResponse({"error": "Persona not found"}, status_code=404)
-        block_name = request.path_params.get("block_name", "")
-        result = ctx.memory_service.delete_block(block_name, persona=persona)
-        if isinstance(result, Success):
-            return JSONResponse({"ok": True})
-        return error_from_result(result)
-
     @mcp.custom_route("/api/observations/{persona}", methods=["GET"])
     async def observations(request: Request) -> JSONResponse:
         persona = _resolve_persona_from_request(request)

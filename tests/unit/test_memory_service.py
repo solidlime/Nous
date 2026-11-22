@@ -28,7 +28,6 @@ class InMemoryMemoryRepository:
 
     def __init__(self) -> None:
         self._store: dict[str, Memory] = {}
-        self._blocks: dict[str, dict] = {}
 
     def save(self, memory: Memory) -> Result[str, RepositoryError]:
         self._store[memory.key] = memory
@@ -94,36 +93,6 @@ class InMemoryMemoryRepository:
 
     def find_all(self) -> Result[list[Memory], RepositoryError]:
         return Success(list(self._store.values()))
-
-    def get_block(self, block_name: str, persona: str = "default") -> Result[dict | None, RepositoryError]:
-        return Success(self._blocks.get(block_name))
-
-    def save_block(
-        self,
-        block_name: str,
-        content: str,
-        block_type: str = "custom",
-        max_tokens: int = 500,
-        priority: int = 0,
-        metadata: dict | None = None,
-        persona: str = "default",
-    ) -> Result[None, RepositoryError]:
-        self._blocks[block_name] = {
-            "block_name": block_name,
-            "content": content,
-            "block_type": block_type,
-            "max_tokens": max_tokens,
-            "priority": priority,
-            "metadata": metadata or {},
-        }
-        return Success(None)
-
-    def list_blocks(self, persona: str = "default") -> Result[list[dict], RepositoryError]:
-        return Success(list(self._blocks.values()))
-
-    def delete_block(self, block_name: str, persona: str = "default") -> Result[None, RepositoryError]:
-        self._blocks.pop(block_name, None)
-        return Success(None)
 
     # Memory versions
     def save_version(
@@ -327,23 +296,6 @@ class TestGetStats:
         assert stats["tag_distribution"]["travel"] == 1
         assert stats["emotion_distribution"]["joy"] == 1
         assert stats["emotion_distribution"]["sadness"] == 1
-
-
-class TestMemoryBlocks:
-    def test_list_blocks(self, service: MemoryService):
-        service.write_block("b1", "c1")
-        service.write_block("b2", "c2")
-        result = service.list_blocks()
-        assert result.is_ok
-        assert len(result.value) == 2
-
-    def test_write_empty_name_fails(self, service: MemoryService):
-        result = service.write_block("", "content")
-        assert not result.is_ok
-
-    def test_write_empty_content_fails(self, service: MemoryService):
-        result = service.write_block("name", "")
-        assert not result.is_ok
 
 
 class TestGetStatsTopN:

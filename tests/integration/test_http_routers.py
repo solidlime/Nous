@@ -113,62 +113,6 @@ class TestPersonaResolution:
 # ---------------------------------------------------------------------------
 
 
-@pytest.mark.integration
-class TestBlocksEndpoints:
-    """GET / POST / DELETE /api/blocks/{persona}."""
-
-    async def test_list_blocks_empty(self, client):
-        resp = await client.get(f"/api/blocks/{PERSONA}")
-        assert resp.status_code == 200
-        data = resp.json()
-        assert "blocks" in data
-        assert isinstance(data["blocks"], list)
-
-    async def test_create_block_ok(self, client):
-        resp = await client.post(
-            f"/api/blocks/{PERSONA}",
-            json={"block_name": "test_block", "content": "block content"},
-        )
-        assert resp.status_code == 200
-        assert resp.json().get("ok") is True
-        assert resp.json().get("block_name") == "test_block"
-
-    async def test_create_block_missing_block_name(self, client):
-        resp = await client.post(f"/api/blocks/{PERSONA}", json={"content": "no name"})
-        assert resp.status_code == 400
-
-    async def test_create_block_missing_content(self, client):
-        resp = await client.post(f"/api/blocks/{PERSONA}", json={"block_name": "noname"})
-        assert resp.status_code == 400
-
-    async def test_delete_block_ok(self, client):
-        await client.post(
-            f"/api/blocks/{PERSONA}",
-            json={"block_name": "del_block", "content": "to delete"},
-        )
-        resp = await client.delete(f"/api/blocks/{PERSONA}/del_block")
-        assert resp.status_code == 200
-        assert resp.json().get("ok") is True
-
-    async def test_list_blocks_after_create(self, client):
-        await client.post(
-            f"/api/blocks/{PERSONA}",
-            json={"block_name": "visible_block", "content": "listed"},
-        )
-        resp = await client.get(f"/api/blocks/{PERSONA}")
-        assert resp.status_code == 200
-        blocks = resp.json()["blocks"]
-        # block names may be returned as strings or dicts
-        names = [b if isinstance(b, str) else b.get("block_name", "") for b in blocks]
-        assert "visible_block" in names
-
-
-# ---------------------------------------------------------------------------
-# memory.py — recent endpoint (replaced by /api/observations with mode=recent)
-# ---------------------------------------------------------------------------
-
-
-@pytest.mark.integration
 class TestObservationsRecentEndpoint:
     """GET /api/observations/{persona}?mode=recent replaces /api/recent/{persona}."""
 
@@ -256,7 +200,7 @@ class TestDashboardEndpoints:
     async def test_api_dashboard_contains_required_keys(self, client):
         resp = await client.get(f"/api/dashboard/{PERSONA}")
         data = resp.json()
-        for key in ("stats", "context", "recent", "blocks", "equipment", "items", "goals"):
+        for key in ("stats", "context", "recent", "equipment", "items"):
             assert key in data, f"Missing key: {key}"
 
     async def test_api_dashboard_recent_populated_after_create(self, client):

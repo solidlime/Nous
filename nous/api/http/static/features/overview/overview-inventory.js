@@ -8,7 +8,7 @@ N.Features.Overview = N.Features.Overview || {};
 
 ;(function() {
 var S = window.S;
-var { esc, toast, api, safeSetHTML } = window.Nous.Core;
+var { toast, api } = window.Nous.Core;
 
 async function deleteItem(itemName) {
     if (!confirm('Delete item: ' + itemName + '?')) return;
@@ -56,7 +56,7 @@ async function saveNewItem() {
 
 async function openEditItemModal(itemName) {
     // v4/B6: items はセクション別キャッシュ。未取得なら v2 分割 API で埋める。
-    if (!S.dashCache) S.dashCache = { overview: null, items: null, blocks: null, images: null };
+    if (!S.dashCache) S.dashCache = { overview: null, items: null, images: null };
     if (!S.dashCache.items || !S.dashCache.items.length) {
         try {
             S.dashCache.items = (await api('/api/v2/items/' + encodeURIComponent(S.persona))).items || [];

@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Nous 内臓スキル5種 自律動作テスト
+"""Nous 内臓スキル4種 自律動作テスト
 
 WebUI API (POST /api/chat/herta) 経由でトリガーメッセージを送信し、
 SSEレスポンスから tool_call イベントを抽出して検証する。
@@ -36,13 +36,6 @@ TEST_CASES = [
         "expected_skill_call": "mood-sync",
         "expected_tool": "update_context",
         "description": "感情の大きな動き → update_context",
-    },
-    {
-        "skill": "goal-coach",
-        "message": "来月から毎日ジムに通おうと思ってるんだよね。目標は3ヶ月で5kg減量！",
-        "expected_skill_call": "goal-coach",
-        "expected_tool": "goal_manage",
-        "description": "目標の表明 → goal_manage",
     },
     {
         "skill": "image-gen",

@@ -50,7 +50,6 @@ def _run_prompt(turn_ctx: ChatTurnContext) -> None:
     ctx = MagicMock()
     ctx.persona = "herta"
     ctx.session_id = "s"
-    ctx.memory_service.get_profile_blocks.return_value = Success({})
     config = MagicMock()
     config.system_prompt = ""
     config.enabled_skills = []

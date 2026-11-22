@@ -26,9 +26,8 @@ from nous.domain.value_objects import _VALID_EMOTIONS, ensure_project_tag, norma
 MEMORY_SEARCH_RECENCY_WEIGHT_DEFAULT = 0.05
 
 # Minimum similarity for query-based destructive resolution (memory_delete /
-# memory_update by query) and goal resolution. Single source — audit:M6:
+# memory_update by query). Single source — audit:M6:
 # an unrelated query must never resolve to a delete/update target.
-# 0.3 matches the goal-resolution threshold previously used in _tools_goal.py.
 QUERY_RESOLVE_MIN_SCORE = 0.3
 
 logger = logging.getLogger(__name__)

@@ -37,7 +37,7 @@ def render_timeline_tab() -> str:
 
             <div class="tl-toolbar">
                 <label>感情 <select id="tl-emotion"><option value="">すべて</option></select></label>
-                <label>タグ <input type="text" id="tl-tag" class="glass-input" placeholder="例: goal" /></label>
+                <label>タグ <input type="text" id="tl-tag" class="glass-input" placeholder="例: reflection" /></label>
                 <label>重要度≧ <input type="number" id="tl-min-importance" class="glass-input tl-min-imp" value="0" min="0" max="1" step="0.1" /></label>
                 <label>件数 <select id="tl-per-page"><option value="50">50</option><option value="100" selected>100</option><option value="200">200</option><option value="500">500</option></select></label>
             </div>

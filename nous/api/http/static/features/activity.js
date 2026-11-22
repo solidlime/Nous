@@ -32,7 +32,6 @@ const ACT_ICONS = {
     'session.compact':    '<i data-lucide="shrink"></i>',
     'events.ingested':    '<i data-lucide="upload"></i>',
     'place.moved':        '<i data-lucide="map-pin"></i>',
-    'prospective.due':    '<i data-lucide="alarm-clock"></i>',
     'memory.merge_review':'<i data-lucide="git-merge"></i>',
 };
 
@@ -44,7 +43,6 @@ const ACT_LABELS = {
     'session.compact':    'Compress',
     'events.ingested':    'External',
     'place.moved':        'Move',
-    'prospective.due':    'Due',
     'memory.merge_review':'Merge?',
 };
 

@@ -113,8 +113,6 @@ beforeEach(() => {
       </div>
       <div id="memory-retrieved-list"></div>
       <div id="memory-saved-list"></div>
-      <div id="memory-goals-list"></div>
-      <div id="memory-promises-list"></div>
     </div>
     <details data-category="reflection"><div class="details-body">
       <input type="number" id="chat-reflection-threshold" value="1.0" />

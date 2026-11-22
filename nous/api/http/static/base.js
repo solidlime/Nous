@@ -7,10 +7,10 @@ var N = window.Nous;
 const PER_PAGE = 20;
 
 /* v4/B6: dashCache はセクション別。各ローダは自分が必要とするキーだけ埋める
-   （overview=KPI/recent/blocks/goals, items=inventory, blocks=core blocks,
-   images=portrait+generated）。全量 1 本前提のままだと memories/inventory が空になる。 */
+   （overview=KPI/recent, items=inventory, images=portrait+generated）。
+   全量 1 本前提のままだと memories/inventory が空になる。 */
 function emptyDashCache() {
-  return { overview: null, items: null, blocks: null, images: null };
+  return { overview: null, items: null, images: null };
 }
 
 const S = {

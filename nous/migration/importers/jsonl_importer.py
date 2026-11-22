@@ -16,7 +16,7 @@ class JSONLImporter:
 
     Each line is a JSON object with a ``type`` field that determines the
     target table.  Supported types: ``memory``, ``state``, ``item``,
-    ``emotion``, ``block``.
+    ``emotion``.
     """
 
     def import_file(
@@ -35,7 +35,6 @@ class JSONLImporter:
             "state": 0,
             "item": 0,
             "emotion": 0,
-            "block": 0,
         }
 
         try:
@@ -63,9 +62,6 @@ class JSONLImporter:
                     elif record_type == "emotion":
                         self._import_emotion(data, connection)
                         counts["emotion"] += 1
-                    elif record_type == "block":
-                        self._import_block(data, connection)
-                        counts["block"] += 1
         except OSError as exc:
             return Failure(MigrationError(f"Cannot read file: {exc}"))
 
@@ -172,30 +168,6 @@ class JSONLImporter:
                 data.get("timestamp", now),
                 data.get("trigger_memory_key"),
                 data.get("context"),
-            ),
-        )
-        db.commit()
-
-    @staticmethod
-    def _import_block(data: dict, conn: SQLiteConnection) -> None:
-        db = conn.get_memory_db()
-        now = format_iso(get_now())
-        db.execute(
-            """
-            INSERT OR REPLACE INTO memory_blocks
-            (block_name, content, block_type, max_tokens,
-             priority, created_at, updated_at, metadata)
-            VALUES (?,?,?,?,?,?,?,?)
-            """,
-            (
-                data.get("block_name", f"block_{now}"),
-                data.get("content", ""),
-                data.get("block_type", "custom"),
-                data.get("max_tokens", 500),
-                data.get("priority", 0),
-                data.get("created_at", now),
-                data.get("updated_at", now),
-                data.get("metadata", "{}"),
             ),
         )
         db.commit()

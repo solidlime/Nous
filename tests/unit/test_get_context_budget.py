@@ -13,8 +13,6 @@ from __future__ import annotations
 from datetime import UTC, datetime
 
 from nous.api.mcp._tools_helpers import (
-    _MAX_COMMITMENT_CHARS,
-    _MAX_COMMITMENTS,
     _MAX_INSIGHT_CHARS,
     _MAX_INSIGHTS,
     _MAX_PROJECT_CHARS,
@@ -47,7 +45,6 @@ def _state() -> PersonaState:
 def _render(
     *,
     wiki_page_count: int | None = None,
-    goals: list[Memory] | None = None,
     top_memories: list[Memory] | None = None,
     reflections: list[Memory] | None = None,
     mental_models: list[Memory] | None = None,
@@ -58,7 +55,6 @@ def _render(
     return _format_lightweight_response(
         _state(),
         top_memories or [],
-        goals or [],
         {},
         recent or [],
         reflections=reflections or [],
@@ -71,7 +67,6 @@ def _render(
 
 
 _SECTION_HEADERS = [
-    "⚠️ YOUR ACTIVE COMMITMENTS:",
     "--- Your Recent Memories ---",
     "## YOUR ESSENTIAL STORY",
     "--- Recent Insights ---",
@@ -118,16 +113,6 @@ def test_empty_case_stays_under_total_budget():
     assert "Use memory_search()" in text
 
 
-def test_commitments_capped_by_count_and_chars():
-    goals = [_mem(f"g{i}", "い" * 600, tags=["goal", "active"]) for i in range(50)]
-    text = _render(goals=goals)
-
-    lines = [row for row in _section_lines(text, "⚠️ YOUR ACTIVE COMMITMENTS:") if "🎯" in row]
-    assert len(lines) <= _MAX_COMMITMENTS
-    assert "い" * 600 not in text
-    assert _max_run(text, "い") <= _MAX_COMMITMENT_CHARS
-
-
 def test_insights_capped_by_count_and_chars():
     reflections = [_mem(f"r{i}", "あ" * 600, tags=["reflection"]) for i in range(10)]
     text = _render(reflections=reflections)
@@ -162,7 +147,6 @@ def test_project_memories_capped_by_count_and_chars():
 
 def test_extreme_case_stays_under_total_budget():
     """全節を満杯にしても合計上限 _MAX_TOTAL_CHARS を越えない。"""
-    goals = [_mem(f"g{i}", "い" * 600, tags=["goal", "active"]) for i in range(50)]
     reflections = [_mem(f"r{i}", "あ" * 600, tags=["reflection"]) for i in range(10)]
     summaries = [_mem(f"s{i}", "う" * 600, tags=["session_summary"]) for i in range(10)]
     project = [_mem(f"p{i}", "え" * 600, tags=["project:demo"]) for i in range(20)]
@@ -170,7 +154,6 @@ def test_extreme_case_stays_under_total_budget():
     recent = [_mem(f"rec{i}", "か" * 600) for i in range(5)]
 
     text = _render(
-        goals=goals,
         reflections=reflections,
         session_summaries=summaries,
         project_memories=project,
@@ -180,7 +163,6 @@ def test_extreme_case_stays_under_total_budget():
 
     assert len(text) <= _MAX_TOTAL_CHARS
     # 各節の上限は個別テストで固定済み。ここでは件数だけ総当たりで確認する。
-    assert len([row for row in _section_lines(text, "⚠️ YOUR ACTIVE COMMITMENTS:") if "🎯" in row]) <= _MAX_COMMITMENTS
     assert (
         len([row for row in _section_lines(text, "--- Recent Insights ---") if row.startswith("💡 ")]) <= _MAX_INSIGHTS
     )
@@ -196,8 +178,8 @@ def test_extreme_case_stays_under_total_budget():
 
 def test_wiki_line_survives_total_budget_truncation():
     """予算超過で末尾が切られても wiki 行は先頭側に残る（回帰: 実機で消えた）。"""
-    goals = [_mem(f"g{i}", "あ" * 300, tags=["goal", "active"]) for i in range(40)]
-    text = _render(goals=goals, wiki_page_count=3)
+    reflections = [_mem(f"r{i}", "あ" * 300, tags=["reflection"]) for i in range(40)]
+    text = _render(reflections=reflections, wiki_page_count=3)
     assert len(text) <= _MAX_TOTAL_CHARS
     assert "📚 wiki: 3 pages (project:demo)" in text
 

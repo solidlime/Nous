@@ -11,22 +11,15 @@ class TestPreliminaryFlag:
     def test_sse_includes_preliminary(self):
         from nous.application.chat.events import MemoryActivitySSE
 
-        sse = MemoryActivitySSE(retrieved=[{"content": "x"}], saved=[], goals=[])
+        sse = MemoryActivitySSE(retrieved=[{"content": "x"}], saved=[])
         assert hasattr(sse, "preliminary")
         payload = json.loads(sse.to_sse().split("data: ", 1)[1])
         assert payload["type"] == "memory_activity"
         assert payload["preliminary"] is False
 
-        pre = MemoryActivitySSE(retrieved=[{"content": "x"}], saved=[], goals=[], preliminary=True)
+        pre = MemoryActivitySSE(retrieved=[{"content": "x"}], saved=[], preliminary=True)
         payload2 = json.loads(pre.to_sse().split("data: ", 1)[1])
         assert payload2["preliminary"] is True
-
-    def test_sse_includes_promises(self):
-        from nous.application.chat.events import MemoryActivitySSE
-
-        sse = MemoryActivitySSE(retrieved=[], saved=[], goals=[], promises=[{"content": "p"}])
-        payload = json.loads(sse.to_sse().split("data: ", 1)[1])
-        assert payload["promises"] == [{"content": "p"}]
 
     def test_service_has_no_preliminary_sse(self):
         """速報（preliminary=True）は廃止。検索は PrepareStep の 1 回だけ。"""
@@ -83,8 +76,6 @@ class TestSavedOnlyTracking:
 
         llm_result = {
             "facts": [{"content": "dup fact", "tags": ["auto_extract"]}],
-            "goals": [],
-            "promises": [],
             "context_update": {},
             "inventory_update": {},
         }
@@ -138,8 +129,6 @@ class TestSavedOnlyTracking:
 
         llm_result = {
             "facts": [{"content": "new fact", "tags": ["auto_extract"]}],
-            "goals": [],
-            "promises": [],
             "context_update": {},
             "inventory_update": {},
         }
@@ -149,59 +138,6 @@ class TestSavedOnlyTracking:
 
         assert result["facts"][0].get("_saved") is True
         assert result["facts"][0].get("memory_key") == "mem_123"
-
-    @pytest.mark.asyncio
-    async def test_goal_achieve_marked_updated(self):
-        from unittest.mock import AsyncMock, MagicMock, patch
-
-        from nous.application.chat.memory_extractor import run_memory_llm
-        from nous.domain.shared.result import Success
-
-        ctx = MagicMock()
-        ctx.persona = "test_persona"
-        ctx.persona_service = MagicMock()
-        state = MagicMock()
-        state.user_info = {}
-        state.emotion = ""
-        state.mental_state = ""
-        state.physical_state = ""
-        state.environment = ""
-        state.fatigue = None
-        state.warmth = None
-        state.arousal = None
-        ctx.persona_service.get_context.return_value = Success(state)
-        ctx.memory_service = MagicMock()
-        ctx.memory_service.create_memory = AsyncMock()
-        ctx.memory_service.update_memory = MagicMock(return_value=Success(MagicMock()))
-        ctx.memory_service.get_by_tags.return_value = Success([])
-        ctx.equipment_service = MagicMock()
-        ctx.equipment_service.get_equipment.return_value = Success({})
-        ctx.equipment_service.search_items.return_value = Success([])
-        ctx.search_engine = MagicMock()
-        ctx.search_engine.search = AsyncMock(return_value=Success([]))
-        ctx.vector_store = None
-
-        config = MagicMock()
-        config.extract_model = "m"
-        config.get_effective_api_key.return_value = "k"
-        config.get_effective_model.return_value = "m"
-        config.get_effective_base_url.return_value = ""
-        config.provider = "openai"
-        config.system_prompt = ""
-
-        llm_result = {
-            "facts": [],
-            "goals": [{"action": "achieve", "content": "old goal", "memory_key": "g1"}],
-            "promises": [],
-            "context_update": {},
-            "inventory_update": {},
-        }
-        with patch("nous.application.chat.memory_llm.MemoryLLM") as mock_llm:
-            mock_llm.return_value.process = AsyncMock(return_value=llm_result)
-            result = await run_memory_llm(ctx, config, {"user": "u", "assistant": "a"})
-
-        assert result["goals"][0].get("_saved") is True
-        assert result["goals"][0].get("action") == "achieve"
 
 
 class TestPostBuildsSavedOnlySSE:
@@ -213,11 +149,3 @@ class TestPostBuildsSavedOnlySSE:
         src = inspect.getsource(post_mod.PostProcessStep.run)
         assert "_saved" in src
         assert "memory_key" in src or '"key"' in src
-
-    def test_post_source_includes_action(self):
-        import inspect
-
-        from nous.application.chat.pipeline import post as post_mod
-
-        src = inspect.getsource(post_mod.PostProcessStep.run)
-        assert "action" in src

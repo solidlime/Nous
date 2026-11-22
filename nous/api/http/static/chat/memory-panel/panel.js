@@ -5,8 +5,7 @@
 ;(function(N) {
 var C = N.Core;
 var api = C.api, esc = C.esc, toast = C.toast, safeSetHTML = C.safeSetHTML;
-var showConfirm = C.showConfirm, showAlert = C.showAlert;
-var truncate = C.truncate, relativeTime = C.relativeTime, fmtDate = C.fmtDate, fmtDateTime = C.fmtDateTime;
+var showConfirm = C.showConfirm;
 "use strict";
 var S = window.S;
 // Namespace first: the delegation block below reads N.Chat.memoryPanel,
@@ -14,9 +13,9 @@ var S = window.S;
 N.Chat.memoryPanel = N.Chat.memoryPanel || {};
 
 // ------------------------------------------------------------------
-// Memory panel update (retrieved / saved / goals)
+// Memory panel update (retrieved / saved)
 // ------------------------------------------------------------------
-function updateMemoryPanel(retrieved, saved, goals, promises) {
+function updateMemoryPanel(retrieved, saved) {
   const panel = document.getElementById("memory-panel");
   if (!panel || panel.style.display === "none") return;
   if (retrieved !== undefined) {
@@ -120,78 +119,6 @@ function updateMemoryPanel(retrieved, saved, goals, promises) {
       }
     }
   }
-  if (goals !== undefined) {
-    const goalsList = document.getElementById("memory-goals-list");
-    if (goalsList) {
-      if (!goals || goals.length === 0) {
-        safeSetHTML(goalsList, '<div class="memory-empty">なし</div>');
-      } else {
-        safeSetHTML(goalsList, goals
-          .map((g) => {
-            const key = g.key || "";
-            const actionBadge = (g.action && g.action !== "create")
-              ? '<span class="mem-action-badge">更新</span> ' : "";
-            return (
-              '<div class="memory-item-card" data-panel-kind="goal" role="button" tabindex="0" data-key="' +
-              esc(key) +
-              '" data-content="' +
-              esc(g.content || "") +
-              '" data-importance="' +
-              (g.importance || 0.75) +
-              '" data-tags="' +
-              esc((g.tags || []).join(",")) +
-              '">' +
-              '<i data-lucide="target"></i> ' +
-              actionBadge +
-              esc((g.content || "").substring(0, 80)) +
-              '<div class="mem-actions"><button type="button" class="mem-action-btn done" data-mem-action="complete" data-mem-key="' +
-              esc(key) +
-              '" data-mem-content="' +
-              esc((g.content || "").substring(0, 50)) +
-              '">完了</button><button type="button" class="mem-action-btn del" data-mem-action="delete" data-mem-key="' +
-              esc(key) +
-              '">削除</button></div>' +
-              "</div>"
-            );
-          })
-          .join(""));
-      }
-    }
-  }
-  if (promises !== undefined) {
-    const promisesList = document.getElementById("memory-promises-list");
-    if (promisesList) {
-      if (!promises || promises.length === 0) {
-        safeSetHTML(promisesList, '<div class="memory-empty">なし</div>');
-      } else {
-        safeSetHTML(promisesList, promises
-          .map((g) => {
-            const key = g.key || "";
-            const actionBadge = (g.action && g.action !== "create")
-              ? '<span class="mem-action-badge">更新</span> ' : "";
-            return (
-              '<div class="memory-item-card" data-panel-kind="promise" role="button" tabindex="0" data-key="' +
-              esc(key) +
-              '" data-content="' +
-              esc(g.content || "") +
-              '" data-importance="' +
-              (g.importance || 0.8) +
-              '" data-tags="' +
-              esc((g.tags || []).join(",")) +
-              '">' +
-              '<i data-lucide="handshake"></i> ' +
-              actionBadge +
-              esc((g.content || "").substring(0, 80)) +
-              '<div class="mem-actions"><button type="button" class="mem-action-btn del" data-mem-action="delete" data-mem-key="' +
-              esc(key) +
-              '">削除</button></div>' +
-              "</div>"
-            );
-          })
-          .join(""));
-      }
-    }
-  }
 }
 
 // ------------------------------------------------------------------
@@ -282,34 +209,10 @@ async function deleteMemCard(key) {
   });
 }
 
-async function completeGoal(key, content) {
-  if (!S.persona) return;
-  try {
-    const resp = await api(
-      "/api/chat/" + encodeURIComponent(S.persona) + "/tool",
-      {
-        method: "POST",
-        body: JSON.stringify({
-          tool: "goal_manage",
-          input: { operation: "achieve", content, memory_key: key },
-        }),
-      },
-    );
-    if (resp.status === "ok") {
-      toast("目標を達成しました: " + (resp.updated || content), "success");
-      N.Chat.core.loadCommitments();
-    } else {
-      toast("完了失敗: " + (resp.message || ""), "error");
-    }
-  } catch (e) {
-    toast("エラー: " + e.message, "error");
-  }
-}
-
 // ------------------------------------------------------------------
 // CSP-safe delegation: no inline onclick (script-src 'self').
-// Buttons carry data-mem-action="delete|complete" + data-mem-key.
-// Row cards carry data-panel-kind="memory|goal|promise|reflection"
+// Buttons carry data-mem-action="delete" + data-mem-key.
+// Row cards carry data-panel-kind="memory|reflection"
 // and open the detail modals on click / Enter / Space.
 // ------------------------------------------------------------------
 if (typeof document !== "undefined" && !N.Chat.memoryPanel._delegated) {
@@ -318,16 +221,10 @@ if (typeof document !== "undefined" && !N.Chat.memoryPanel._delegated) {
     var btn = e.target && e.target.closest ? e.target.closest("[data-mem-action]") : null;
     if (btn) {
       e.stopPropagation();
-      // Action fired inside the panel detail modal — close it first;
-      // deleteCard/completeGoal refresh the panel via loadCommitments.
-      if (btn.closest("#panel-detail-overlay")) N.Chat.memoryPanel.closePanelDetail();
       var action = btn.getAttribute("data-mem-action");
       var key = btn.getAttribute("data-mem-key");
       if (action === "delete" && key) {
         if (typeof N.Chat.memoryPanel.deleteCard === "function") N.Chat.memoryPanel.deleteCard(key);
-      } else if (action === "complete" && key) {
-        var content = btn.getAttribute("data-mem-content") || "";
-        if (typeof N.Chat.memoryPanel.completeGoal === "function") N.Chat.memoryPanel.completeGoal(key, content);
       }
       return;
     }
@@ -353,6 +250,5 @@ Object.assign(N.Chat.memoryPanel, {
   sessionSummarized: showSessionSummarized,
   contextCompressed: showContextCompressed,
   deleteCard: deleteMemCard,
-  completeGoal: completeGoal,
 });
 })(window.Nous);

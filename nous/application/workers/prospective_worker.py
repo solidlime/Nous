@@ -1,13 +1,8 @@
-"""ProspectiveWorker — 期限の近い約束を 1 時間ごとに照合する（audit M2）。
+"""ProspectiveWorker — 期限の来た ``agent:task`` を拾って自分で1ターン走らせる。
 
-注入そのものは ``get_context`` が行う（``context_loader`` の「いま思い出すべき
-約束」）。この worker はその周期的な半分で、同じ照合器 ``due_cues`` を毎時
-回し、期限入りのコミットメントを ``prospective.due`` の session event として
-残す。push 経路も持たない（Nous に自発通知のチャネルはまだ無い）。
-
-記憶は原則書かない（get_context がライブ計算するので行を増やす意味がない）。
-例外は ``agent:task``（kanban #36）: 期限が来たら自分で1ターン走らせ、
-走らせた後にタグを外す（recur は次回を入れ直す）。
+``agent:task``（kanban #36）: 期限が来たら自分で1ターン走らせ、走らせた後に
+タグを外す（recur は次回を入れ直す）。この worker がその巡回の入口で、
+``run_agent_tasks()`` が本体（``run_cycle`` からもテストからも呼べる）。
 
 発火の精度（kanban #64/#68）:
 
@@ -15,8 +10,6 @@
   ``prospective_min_wait_seconds``（既定 30 秒）以降に走る。未来の期限が
   1つも無い時だけ ``prospective_interval_seconds``（既定 1 時間）で起きる。
   期限を過ぎたタスクは ``OVERDUE_GRACE_HOURS``(=72h) 内なら次の巡回で拾い直す。
-- ``cue:time`` を持つ約束の照合（``prospective.due``）は毎時巡回なので、
-  表示は最大 1 時間古い。イベント駆動ではない。
 
 注意: 巡回対象は ``AppContextRegistry.personas()`` が持つ、すなわち
 **一度でも HTTP/チャットでアクセスされた persona だけ**（AppContext は遅延生成）。
@@ -42,7 +35,6 @@ from nous.application.chat.tools.schedule import (
 )
 from nous.application.workers.announce import speak_to_main
 from nous.config.settings import get_settings
-from nous.domain.memory.cue import due_cues
 from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
@@ -52,7 +44,6 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
-EVENT_TYPE = "prospective.due"
 TASK_DONE_EVENT = "agent.task.ran"
 TASK_FAILED_EVENT = "agent.task.failed"
 TASK_SPOKE_EVENT = "agent.task.spoke"
@@ -60,13 +51,11 @@ SELF_TURN_PREFIX = "[自分で決めた予定] "
 
 
 class ProspectiveWorker:
-    """Hourly sweep over active goals/promises with a time cue."""
+    """Sweep over due ``agent:task`` reservations."""
 
     def __init__(self) -> None:
         self._stop_event = threading.Event()
         self._thread: threading.Thread | None = None
-        #: persona → 直前に通知した約束キー（同じ約束を毎時積み直さない）。
-        self._last_due: dict[str, frozenset[str]] = {}
 
     def start(self) -> None:
         if self._thread is not None and self._thread.is_alive():
@@ -129,25 +118,6 @@ class ProspectiveWorker:
 
     def run_cycle(self) -> None:
         """1 サイクル（手動運転・検証用に public）。"""
-        from nous.application.use_cases import AppContextRegistry
-
-        for persona in AppContextRegistry.all_personas():
-            try:
-                ctx = AppContextRegistry.get(persona)
-                due = self._due(ctx)
-            except Exception:
-                # 削除中の PersonaNotFoundError もここで拾う（他ペルソナの周期を止めない）
-                logger.exception("ProspectiveWorker: persona=%s failed", persona)
-                continue
-            keys = frozenset(m.key for m, _ in due)
-            if not keys:
-                self._last_due.pop(persona, None)
-                continue
-            if keys == self._last_due.get(persona):
-                continue
-            self._last_due[persona] = keys
-            self._record(ctx, persona, due)
-
         self.run_agent_tasks()
 
     def run_agent_tasks(self) -> None:
@@ -249,30 +219,3 @@ class ProspectiveWorker:
             )
         except Exception:
             logger.debug("ProspectiveWorker: failed to record %s", event_type, exc_info=True)
-
-    @staticmethod
-    def _due(ctx: AppContext) -> list[tuple[Memory, str]]:
-        result = ctx.memory_service.get_by_tags(["goal", "active"])
-        if not getattr(result, "is_ok", False):
-            return []
-        return due_cues(getattr(result, "value", None) or [], get_now(), allow_overdue=False)
-
-    @staticmethod
-    def _record(ctx: AppContext, persona: str, due: list[tuple[Memory, str]]) -> None:
-        from nous.domain.memory.session_event import SessionEvent
-        from nous.infrastructure.sqlite.session_event_repo import SessionEventRepository
-
-        summary = "近い約束: " + "; ".join(f"{m.content[:80]} ({label})" for m, label in due)
-        logger.info("ProspectiveWorker: persona=%s %s", persona, summary)
-        try:
-            SessionEventRepository(ctx.connection).insert(
-                SessionEvent(
-                    session_id="prospective_worker",
-                    persona=persona,
-                    event_type=EVENT_TYPE,
-                    timestamp=get_now(),
-                    summary=summary[:200],
-                )
-            )
-        except Exception:
-            logger.debug("ProspectiveWorker: failed to record event", exc_info=True)

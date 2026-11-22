@@ -89,9 +89,6 @@ memory_create(
 
 `project_path:<cwd の絶対パス>` は重複確認（手順2）とタグ採用（session-start ステップ2）を content の自然言語パースなしで行うための構造化タグ。**以後このプロジェクトの全記憶に同じ `project_path` タグを付ける**こと。初期記憶（project_overview）にだけ付けると、その記憶が archive / tombstone された時点で session-start ステップ2 の採用が空振りし、手順2 が「別プロジェクト」と誤認して slug 分裂が再発する（単一障害点を作らない。session-start ステップ2b にフォールバックはあるが、付与しておくのが本筋）。
 
-必要なら追加で:
-- 初期の目標（あれば）: `tags=["project:<slug>", "goal"]`, `kind="prospective"`
-
 **手順 3 の後（手順 4 の前）**: 同じ slug の `project_overview` 記憶が既に存在する場合はタグ付け済みとみなし、記憶記録をスキップしてファイル生成のみ行う。
 
 ### 4. ファイル生成（ユーザー側エージェントが実行）

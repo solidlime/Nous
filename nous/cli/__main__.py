@@ -155,7 +155,6 @@ def _handle_stats(args: argparse.Namespace, settings: Settings) -> None:
 
     _print_count(db, "memories", "Memories")
     _print_count(db, "memory_strength", "Memory strength records")
-    _print_count(db, "memory_blocks", "Memory blocks")
     _print_count(db, "emotion_history", "Emotion records")
     _print_count(db, "context_state", "Context state entries")
     _print_count(db, "goals", "Goals")
@@ -211,7 +210,6 @@ _COUNTABLE_TABLES = frozenset(
     {
         "memories",
         "memory_strength",
-        "memory_blocks",
         "emotion_history",
         "context_state",
         "goals",

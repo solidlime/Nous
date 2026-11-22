@@ -1,4 +1,4 @@
-"""session_begin の notes — 沈黙の間（#37）と約束（#43）のテスト。"""
+"""session_begin の notes — 沈黙の間（#37）のテスト。"""
 
 from __future__ import annotations
 
@@ -9,7 +9,6 @@ from unittest.mock import AsyncMock, MagicMock
 import pytest
 
 from nous.application.session import session_notes
-from nous.domain.memory.cue import PROMISE_TAGS
 from nous.domain.memory.entities import Memory
 from nous.domain.memory.session_event import SessionEvent
 from nous.domain.shared.result import Success
@@ -122,31 +121,3 @@ class TestHoursSince:
     def test_naive_timestamp_is_comparable(self) -> None:
         now = datetime(2026, 11, 18, 9, 0)
         assert session_notes._hours_since(datetime(2026, 11, 18, 3, 0), now) == 6.0
-
-
-class TestPromiseNote:
-    def test_due_promise_gives_one_line(self, sqlite_conn) -> None:
-        due = get_now() + timedelta(hours=3)
-        memory = _memory(["promise", f"cue:time:{due.isoformat(timespec='minutes')}"], "健診の結果を聞く")
-        ctx = _ctx(sqlite_conn, [memory])
-        note = session_notes.promise_note(ctx)
-        # 書き手（memory_extractor）と同じタグ組で引いていること
-        ctx.memory_service.get_by_tags.assert_called_once_with(list(PROMISE_TAGS))
-        assert note is not None
-        assert note.startswith("⏳ 自分から切り出す: 健診の結果を聞く")
-        assert "in 3h" in note
-
-    def test_promise_without_cue_is_ignored(self, sqlite_conn) -> None:
-        ctx = _ctx(sqlite_conn, [_memory(["promise"], "いつか話す")])
-        assert session_notes.promise_note(ctx) is None
-
-    def test_far_future_promise_is_ignored(self, sqlite_conn) -> None:
-        due = get_now() + timedelta(days=10)
-        memory = _memory(["promise", f"cue:time:{due.isoformat(timespec='minutes')}"])
-        ctx = _ctx(sqlite_conn, [memory])
-        assert session_notes.promise_note(ctx) is None
-
-    def test_lookup_failure_is_silent(self, sqlite_conn) -> None:
-        ctx = _ctx(sqlite_conn)
-        ctx.memory_service.get_by_tags.side_effect = RuntimeError("db down")
-        assert session_notes.promise_note(ctx) is None

@@ -930,12 +930,6 @@ html.light ::selection {
     align-items: center;
     gap: 8px;
 }
-.ov-block-title {
-    font-size: 1.2rem;
-    font-weight: 600;
-    color: var(--text-primary);
-    margin-bottom: 16px;
-}
 .ov-modal-fields {
     display: flex;
     flex-direction: column;
@@ -961,15 +955,6 @@ html.light ::selection {
 }
 textarea.ov-field {
     resize: vertical;
-}
-.ov-field-block {
-    margin-bottom: 12px;
-}
-.ov-form-label {
-    display: block;
-    font-size: 0.85rem;
-    color: var(--text-muted);
-    margin-bottom: 4px;
 }
 .ov-modal-actions {
     display: flex;

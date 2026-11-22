@@ -106,7 +106,7 @@ def fail_count(memory: Memory) -> int:
 def due_agent_tasks(memories: Iterable[Memory], now: datetime | None = None) -> list[Memory]:
     """期限が来た ``agent:task``（未来は含めない・過期は grace 内のみ）。
 
-    ``window_hours=0`` が要点: 通常の ``due_cues`` は「これから24時間」も拾うため、
+    ``window_hours=0`` が要点: 既定の照合窓（``DUE_WINDOW_HOURS``=24h）は「これから24時間」も拾うため、
     daily の次回（+24h）が同じ周期で再点火してしまう。一方 ``within_window`` は
     ``window_hours`` に関係なく常に ``OVERDUE_GRACE_HOURS``(=72h) までの過期を拾う
     ので、実効条件は「期限から 72 時間を過ぎていないもの」。期限時に他ターンとの

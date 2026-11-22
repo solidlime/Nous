@@ -1,7 +1,7 @@
 #!/usr/bin/env python3
 """Nous スキル再現性テスト
 
-5つの内臓スキルの自律呼出、画像生成、時間認識をそれぞれ複数回繰り返し、
+4つの内臓スキルの自律呼出、画像生成、時間認識をそれぞれ複数回繰り返し、
 再現性（同じ条件で同じ結果が出るか）を検証する。
 
 Usage:
@@ -216,15 +216,6 @@ SKILL_TEST_CASES: list[dict] = [
         ],
     },
     {
-        "skill": "goal-coach",
-        "expected_tool": "goal_manage",
-        "prompts": [
-            "新しい目標を設定したい。プログラミングを勉強する。",
-            "今年中に10キロ痩せたい！具体的な計画を立てたい。",
-            "来月から毎日英会話の勉強を始めるのが目標です。",
-        ],
-    },
-    {
         "skill": "image-gen",
         "expected_tool": "image_generate",
         "prompts": [
@@ -237,8 +228,8 @@ SKILL_TEST_CASES: list[dict] = [
 
 
 def run_test1() -> tuple[list[dict], int, int]:
-    """Run Test 1: single-skill autonomous invocation (15 tests)."""
-    print("\n--- テスト1: 単一スキル自律呼出 (5種×3回) ---", flush=True)
+    """Run Test 1: single-skill autonomous invocation (12 tests)."""
+    print("\n--- テスト1: 単一スキル自律呼出 (4種×3回) ---", flush=True)
     all_results: list[dict] = []
     passed = 0
     total = sum(len(tc["prompts"]) for tc in SKILL_TEST_CASES)

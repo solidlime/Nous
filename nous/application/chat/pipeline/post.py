@@ -199,7 +199,7 @@ class PostProcessStep:
                 except Exception as e:
                     logger.warning("PostProcessStep: run_memory_llm failed: %s", e)
 
-        # MemoryActivitySSE: 取得された記憶と保存された記憶・goals・promises を通知
+        # MemoryActivitySSE: 取得された記憶と保存された記憶を通知
         # retrieved は「実際にプロンプトへ挿入された記憶」に揃える（嘘を描かない）。
         retrieved_for_sse = _inserted_retrieved(turn_ctx)
 
@@ -229,29 +229,9 @@ class PostProcessStep:
             for f in memory_result.get("facts", [])
             if f.get("content") and _is_saved(f)
         ]
-        saved_goals = [
-            {
-                "content": _ensure_str(g.get("content")),
-                "key": g.get("memory_key", ""),
-                "action": g.get("action", "create"),
-            }
-            for g in memory_result.get("goals", [])
-            if (g.get("content") or g.get("memory_key")) and _is_saved(g)
-        ]
-        saved_promises = [
-            {
-                "content": _ensure_str(p.get("content")),
-                "key": p.get("memory_key", ""),
-                "action": p.get("action", "create"),
-            }
-            for p in memory_result.get("promises", [])
-            if (p.get("content") or p.get("memory_key")) and _is_saved(p)
-        ]
         yield MemoryActivitySSE(
             retrieved=retrieved_for_sse,
             saved=saved_facts,
-            goals=saved_goals,
-            promises=saved_promises,
         )
 
         # ContextUpdateSSE: notify frontend of persona state changes

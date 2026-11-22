@@ -11,8 +11,6 @@ from nous.application.chat.memory_prompts import (
     _ITEM_LLM_PROMPT,
 )
 from nous.domain.language import LanguageResolver
-from nous.domain.memory.cue import PROMISE_TAGS
-from nous.domain.memory.cue import cue_tags as build_cue_tags
 from nous.domain.memory.entities import VALID_KINDS
 from nous.domain.memory.felt import felt_tag
 from nous.domain.persona.places import find_place
@@ -66,13 +64,12 @@ class MemoryLLM:
         assistant_response: str,
         *,
         context: str = "",
-        commitments: str = "",
         inventory: str = "",
         persona_name: str = "assistant",
         persona_identity: str = "",
         mode: str = "context",
     ) -> dict:
-        # mode: "context" = facts/goals/promises/context_update, "item" = inventory_update
+        # mode: "context" = facts/context_update, "item" = inventory_update
         # (spec F で 1 呼び出しを 2 プロンプトに分割。逐次実行は run_memory_llm 側)。
         extract_model = config.extract_model.strip() or config.get_effective_model()
         if mode == "item" and getattr(config, "item_llm_dedicated", False):
@@ -134,7 +131,6 @@ class MemoryLLM:
             persona_name=persona_name,
             persona_identity=persona_identity.strip() or f"あなたは{persona_name}です。",
             context=context.strip() or "(情報なし)",
-            commitments=commitments.strip() or "(なし)",
             inventory=inventory.strip() or "(なし)",
             user_message=user_message[:500],
             assistant_response=assistant_response[:500],
@@ -167,12 +163,6 @@ def _parse_memory_llm_result(text: str) -> dict:
             if "facts" not in result:
                 result["facts"] = []
             result["facts"] = [f for f in result["facts"] if isinstance(f, dict) and "content" in f]
-            if "goals" not in result:
-                result["goals"] = []
-            result["goals"] = [g for g in result["goals"] if isinstance(g, dict) and "content" in g]
-            if "promises" not in result:
-                result["promises"] = []
-            result["promises"] = [p for p in result["promises"] if isinstance(p, dict) and "content" in p]
             if "context_update" not in result:
                 result["context_update"] = {}
             if "inventory_update" not in result:
@@ -182,8 +172,6 @@ def _parse_memory_llm_result(text: str) -> dict:
         if isinstance(result, list):
             return {
                 "facts": [f for f in result if isinstance(f, dict) and "content" in f],
-                "goals": [],
-                "promises": [],
                 "context_update": {},
                 "inventory_update": {},
             }
@@ -210,11 +198,11 @@ def _current_place(ctx: AppContext, persona: str) -> str | None:
     return found.name if found else env.strip()
 
 
-async def _build_memory_llm_context(ctx: AppContext) -> tuple[str, str, str]:
-    """MemoryLLM に渡すコンテキスト・コミットメント・インベントリ文字列を構築する。
+async def _build_memory_llm_context(ctx: AppContext) -> tuple[str, str]:
+    """MemoryLLM に渡すコンテキスト・インベントリ文字列を構築する。
 
     Returns:
-        (context_str, commitments_str, inventory_str)
+        (context_str, inventory_str)
     """
     lines: list[str] = []
     persona = ctx.persona
@@ -234,19 +222,6 @@ async def _build_memory_llm_context(ctx: AppContext) -> tuple[str, str, str]:
             val = getattr(state, field, "")
             if val:
                 lines.append(f"{field}: {val}")
-
-    # アクティブな goal (scope=self と scope=interpersonal を統合)
-    commit_lines: list[str] = []
-    for tag_pair, label in [
-        (["goal", "active"], "goal (self)"),
-        (["goal", "active", "interpersonal"], "goal (interpersonal)"),
-    ]:
-        mem_result = ctx.memory_service.get_by_tags(tag_pair)
-        if isinstance(mem_result, Success) and mem_result.value:
-            for m in mem_result.value[:5]:
-                key = getattr(m, "key", None) or getattr(m, "id", "")
-                commit_lines.append(f"  [{label}] key={key} : {m.content[:100]}")
-    commitments_str = "\n".join(commit_lines)
 
     # 装備品（context に含める）
     equip_result = ctx.equipment_service.get_equipment()
@@ -268,7 +243,7 @@ async def _build_memory_llm_context(ctx: AppContext) -> tuple[str, str, str]:
         logger.debug("MemoryLLM: failed to build context inventory: %s", _e)
     inventory_str = "\n".join(inv_lines)
 
-    return "\n".join(lines), commitments_str, inventory_str
+    return "\n".join(lines), inventory_str
 
 
 def _body_delta_state(ctx: AppContext, persona: str, ctx_update: dict, *, skip_body: bool) -> dict[str, float]:
@@ -407,14 +382,6 @@ async def run_memory_llm(
         facts = result.get("facts", [])
         await _save_extracted_facts(ctx, persona, facts)
 
-        # goals: action ベース処理（create / achieve / cancel）
-        goals = result.get("goals", [])
-        await _process_goal_actions(ctx, persona, goals)
-
-        # promises → goals with scope=interpersonal (unified with goals)
-        promises = result.get("promises", [])
-        await _process_promise_actions(ctx, persona, promises)
-
         # context_update: 感情・状態を更新
         ctx_update = result.get("context_update", {})
         (
@@ -454,7 +421,7 @@ async def _run_memory_llm_calls(
     呼ばず ``inventory_update`` を空 dict にし、False なら item 抽出 LLM を
     実行して会話由来の装備変更を拾う（audit M9-c）。
     """
-    context_str, commitments_str, inventory_str = await _build_memory_llm_context(ctx)
+    context_str, inventory_str = await _build_memory_llm_context(ctx)
     persona_name = ctx.persona or "assistant"
     persona_identity = (config.system_prompt or "").strip()
     from nous.application.chat.memory_llm import MemoryLLM as _MemoryLLM
@@ -464,7 +431,6 @@ async def _run_memory_llm_calls(
         user_message=user_message,
         assistant_response=assistant_response,
         context=context_str,
-        commitments=commitments_str,
         inventory=inventory_str,
         persona_name=persona_name,
         persona_identity=persona_identity,
@@ -472,7 +438,7 @@ async def _run_memory_llm_calls(
     result = await llm.process(config, **common, mode="context")
     if not result:
         logger.warning("MemoryLLM: empty context result drift=empty_result persona=%s", persona_name)
-        result = {"facts": [], "goals": [], "promises": [], "context_update": {}}
+        result = {"facts": [], "context_update": {}}
     # item 抽出は context の後に逐次実行し inventory_update のみ上書き (spec F・並列化しない)
     # audit M9-c: inventory を変化させる item_* ツールが呼ばれたターンは、
     # ツールが既に inventory を決定的に更新しており skip_inventory により LLM 出力も
@@ -539,108 +505,6 @@ async def _save_extracted_facts(ctx: AppContext, persona: str, facts: list) -> N
             fact["_saved"] = False
     if facts:
         logger.info("MemoryLLM: processed %d facts for persona=%s", len(facts), persona)
-
-
-async def _process_goal_actions(ctx: AppContext, persona: str, goals: list) -> None:
-    """goals を action ベースで処理する（create / achieve / cancel）。"""
-    for goal in goals:
-        action = goal.get("action", "create")
-        content = goal.get("content", "")
-        memory_key = goal.get("memory_key", "")
-
-        if action == "achieve" and memory_key:
-            upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "achieved"])
-            logger.info("MemoryLLM: goal achieved key=%s", memory_key)
-            if not isinstance(upd, Success):
-                logger.warning("MemoryLLM: goal achieve failed key=%s: %s", memory_key, upd.error)
-                goal["_saved"] = False
-            else:
-                goal["_saved"] = True
-        elif action == "cancel" and memory_key:
-            upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "cancelled"])
-            logger.info("MemoryLLM: goal cancelled key=%s", memory_key)
-            if not isinstance(upd, Success):
-                logger.warning("MemoryLLM: goal cancel failed key=%s: %s", memory_key, upd.error)
-                goal["_saved"] = False
-            else:
-                goal["_saved"] = True
-        elif action == "create" and content:
-            dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
-            if isinstance(dup_check, Success) and dup_check.value:
-                top_hit = dup_check.value[0]
-                if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
-                    logger.debug("MemoryLLM: skipping duplicate goal: %s", content[:60])
-                    goal["_saved"] = False
-                    continue
-            mem_result = await ctx.memory_service.create_memory(
-                content=content,
-                importance=0.75,
-                tags=["goal", "active", *build_cue_tags(goal.get("cue_time"), goal.get("cue_event"))],
-                emotion="neutral",
-            )
-            if isinstance(mem_result, Success) and ctx.vector_store is not None:
-                with contextlib.suppress(Exception):
-                    await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
-            if isinstance(mem_result, Success):
-                goal["memory_key"] = mem_result.value.key
-                goal["_saved"] = True
-            else:
-                goal["_saved"] = False
-        else:
-            goal["_saved"] = False
-    if goals:
-        logger.info("MemoryLLM: processed %d goals for persona=%s", len(goals), persona)
-
-
-async def _process_promise_actions(ctx: AppContext, persona: str, promises: list) -> None:
-    """promises を goals with scope=interpersonal として処理する（goals と統一）。"""
-    for promise in promises:
-        action = promise.get("action", "create")
-        content = promise.get("content", "")
-        memory_key = promise.get("memory_key", "")
-
-        if action in ("fulfill", "achieve") and memory_key:
-            upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "achieved", "archived", "interpersonal"])
-            logger.info("MemoryLLM: interpersonal goal achieved key=%s", memory_key)
-            if not isinstance(upd, Success):
-                logger.warning("MemoryLLM: interpersonal goal achieve failed key=%s: %s", memory_key, upd.error)
-                promise["_saved"] = False
-            else:
-                promise["_saved"] = True
-        elif action == "cancel" and memory_key:
-            upd = ctx.memory_service.update_memory(memory_key, tags=["goal", "cancelled", "archived", "interpersonal"])
-            logger.info("MemoryLLM: interpersonal goal cancelled key=%s", memory_key)
-            if not isinstance(upd, Success):
-                logger.warning("MemoryLLM: interpersonal goal cancel failed key=%s: %s", memory_key, upd.error)
-                promise["_saved"] = False
-            else:
-                promise["_saved"] = True
-        elif action == "create" and content:
-            dup_check = await ctx.search_engine.search(SearchQuery(text=content, top_k=3, mode="semantic"))
-            if isinstance(dup_check, Success) and dup_check.value:
-                top_hit = dup_check.value[0]
-                if (top_hit.score if hasattr(top_hit, "score") else 0.0) > 0.85:
-                    logger.debug("MemoryLLM: skipping duplicate interpersonal goal: %s", content[:60])
-                    promise["_saved"] = False
-                    continue
-            mem_result = await ctx.memory_service.create_memory(
-                content=content,
-                importance=0.8,
-                tags=[*PROMISE_TAGS, *build_cue_tags(promise.get("cue_time"), promise.get("cue_event"))],
-                emotion="neutral",
-            )
-            if isinstance(mem_result, Success) and ctx.vector_store is not None:
-                with contextlib.suppress(Exception):
-                    await ctx.vector_store.upsert(persona, mem_result.value.key, mem_result.value.content)
-            if isinstance(mem_result, Success):
-                promise["memory_key"] = mem_result.value.key
-                promise["_saved"] = True
-            else:
-                promise["_saved"] = False
-        else:
-            promise["_saved"] = False
-    if promises:
-        logger.info("MemoryLLM: processed %d interpersonal goals for persona=%s", len(promises), persona)
 
 
 async def _apply_context_update(

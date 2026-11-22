@@ -427,12 +427,6 @@ function chatInputKeydownHandler(e) {
         importance: 0.7,
         tags: [],
       });
-    } else if (val.startsWith("/goal ")) {
-      N.Chat.commands.handle("goal_manage", {
-        operation: "create",
-        content: val.slice(6).trim(),
-        importance: 0.8,
-      });
     } else if (val === "/help" || val.startsWith("/help ")) {
       input.value = "";
       input.style.height = "auto";
@@ -475,9 +469,6 @@ async function loadChatCommitments() {
     const data = await api(
       "/api/chat/" + encodeURIComponent(S.persona) + "/commitments",
     );
-    if (Array.isArray(data.goals) && typeof mp.update === "function") {
-      mp.update(undefined, undefined, data.goals);
-    }
     if (data.insights && data.insights.length > 0 && typeof mp.updateReflection === "function") {
       mp.updateReflection(data.insights);
     }

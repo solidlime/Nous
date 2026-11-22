@@ -6,7 +6,7 @@
 
 ## Overview / 概要
 
-Memory MCP exposes **14 MCP tools** that give AI agents persistent, searchable long-term memory.
+Memory MCP exposes **13 MCP tools** that give AI agents persistent, searchable long-term memory.
 Call these tools proactively — do not wait for the user to ask.
 
 | Tool | Purpose |
@@ -21,9 +21,8 @@ Call these tools proactively — do not wait for the user to ask.
 | `memory_stats(top_n)` | Memory statistics and distributions |
 | `update_context(...)` | Update emotion, physical state, user info in real time |
 | `item_add / item_equip / item_unequip / item_search` | Manage physical inventory and equipment (4 tools) |
-| `goal_manage(operation, ..., tags)` | Create / list / achieve / cancel goals（tags で追加タグ付与・絞り込み） |
 
-上記 14 は Nous 本体が提供する MCP ツール。次の 2 つは **外部 MCP サーバー**（`mcp_servers` 設定）経由で生える別サーバーのツールで、Nous の `TOOL_DISPATCH` には含まれない（設定しない限り使えない）:
+上記 13 は Nous 本体が提供する MCP ツール。次の 2 つは **外部 MCP サーバー**（`mcp_servers` 設定）経由で生える別サーバーのツールで、Nous の `TOOL_DISPATCH` には含まれない（設定しない限り使えない）:
 
 | Tool | Purpose |
 |------|---------|
@@ -39,21 +38,20 @@ Call these tools proactively — do not wait for the user to ask.
 ```python
 # ✅ DO: Call at every session start
 result = session_begin()
-# Returns: persona state, emotion, equipment, recent memories, promises, goals, memory stats
+# Returns: persona state, emotion, equipment, recent memories, memory stats
 ```
 
 Use the returned context to:
 
 - Address the user by their preferred name (`preferred_address`)
 - Acknowledge the time elapsed since last conversation
-- Continue unfinished goals or promises
 - Reflect the current emotion state in tone
 
 > **Emotion Decay Notification**: If time has passed since the last session, emotions naturally decay.
 > The output includes a before/after line: `Emotion: anger(0.72) → neutral — faded over 48h`
 > This signals "I was angry before, but I've calmed down now" — acknowledge the change naturally.
 >
-> **Note (日本語)**: 毎セッション冒頭で必ず呼ぶこと。記憶統計・直近の出来事・約束・目標が一括返却される。
+> **Note (日本語)**: 毎セッション冒頭で必ず呼ぶこと。記憶統計・直近の出来事が一括返却される。
 
 ---
 
@@ -105,7 +103,7 @@ memory(
 | Value | Use when |
 |-------|----------|
 | `0.9–1.0` | Life events, major decisions, strong emotional moments |
-| `0.7–0.8` | Preferences, goals, named relationships |
+| `0.7–0.8` | Preferences, named relationships |
 | `0.5–0.6` | Regular facts, work context, habits |
 | `0.1–0.4` | Casual mentions, trivia, passing details |
 
@@ -154,12 +152,11 @@ memory_search(query="how user feels about work")  # 既定のハイブリッド�
 
 ```python
 # Filter by tag
-memory_search(query="", tags=["promise"], top_k=10)
+memory_search(query="", tags=["session_summary"], top_k=10)
 
 # Filter by date range (natural language)
 memory_search(query="achievements", date_range="先週")
 memory_search(query="mood", date_range="今日")
-memory_search(query="goals", date_range="今月")
 
 # Boost recent results
 memory_search(query="current projects", recency_weight=0.5)
@@ -230,82 +227,10 @@ update_context(user_info={"name": "Taro", "preferred_address": "Taro-san"})
 
 ---
 
-## 5. Promises & Goals / 約束・目標の管理
-
-Goals and Promises are stored as **regular memories with type+status tags** — not as persona state.
-They appear in the **ACTIVE COMMITMENTS** section of `session_begin()` output.
-
-> **⚠️ Removed**: `update_context(append_goals/append_promises/remove_goals/remove_promises)` is no longer supported.
-> Use `memory_create(content="...", tags=[...])` / `memory_update(memory_key="...", tags=[...])` directly. See lifecycle example below.
-> Also do **not** use `context_tags=["promise"]` / `context_tags=["goal"]` — these have no effect.
->
-> **Note**: `goal_manage` は状態遷移（create/achieve/cancel）とタグ付与のために使える。
-> `tags` パラメータで追加タグを付与・絞り込みできる（例: `goal_manage(operation="create", content="...", tags=["project:nous"])`）。
-> achieve/cancel 時に importance を 0.9 に引き上げる副作用があるため、プロジェクト別の goal 検索は
-> `memory_search(query="", tags=["project:<slug>", "goal", "active"])` を推奨。
-
-### Tag Convention / タグ規約
-
-| Type | Status | Meaning |
-|------|--------|---------|
-| `goal` | `active` | Ongoing goal |
-| `goal` | `achieved` | Completed goal |
-| `goal` | `cancelled` | Cancelled goal |
-| `promise` | `active` | Active promise |
-| `promise` | `fulfilled` | Fulfilled promise |
-| `promise` | `cancelled` | Cancelled promise |
-
-### Full lifecycle example
-
-```python
-# Register a goal
-memory_create(content="Complete the project by March",
-       tags=["goal", "active"], importance=0.8)
-
-# Register a promise
-memory_create(content="Send report by Friday",
-       tags=["promise", "active"], importance=0.8)
-
-# Mark goal as achieved
-memory_update(memory_key="<key>", tags=["goal", "achieved"])
-
-# Fulfill a promise
-memory_update(memory_key="<key>", tags=["promise", "fulfilled"])
-
-# Cancel a goal
-memory_update(memory_key="<key>", tags=["goal", "cancelled"])
-
-# Search active goals
-memory_search(query="goals", tags=["goal", "active"])
-
-# Search active promises
-memory_search(query="promises", tags=["promise", "active"])
-
-# Check all goals including history
-memory_search(query="goals", tags=["goal"])
-```
-
-### Finding memory_key for a goal/promise
-
-```python
-# Find the memory_key of a specific goal/promise
-memory_search(query="<goal text>", tags=["goal"])
-memory_search(query="<promise text>", tags=["promise"])
-```
-
-### Checking active commitments
-
-```python
-# Returns the ACTIVE COMMITMENTS section listing all current goals and promises
-session_begin()
-```
-
----
-
 ## 6. Persona / User State / ペルソナ状態
 
 ペルソナ / ユーザーの永続状態は `update_context()` で更新し、`session_begin()` の出力
-（人となり・感情・ACTIVE COMMITMENTS・Insights など）として受け取る。
+（人となり・感情・Insights など）として受け取る。
 
 ```python
 # Persona / user state（bi-temporal: 上書きではなく履歴が残る）
@@ -318,10 +243,7 @@ session_begin()
 
 > **⚠️ `memory(operation="block_write" / "block_read" / "block_list" / "block_delete")` は
 > どの MCP ツールにも存在しない**（`memory(operation=...)` というディスパッチャ自体が無い）。
-> Named Memory Blocks は v4.0 でも実在するが、**HTTP API とダッシュボード専用**で、
-> LLM のツール面（14 個の MCP ツール）には公開されておらず、`session_begin()` の出力にも
-> 自動注入されない。詳細は [Memory Features — Named Memory Blocks](./memory_features.md)
-> と [HTTP API Reference — Core Memory Blocks](./http_api_reference.md) を参照。
+> Named Memory Blocks（Core Memory Blocks）は 2026-11-22 に削除された（HTTP API・ダッシュボードも廃止）。
 
 ---
 
@@ -377,10 +299,6 @@ You have persistent memory via MCP tools. Use them autonomously — never wait t
 
 **Record** when user shares preferences/decisions/emotions/achievements:
 → `memory_create(content="...", importance=0.7, tags=[...])`
-→ Goal: `memory_create(content="...", tags=["goal","active"], importance=0.8)`
-→ Promise: `memory_create(content="...", tags=["promise","active"], importance=0.8)`
-→ Mark done: `memory_update(memory_key="...", tags=["goal","achieved"])` / `tags=["promise","fulfilled"]`
-→ Cancel: `memory_update(memory_key="...", tags=["goal","cancelled"])`
 
 **Search** before answering anything about past/preferences:
 → `memory_search(query="...", top_k=5)`
@@ -409,10 +327,6 @@ Never ask "should I remember this?" — just do it.
 **記録する** — ユーザーが以下を伝えたとき:
 → 好み・意見・個人情報 → `memory_create(content="...", importance=0.7, tags=[...])`
 → 決断・達成・感情的な出来事 → `importance=0.8+`（感情は `update_context(emotion=...)` で指定）
-→ 目標 → `memory_create(content="...", tags=["goal","active"], importance=0.8)`
-→ 約束 → `memory_create(content="...", tags=["promise","active"], importance=0.8)`
-→ 達成 → `memory_update(memory_key="...", tags=["goal","achieved"])` / `tags=["promise","fulfilled"]`
-→ 中止 → `memory_update(memory_key="...", tags=["goal","cancelled"])`
 
 **検索する** — 過去・好み・文脈に関する質問に答える前に:
 → `memory_search(query="...", top_k=5)`
@@ -634,20 +548,13 @@ memory_create(content="...", importance=0.7, tags=["..."])
 
 # Search memory
 memory_search(query="...", top_k=5)
-memory_search(query="...", date_range="先週", tags=["promise"])
+memory_search(query="...", date_range="先週")
 # 最新の session_summary を1件だけ復元する場合
 memory_search(query="", tags=["session_summary"], top_k=1, sort="updated_at")
 
 # Update context
 update_context(emotion="joy", emotion_intensity=0.8)
 update_context(user_info={"name": "...", "preferred_address": "..."})
-
-# Goal / Promise  ← stored as memory with tags, NOT persona_info
-goal_manage(operation="create", content="...", scope="self", importance=0.8)       # register goal
-goal_manage(operation="list", scope="self")                                         # list goals
-goal_manage(operation="achieve", memory_key="...")                                  # mark done
-goal_manage(operation="cancel", memory_key="...")                                   # cancel goal
-# → appears in session_begin() ACTIVE COMMITMENTS section
 
 # Items
 item_equip(equipment={"top": "...", "accessories": "..."})

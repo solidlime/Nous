@@ -1,7 +1,7 @@
 """MemoryLLM prompts: LLM prompt templates for memory extraction.
 
 Spec F (2026-09-12) split the single extractor into two prompts:
-- _CONTEXT_LLM_PROMPT: facts / goals / promises / context_update (incl. emotion/body/state)
+- _CONTEXT_LLM_PROMPT: facts / context_update (incl. emotion/body/state)
 - _ITEM_LLM_PROMPT: inventory_update only
 _MEMORY_LLM_PROMPT is kept as a backward-compatible alias of the context prompt.
 """
@@ -19,9 +19,6 @@ _CONTEXT_LLM_PROMPT = """\
 【現在のコンテキスト】
 {context}
 
-【既存のアクティブなコミットメント】
-{commitments}
-
 【会話】
 [user]: {user_message}
 [assistant（私={persona_name}）]: {assistant_response}
@@ -31,16 +28,6 @@ JSONのみ。コメント不要。不要なフィールドは省略可。
 {{
   "facts": [
     {{"content": "記憶すべき事実", "importance": 0.7, "tags": ["preference"], "emotion": "neutral", "felt": "嬉しい", "kind": "semantic"}}
-  ],
-  "goals": [
-    {{"action": "create", "content": "新規目標", "cue_time": "2026-09-20T09:00", "cue_event": "健康診断"}},
-    {{"action": "achieve", "memory_key": "mem_xxx", "content": "達成した目標（参照用）"}},
-    {{"action": "cancel", "memory_key": "mem_xxx", "content": "中止した目標（参照用）"}}
-  ],
-  "promises": [
-    {{"action": "create", "content": "新規約束", "cue_time": "2026-09-20T19:00"}},
-    {{"action": "fulfill", "memory_key": "mem_xxx", "content": "履行した約束（参照用）"}},
-    {{"action": "cancel", "memory_key": "mem_xxx", "content": "取り消した約束（参照用）"}}
   ],
   "context_update": {{
     "emotion": "joy",
@@ -63,20 +50,6 @@ JSONのみ。コメント不要。不要なフィールドは省略可。
 - facts の felt（体験記憶）: その出来事のとき私（{persona_name}）が感じた感情を1語で書く（語彙自由・20字以内）。
   - 「嬉しい」「恥ずかしい」「もやもや」のような生の語でよい。記号や説明文は付けない。
   - 感情が動いていない事実では省略する（推測で埋めない）。
-- goals: ユーザーが「〜したい」「〜を目指す」と表明した目標のみ。
-  - 新規の場合: action="create" + content
-  - 既存リストにあるgoalが会話で達成されたら: action="achieve" + memory_key
-  - 既存リストにあるgoalが中止/取り消しになったら: action="cancel" + memory_key
-  - 既存と同じ内容は create しない（重複禁止）
-- promises: ユーザーまたは私が約束・コミットメントした内容。
-  - 履行済みなら: action="fulfill" + memory_key
-  - 取り消しなら: action="cancel" + memory_key
-  - 既存と同じ内容は create しない（重複禁止）
-- goals・promises: 何もなければ空配列。
-- goals・promises の cue（監査 M2）: create のとき、会話から読み取れる場合のみ付ける（読み取れなければ省略する。推測で埋めない）。
-  - cue_time: 期限の絶対日時（ISO8601 形式、例: 2026-09-20T09:00）。現在時刻は {current_time}。「明日」「3日後」「来週」等の相対表現は、必ずこの絶対日時に変換して書く。日付だけわかる場合は日付のみ（例: 2026-09-20）。
-  - cue_event: 想起のきっかけになる固有名詞（人・場所・もの・出来事。例: 健康診断、京都旅行）。日時ではなく「その話題が出たら思い出す」約束に使う。
-  - cue は「その時が来たら／その話題が出たら想起すべき」コミットメントにのみ付ける。
 - context_update: 私（{persona_name}）自身の感情・身体・状態の変化。変化がなければ省略。
   - 感情: emotion + emotion_intensity（変化時のみ）
     - emotion は正典25語のみ: neutral, joy, sadness, anger, fear, surprise, disgust, love, trust, anticipation, excitement, frustration, nostalgia, pride, shame, guilt, loneliness, contentment, curiosity, awe, relief, envy, gratitude, contempt, anxiety
@@ -87,7 +60,7 @@ JSONのみ。コメント不要。不要なフィールドは省略可。
   - environment は**現在地が実際に変わった時だけ**書く。同じ場所の描写の書き直し（「自室。静かだ」→「自室。少し寒い」）は書かない。
   - 関係性: relationship_status（関係性の変化があった時のみ）
   - ユーザー情報: user_name, user_nickname, user_preferred_address（ユーザーが自ら名乗ったり呼び方を変えた時のみ記録）
-- 何も抽出すべきものがなければ {{"facts": [], "goals": [], "promises": [], "context_update": {{}}}} を出力。
+- 何も抽出すべきものがなければ {{"facts": [], "context_update": {{}}}} を出力。
 """
 
 _ITEM_LLM_PROMPT = """\

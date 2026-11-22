@@ -2,7 +2,6 @@
    OVERVIEW CORE — Main loader, modals, charts, namespace registration
    Namespace: N.Features.Overview.*
    Depends on: N.Core.* (esc, api, truncate, relativeTime, fmtDate)
-               overview-blocks.js (Block CRUD)
                overview-inventory.js (Inventory CRUD)
                window.* (safeSetHTML, Chart, lucide, destroyChart, chartOpts)
    ================================================================= */
@@ -61,11 +60,10 @@ async function loadOverview() {
             genImagesHtml += '</div>';
         }
         // v4/B6: dashCache はセクション別。このローダが埋めるキーだけを書く。
-        if (!S.dashCache) S.dashCache = { overview: null, items: null, blocks: null, images: null };
+        if (!S.dashCache) S.dashCache = { overview: null, items: null, images: null };
         S.dashCache.overview = { persona: data.persona, stats: data.stats, context: data.context,
-            state_memories: data.state_memories, goals: data.goals };
+            state_memories: data.state_memories };
         S.dashCache.items = data.items || [];
-        S.dashCache.blocks = data.blocks || [];
         S.dashCache.images = { latest_self_portrait: data.latest_self_portrait,
             generated_images: data.generated_images };
         const wikiPages = await wikiPromise;
@@ -166,15 +164,9 @@ async function loadOverview() {
             + esc((m.tags && m.tags.length) ? m.tags[0] : 'memory') + '</span><span>'
             + esc(truncate(m.content || '', 90)) + '</span></div>').join('');
 
-        const goals = data.goals || [];
-        const activeGoals = goals.filter(g => (g.status || 'active') === 'active').length;
         const capacityRows = [];
         if (stats.linked_ratio != null) {
             capacityRows.push(barRow('想起カバレッジ', Math.round(stats.linked_ratio * 100), 'var(--accent-green)'));
-        }
-        if (goals.length > 0) {
-            capacityRows.push(barRow('進行中の目標', Math.round((activeGoals / goals.length) * 100),
-                'var(--accent-blue)', activeGoals + '/' + goals.length));
         }
         if (projectCount != null && wikiPages.length > 0) {
             capacityRows.push(barRow('Wiki のプロジェクト紐付け',
@@ -242,7 +234,7 @@ async function loadOverview() {
         <div class="glass p-4 mb-6">
             <div class="ov-section-title"><i data-lucide="user-circle"></i> Profile &amp; Relationship</div>
             ${Object.entries(userInfo).length ? Object.entries(userInfo).map(([k,v]) => '<div class="ov-quick-row ov-quick-tight"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value">' + esc(String(v)) + '</span></div>').join('') : '<span class="ov-muted">No user info</span>'}
-            ${(() => { const _GK = new Set(['goals','active_promises','current_goals']); const filtered = Object.entries(personaInfo).filter(([k]) => !_GK.has(k)); return filtered.length ? filtered.map(([k,v]) => '<div class="ov-quick-row ov-quick-tight"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value ov-accent-purple">' + esc(String(v)) + '</span></div>').join('') : ''; })()}
+            ${Object.entries(personaInfo).length ? Object.entries(personaInfo).map(([k,v]) => '<div class="ov-quick-row ov-quick-tight"><span class="ov-quick-label">' + esc(k.replace(/_/g,' ')) + '</span><span class="ov-quick-value ov-accent-purple">' + esc(String(v)) + '</span></div>').join('') : ''}
             <div class="ov-quick-row"><span class="ov-quick-label">Relationship</span><span class="ov-quick-value ov-accent-pink">${esc(relStatus)}</span></div>
             <div class="ov-quick-row"><span class="ov-quick-label">Physical</span><span class="ov-quick-value">${esc(physicalContent || '--')}</span></div>
             <div class="ov-quick-row"><span class="ov-quick-label">Mental</span><span class="ov-quick-value">${esc(mentalContent || '--')}</span></div>
@@ -305,30 +297,7 @@ async function loadOverview() {
                 </div>
             </div>
         </div>
-        <!-- Block Edit Modal -->
-        <div id="block-edit-modal" class="ov-modal-overlay blur" role="dialog" aria-modal="true" aria-label="Edit Block">
-            <div class="glass p-6 ov-modal wide">
-                <h3 class="ov-block-title">
-                    <span id="block-modal-title"><i data-lucide="pencil"></i> New Block</span></h3>
-                <input type="hidden" id="block-modal-mode" value="create">
-                <div class="ov-field-block">
-                    <label class="ov-form-label" for="block-modal-name">Block Name</label>
-                    <input type="text" id="block-modal-name" class="glass-input" placeholder="e.g. system_notes">
-                </div>
-                <div class="ov-field-block">
-                    <label class="ov-form-label" for="block-modal-content">Content</label>
-                    <textarea id="block-modal-content" class="glass-input" rows="6"></textarea>
-                </div>
-                <div class="ov-field-block">
-                    <label class="ov-form-label" for="block-modal-priority">Priority (0-100)</label>
-                    <input type="number" id="block-modal-priority" class="glass-input" value="0" min="0" max="100">
-                </div>
-                <div class="ov-modal-actions">
-                    <button type="button" data-ov-action="hide-block-modal" class="glass-btn">Cancel</button>
-                    <button type="button" data-ov-action="save-block" class="glass-btn">Save</button>
-                </div>
-            </div>
-        </div>`);
+        `);
 
         // safeSetHTML strips style= — apply data-fill/data-color to bar fills now
         if (N.Components.memoryCard && N.Components.memoryCard.applyDataStyles) {
@@ -355,7 +324,7 @@ async function loadOverview() {
 }
 /* N.Features.Overview.loadOverview registered below */
 
-// Register in namespace (CRUD helpers live in overview-blocks.js / overview-inventory.js)
+// Register in namespace (CRUD helpers live in overview-inventory.js)
 Object.assign(N.Features.Overview, {
     loadOverview: loadOverview,
 });
@@ -389,8 +358,6 @@ if (typeof document !== "undefined" && !loadOverview._delegated) {
         else if (action === "save-new-item" && typeof Ov.saveNewItem === "function") Ov.saveNewItem();
         else if (action === "close-edit-item" && typeof Ov.closeEditItemModal === "function") Ov.closeEditItemModal();
         else if (action === "save-edit-item" && typeof Ov.saveEditItem === "function") Ov.saveEditItem();
-        else if (action === "hide-block-modal" && typeof Ov.hideBlockModal === "function") Ov.hideBlockModal();
-        else if (action === "save-block" && typeof Ov.saveBlock === "function") Ov.saveBlock();
     });
     document.addEventListener("change", function (e) {
         var sel = e.target && e.target.closest ? e.target.closest("select[data-ov-slot]") : null;

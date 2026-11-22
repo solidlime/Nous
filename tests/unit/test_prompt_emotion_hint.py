@@ -6,7 +6,6 @@ from unittest.mock import MagicMock
 
 from nous.application.chat.pipeline.context import ChatTurnContext
 from nous.application.chat.pipeline.prompt import PromptBuildStep
-from nous.domain.shared.result import Success
 
 HEADER = "【今の感情から】"
 
@@ -15,7 +14,6 @@ def _ctx() -> MagicMock:
     ctx = MagicMock()
     ctx.persona = "herta"
     ctx.session_id = "s"
-    ctx.memory_service.get_profile_blocks.return_value = Success({})
     return ctx
 
 

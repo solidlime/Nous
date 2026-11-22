@@ -150,15 +150,6 @@ class TestSQLiteMemoryRepo:
         assert len(result.value) == 1
         assert result.value[0][0].content == "I love ramen"
 
-    def test_save_and_get_block(self, memory_repo: SQLiteMemoryRepository):
-        memory_repo.save_block("test_block", "block content", block_type="system")
-        result = memory_repo.get_block("test_block")
-        assert result.is_ok
-        block = result.value
-        assert block is not None
-        assert block["content"] == "block content"
-        assert block["block_type"] == "system"
-
     def test_delete_many_is_physical(self, memory_repo: SQLiteMemoryRepository, sqlite_conn):
         """memories / 補助行 / 両方向のリンクを消し、戻り値は memories の行数。"""
         for i in range(3):
@@ -261,13 +252,6 @@ class TestSQLiteMemoryRepo:
         assert len(dumped.value) == 1
         assert dumped.value[0]["content"] == "要約された本文"
         assert dumped.value[0]["created_at"]
-
-    def test_list_and_delete_blocks(self, memory_repo: SQLiteMemoryRepository):
-        memory_repo.save_block("b1", "c1")
-        memory_repo.save_block("b2", "c2")
-        assert len(memory_repo.list_blocks().value) == 2
-        memory_repo.delete_block("b1")
-        assert len(memory_repo.list_blocks().value) == 1
 
 
 # ---------------------------------------------------------------------------

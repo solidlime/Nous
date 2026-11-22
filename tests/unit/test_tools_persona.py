@@ -505,26 +505,23 @@ async def test_get_context_inline_datetime_not_deduplicated(mock_ctx):
 
 @pytest.mark.asyncio
 async def test_get_context_empty_section_header_suppressed(mock_ctx):
-    """節の全項目が節間 dedupe で消えた場合、空の見出し（--- Your Recent Memories ---）を出さない。"""
+    """recent が重要度上位との key 重複で全件除外された場合、空の見出し（--- Your Recent Memories ---）を出さない。"""
     from nous.api.mcp._tools_persona import _tool_get_context
     from nous.domain.persona.entities import PersonaState
 
     state = PersonaState(persona="test_persona")
-    goal_mem = _make_memory("goal_1", content="共通の覚書", tags=["goal", "active"])
+    # top（重要度上位）と同一 key の recent は重要度表示側を優先して除外される
+    top_mems = [
+        _make_memory("rec_1", content="共通の覚書"),
+        _make_memory("rec_2", content="共通の覚書"),
+    ]
     recent_mems = [
         _make_memory("rec_1", content="共通の覚書"),
         _make_memory("rec_2", content="共通の覚書"),
     ]
 
-    def get_by_tags_side_effect(tags, include_consumed=False):
-        if tags == ["goal"]:
-            return Success([goal_mem])
-        return Success([])
-
     mock_ctx.persona_service.get_context.return_value = Success(state)
-    mock_ctx.memory_service.get_by_tags.side_effect = get_by_tags_side_effect
-    mock_ctx.memory_service.get_top_by_importance.return_value = Success([])
-    mock_ctx.memory_service.get_by_tags.return_value = Success([])
+    mock_ctx.memory_service.get_top_by_importance.return_value = Success(top_mems)
     mock_ctx.persona_service.get_emotion_history.return_value = Success([])
     mock_ctx.persona_service.get_body_state_history.return_value = Success([])
     mock_ctx.memory_service.get_recent.return_value = Success(recent_mems)
@@ -535,10 +532,9 @@ async def test_get_context_empty_section_header_suppressed(mock_ctx):
 
     r = result["result"]
     assert result["ok"] is True
-    # ACTIVE COMMITMENTS 節（先に構築）のみに出る
-    assert "⚠️ YOUR ACTIVE COMMITMENTS:" in r
+    # Essential Story 側にのみ出る
     assert r.count("共通の覚書") == 1
-    # recent 節は全件 dedupe され空 → 見出しを出さない
+    # recent 節は全件除外され空 → 見出しを出さない
     assert "--- Your Recent Memories ---" not in r
 
 

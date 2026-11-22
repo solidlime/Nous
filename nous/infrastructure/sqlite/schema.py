@@ -59,19 +59,6 @@ CREATE TABLE IF NOT EXISTS memory_strength (
     FOREIGN KEY (memory_key) REFERENCES memories(key)
 );
 
-CREATE TABLE IF NOT EXISTS memory_blocks (
-    persona TEXT NOT NULL DEFAULT 'default',
-    block_name TEXT NOT NULL,
-    content TEXT NOT NULL,
-    block_type TEXT DEFAULT 'custom',
-    max_tokens INTEGER DEFAULT 500,
-    priority INTEGER DEFAULT 0,
-    created_at TEXT NOT NULL,
-    updated_at TEXT NOT NULL,
-    metadata TEXT DEFAULT '{}',
-    PRIMARY KEY (persona, block_name)
-);
-
 CREATE TABLE IF NOT EXISTS context_state (
     persona TEXT NOT NULL,
     key TEXT NOT NULL,

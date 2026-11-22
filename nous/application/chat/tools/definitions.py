@@ -20,7 +20,6 @@ CORE_ALWAYS_TOOLS: set[str] = {
     "memory_update",
     "update_context",
     "invoke_skill",
-    "goal_manage",
     # item_* 系 — ペルソナ表現に必須
     "item_add",
     "item_equip",
@@ -122,22 +121,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         },
     ),
     ToolDefinition(
-        name="profile_update",
-        description='自己像/ユーザー像プロフィールブロックを全体リライトする。target: "me"（自己像）| "user"（ユーザー像）。content: ブロック全文（上限 3000 token 目安。超過時はエラー）。抽出・追記ではなく置換である。既存内容は失われる。',
-        input_schema={
-            "type": "object",
-            "properties": {
-                "target": {
-                    "type": "string",
-                    "enum": ["me", "user"],
-                    "description": "書き換え対象: me=自己像 / user=ユーザー像",
-                },
-                "content": {"type": "string", "description": "ブロック全文（置換。既存内容は失われる）"},
-            },
-            "required": ["target", "content"],
-        },
-    ),
-    ToolDefinition(
         name="invoke_skill",
         description="有効なスキルの完全な指示を取得する。会話の状況がスキルの発動条件に合致したと判断したら、ユーザーの指示を待たず自律的に呼び出せ。発動したスキルはこのセッション中 system prompt に常駐し、毎ターン自動で参照される（同じスキルを毎ターン呼び直す必要はない）。用が済んだスキルは action=deactivate で解除しろ。発動条件に合致しないスキルを推測で呼ぶな。同じスキルを同一ターンで重複呼び出しするな。name（スキル名）が必須。task パラメータに呼び出し理由を簡潔に記述できる。",
         input_schema={
@@ -156,38 +139,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
                 },
             },
             "required": ["name"],
-        },
-    ),
-    ToolDefinition(
-        name="goal_manage",
-        description="目標・約束を管理する（作成・一覧・達成・取消）。ユーザーが目標を設定・確認・完了・破棄する時に使え。一時的な雑談や軽い意向には使うな。operation（create/list/achieve/cancel）と scope（self/interpersonal）が必須。create 時は content 必須、achieve/cancel 時は memory_key で対象を指定できる。tags は create 時は goal/active に加えて付与、list/achieve/cancel 時は絞り込みに使用する。",
-        input_schema={
-            "type": "object",
-            "properties": {
-                "operation": {
-                    "type": "string",
-                    "enum": ["create", "list", "achieve", "cancel"],
-                    "description": "操作種別",
-                },
-                "content": {"type": "string", "description": "内容（create時に必須）"},
-                "importance": {"type": "number", "description": "重要度 0.0〜1.0", "default": 0.75},
-                "scope": {
-                    "type": "string",
-                    "enum": ["self", "interpersonal"],
-                    "description": "目標種別",
-                    "default": "self",
-                },
-                "memory_key": {
-                    "type": "string",
-                    "description": "memory_key（achieve/cancel時に直接指定可能）",
-                },
-                "tags": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "追加タグ（例: project:nous）。create 時は goal/active に加えて付与、list/achieve/cancel 時は絞り込みに使用",
-                },
-            },
-            "required": ["operation", "scope"],
         },
     ),
     ToolDefinition(
@@ -379,7 +330,6 @@ MEMORY_TOOLS: list[ToolDefinition] = [
         name="schedule_task",
         description=(
             "自分で決めた予定を登録する。後で1人でこなすタスク（日課・定期チェック・調べもの）に使え。"
-            "ユーザーとの約束は memory_create の goal に任せ、ここは「自分がやる」予定専用。"
             "when は ISO（2026-11-18T09:00）か相対（+2h / +30m / +3d）。recur を付けると daily / weekly で繰り返す。"
         ),
         input_schema={
@@ -569,7 +519,6 @@ _NOUS_TOOL_NAMES: frozenset[str] = frozenset(
         "item_add",
         "item_equip",
         "item_search",
-        "goal_manage",
         "invoke_skill",
         "image_generate",
         "list_skills",

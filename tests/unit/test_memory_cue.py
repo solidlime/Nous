@@ -1,9 +1,8 @@
-"""Prospective-memory cue tests — audit M2 (v4.0).
+"""Time-cue primitive tests (agent:task scheduling support).
 
-A commitment needs a cue that brings it back: a deadline (time) or an entity
-(event). These tests pin the storage format and the matching rules, because the
-write side (extractor) and the read side (get_context / hourly sweep) both
-depend on them agreeing.
+cue.py の time-cue 機構（parse_deadline / parse_time_cues / within_window /
+comparable）は schedule_task（agent:task）の deadline 判定が依存する。
+約束照合（due_cues / event cues）は削除済み — ここでは primitive のみ検証する。
 """
 
 from __future__ import annotations
@@ -12,15 +11,9 @@ from datetime import datetime, timedelta
 from zoneinfo import ZoneInfo
 
 from nous.domain.memory.cue import (
-    CUE_EVENT_PREFIX,
     CUE_TIME_PREFIX,
     DUE_WINDOW_HOURS,
     OVERDUE_GRACE_HOURS,
-    cue_tags,
-    due_cues,
-    due_label,
-    event_cue_tag,
-    event_cued_memories,
     parse_deadline,
     parse_time_cues,
     time_cue_tag,
@@ -29,7 +22,7 @@ from nous.domain.memory.cue import (
 from nous.domain.memory.entities import Memory
 
 
-def _mem(key: str, content: str = "約束", tags: list[str] | None = None, **kwargs) -> Memory:
+def _mem(key: str, content: str = "予定", tags: list[str] | None = None, **kwargs) -> Memory:
     now = datetime(2026, 9, 19, 12, 0)
     return Memory(
         key=key,
@@ -42,20 +35,7 @@ def _mem(key: str, content: str = "約束", tags: list[str] | None = None, **kwa
     )
 
 
-class TestCueTags:
-    def test_time_and_event_tags(self):
-        tags = cue_tags("2026-09-20T09:00", "健康診断")
-        # 秒切り捨てると +30m の予定が最大 59 秒早く発火するので seconds 精度で持つ（kanban #88）。
-        assert f"{CUE_TIME_PREFIX}2026-09-20T09:00" in " ".join(tags) or f"{CUE_TIME_PREFIX}2026-09-20T09:00:00" in tags
-        # Entities are lower-cased so matching is case-insensitive
-        assert event_cue_tag("健康診断") == f"{CUE_EVENT_PREFIX}健康診断"
-        assert event_cue_tag("Kyoto Trip") == f"{CUE_EVENT_PREFIX}kyoto trip"
-
-    def test_junk_is_dropped_not_raised(self):
-        assert cue_tags(None, None) == []
-        assert cue_tags("not-a-date", "") == []
-        assert cue_tags(12345, 42) == []
-
+class TestParseDeadline:
     def test_date_only_anchors_at_morning(self):
         parsed = parse_deadline("2026-09-20")
         assert parsed == datetime(2026, 9, 20, 9, 0)
@@ -66,101 +46,32 @@ class TestCueTags:
         assert parse_deadline(None) is None
 
 
-class TestDueCues:
-    def test_deadline_inside_window_fires(self):
-        now = datetime(2026, 9, 19, 12, 0)
-        deadline = now + timedelta(hours=3)
-        mem = _mem("m1", "面接の約束", tags=[time_cue_tag(deadline)])
-        due = due_cues([mem], now)
-        assert len(due) == 1
-        assert due[0][0].key == "m1"
-        assert due[0][1] == "in 3h"
+class TestTimeCueTag:
+    def test_tag_uses_seconds_precision(self):
+        deadline = datetime(2026, 9, 20, 9, 0)
+        # 秒切り捨てると +30m の予定が最大 59 秒早く発火するので seconds 精度で持つ（kanban #88）。
+        assert time_cue_tag(deadline) == f"{CUE_TIME_PREFIX}2026-09-20T09:00:00"
 
-    def test_deadline_beyond_window_does_not_fire(self):
-        now = datetime(2026, 9, 19, 12, 0)
-        mem = _mem("m1", tags=[time_cue_tag(now + timedelta(hours=DUE_WINDOW_HOURS + 1))])
-        assert due_cues([mem], now) == []
 
-    def test_overdue_within_grace_still_fires(self):
-        now = datetime(2026, 9, 19, 12, 0)
-        mem = _mem("m1", tags=[time_cue_tag(now - timedelta(hours=2))])
-        due = due_cues([mem], now)
-        assert len(due) == 1
-        assert "overdue" in due[0][1]
-
-    def test_overdue_beyond_grace_is_dropped(self):
-        now = datetime(2026, 9, 19, 12, 0)
-        mem = _mem("m1", tags=[time_cue_tag(now - timedelta(hours=OVERDUE_GRACE_HOURS + 1))])
-        assert due_cues([mem], now) == []
-
-    def test_multiple_cues_yield_one_entry_sorted(self):
-        now = datetime(2026, 9, 19, 12, 0)
-        later = _mem("later", tags=[time_cue_tag(now + timedelta(hours=10))])
-        sooner = _mem("sooner", tags=[time_cue_tag(now + timedelta(hours=1))])
-        assert [m.key for m, _ in due_cues([later, sooner], now)] == ["sooner", "later"]
-
-    def test_memory_without_cue_never_fires(self):
-        now = datetime(2026, 9, 19, 12, 0)
-        assert due_cues([_mem("m1", tags=["goal", "active"])], now) == []
-
+class TestParseTimeCues:
     def test_parse_time_cues_ignores_junk_tag(self):
-        mem = _mem("m1", tags=[f"{CUE_TIME_PREFIX}garbage", "goal"])
+        mem = _mem("m1", tags=[f"{CUE_TIME_PREFIX}garbage", "project"])
         assert parse_time_cues(mem) == []
 
+    def test_parses_tagged_deadline(self):
+        mem = _mem("m1", tags=[time_cue_tag(datetime(2026, 9, 20, 9, 0))])
+        assert parse_time_cues(mem) == [datetime(2026, 9, 20, 9, 0)]
+
+
+class TestWithinWindow:
     def test_within_window_boundaries(self):
         now = datetime(2026, 9, 19, 12, 0)
         assert within_window(now + timedelta(hours=DUE_WINDOW_HOURS), now) is True
         assert within_window(now + timedelta(hours=DUE_WINDOW_HOURS + 0.1), now) is False
         assert within_window(now - timedelta(hours=OVERDUE_GRACE_HOURS), now) is True
 
-    def test_due_label_minutes(self):
-        now = datetime(2026, 9, 19, 12, 0)
-        assert due_label(now + timedelta(minutes=30), now) == "in 30m"
-        assert due_label(now - timedelta(minutes=15), now) == "15m overdue"
-
-
-class TestEventCues:
-    def test_entity_in_text_fires(self):
-        mem = _mem("m1", "健康診断の結果を聞く", tags=[event_cue_tag("健康診断")])
-        assert [m.key for m in event_cued_memories([mem], "明日は健康診断だよ")] == ["m1"]
-
-    def test_case_insensitive_match(self):
-        mem = _mem("m1", tags=[event_cue_tag("Kyoto")])
-        assert [m.key for m in event_cued_memories([mem], "I loved kyoto last year")] == ["m1"]
-
-    def test_no_text_no_match(self):
-        mem = _mem("m1", tags=[event_cue_tag("健康診断")])
-        assert event_cued_memories([mem], "") == []
-
-    def test_unrelated_text_no_match(self):
-        mem = _mem("m1", tags=[event_cue_tag("健康診断")])
-        assert event_cued_memories([mem], "今日はコードを書いた") == []
-
-
-class TestMixedTimezoneCues:
-    """naive タグと aware タグの混在（#84）。
-
-    cue:time は LLM 出力由来で naive になり得るが、get_now() は aware。
-    素の datetime を sort/max に渡すと TypeError で get_context ごと落ちる。
-    """
-
-    def test_due_cues_sorts_mixed_naive_and_aware(self):
-        now = datetime(2026, 9, 19, 12, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
-        late = _mem("late", tags=[f"{CUE_TIME_PREFIX}2026-09-19T18:00"])
-        early = _mem("early", tags=[f"{CUE_TIME_PREFIX}2026-09-19T13:00+09:00"])
-        due = due_cues([late, early], now, allow_overdue=False)
-        assert [m.key for m, _ in due] == ["early", "late"]
-
-    def test_naive_deadline_is_read_in_the_reference_frame(self):
-        # astimezone は system TZ（コンテナは UTC）で読むため 9 時間ずれる。
-        # 参照枠（now の tz）で読むのが正しいので「15:00 naive」は 3h 後。
-        now = datetime(2026, 9, 19, 12, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
-        mem = _mem("m1", tags=[f"{CUE_TIME_PREFIX}2026-09-19T15:00"])
-        due = due_cues([mem], now, allow_overdue=False)
-        assert [m.key for m, _ in due] == ["m1"]
-        assert due[0][1] == "in 3h"
-
     def test_within_window_accepts_mixed_frames(self):
+        """naive タグと aware タグの混在（#84）。"""
         now = datetime(2026, 9, 19, 12, 0, tzinfo=ZoneInfo("Asia/Tokyo"))
         assert within_window(datetime(2026, 9, 19, 15, 0), now) is True
         assert within_window(datetime(2026, 9, 20, 13, 0), now) is False

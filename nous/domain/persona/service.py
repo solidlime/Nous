@@ -13,7 +13,7 @@ from nous.domain.persona.entities import (
 )
 from nous.domain.shared.errors import DomainError, PersonaValidationError
 from nous.domain.shared.result import Failure, Result, Success
-from nous.domain.shared.time_utils import generate_memory_key, get_now
+from nous.domain.shared.time_utils import get_now
 from nous.domain.value_objects import normalize_emotion, normalize_importance
 
 if TYPE_CHECKING:
@@ -175,20 +175,11 @@ class PersonaService:
         return Success(None)
 
     def update_persona_info(self, persona: str, persona_info: dict) -> Result[None, DomainError]:
-        """Merge updates into persona info.
-
-        If persona_info contains 'goals' key, extracts goals and persists
-        them as tagged memories via memory_service (best-effort).
-        """
+        """Merge updates into persona info."""
         if not persona_info:
             return Success(None)
 
-        # Extract goals for memory persistence (must happen before skip loop)
-        goals_raw = persona_info.get("goals") or persona_info.get("current_goals")
-        if goals_raw is not None and self._memory_service is not None:
-            self._extract_goals(goals_raw)
-
-        # goals/promises は memory タグで管理するため persona_info には保存しない
+        # 旧 DB の persona_info に残る goals/promises 行の生保存を防ぐ防御（履歴互換）
         skip_keys = {"goals", "promises", "active_promises", "current_goals"}
         for key, value in persona_info.items():
             if key in skip_keys:
@@ -202,59 +193,6 @@ class PersonaService:
                 self._repo.update_state(persona, "appearance", str(value))
         self._touch_last_state_update(persona)
         return Success(None)
-
-    def _extract_goals(self, goals_raw: object) -> None:
-        """Extract goals from persona_info and persist as tagged memories.
-
-        Best-effort: failures are silently swallowed.
-        """
-        if self._memory_service is None:
-            return
-
-        # Normalize to list of strings
-        if isinstance(goals_raw, str):
-            try:
-                goals_list = json.loads(goals_raw)
-                if isinstance(goals_list, str):
-                    goals_list = [goals_list]
-            except Exception:
-                goals_list = [goals_raw] if goals_raw else []
-        elif isinstance(goals_raw, list):
-            goals_list = [g for g in goals_raw if g]
-        else:
-            goals_list = []
-
-        if not goals_list:
-            return
-
-        # Get existing active goals for duplicate avoidance
-        try:
-            existing = self._memory_service.get_by_tags(["goal", "active"])
-            existing_contents = [m.content for m in existing.value] if existing.is_ok else []
-        except Exception:
-            existing_contents = []
-
-        for goal_text in goals_list:
-            if not goal_text or not isinstance(goal_text, str):
-                continue
-            if goal_text in existing_contents:
-                continue
-            try:
-                from nous.domain.memory.entities import Memory as _Memory
-
-                now = get_now()
-                mem = _Memory(
-                    key=generate_memory_key(),
-                    content=goal_text,
-                    created_at=now,
-                    updated_at=now,
-                    tags=["goal", "active"],
-                    importance=0.8,
-                    emotion="anticipation",
-                )
-                self._memory_service.save_memory(mem)
-            except Exception:
-                continue
 
     def get_emotion_history(self, persona: str, limit: int = 20) -> Result[list[EmotionRecord], DomainError]:
         """Get recent emotion change history."""

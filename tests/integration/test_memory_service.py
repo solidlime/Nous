@@ -160,59 +160,6 @@ class TestMemoryCRUD:
         assert mem.source_context == "integration_test"
 
 
-# ---------------------------------------------------------------------------
-# C2: Memory Block (write / read / list / delete)
-# ---------------------------------------------------------------------------
-
-
-class TestMemoryBlocks:
-    """block_write / list_blocks / delete_block."""
-
-    def test_write_block_overwrites_existing(self, svc):
-        svc.write_block("overwrite_me", "初回コンテンツ")
-        svc.write_block("overwrite_me", "上書きコンテンツ")
-        result = svc.list_blocks()
-        assert result.is_ok
-        names = [b["block_name"] for b in result.value]
-        assert "overwrite_me" in names
-
-    def test_list_blocks_empty(self, svc):
-        result = svc.list_blocks()
-        assert result.is_ok
-        assert isinstance(result.value, list)
-
-    def test_list_blocks_returns_all(self, svc):
-        svc.write_block("block_a", "コンテンツ A")
-        svc.write_block("block_b", "コンテンツ B")
-        svc.write_block("block_c", "コンテンツ C")
-        result = svc.list_blocks()
-        assert result.is_ok
-        names = [b["block_name"] for b in result.value]
-        assert "block_a" in names
-        assert "block_b" in names
-        assert "block_c" in names
-
-    def test_delete_block(self, svc):
-        svc.write_block("to_delete", "削除するブロック")
-        del_result = svc.delete_block("to_delete")
-        assert del_result.is_ok
-        names = [b["block_name"] for b in svc.list_blocks().value]
-        assert "to_delete" not in names
-
-    def test_write_block_empty_name_rejected(self, svc):
-        result = svc.write_block("  ", "コンテンツ")
-        assert not result.is_ok
-
-    def test_write_block_empty_content_rejected(self, svc):
-        result = svc.write_block("valid_name", "")
-        assert not result.is_ok
-
-
-# ---------------------------------------------------------------------------
-# C3: Search — keyword / hybrid (without Qdrant)
-# ---------------------------------------------------------------------------
-
-
 class _KeywordAdapter:
     """Thin adapter so SQLiteMemoryRepository fits the keyword strategy protocol."""
 

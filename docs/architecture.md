@@ -34,7 +34,6 @@ nous/
 │   │   ├── tools.py           # TOOL_DISPATCH + register_tools()
 │   │   ├── _tools_memory.py   # memory CRUD/Search/Stats
 │   │   ├── _tools_item.py     # item Add/Equip/Search
-│   │   ├── _tools_goal.py     # goal Manage
 │   │   ├── _tools_persona.py  # get/update context
 │   │   └── _tools_skill.py    # invoke_skill
 │   └── http/
@@ -62,7 +61,7 @@ nous/
 │   │   └── service.py         # チャットサービス
 │   ├── workers/               # バックグラウンドワーカー
 │   │   ├── wiki_worker.py           # 記憶編纂
-│   │   └── prospective_worker.py    # 期限が近い約束の 1h sweep
+│   │   └── prospective_worker.py    # agent:task 予約ターンの 1h 巡回
 │   └── use_cases.py           # AppContextRegistry
 ├── domain/                    # ドメインモデル
 │   ├── memory/                # 記憶エンティティ/サービス/リポジトリ
@@ -152,7 +151,6 @@ PostProcessStep（記憶抽出・状態更新）
 | **コンテキスト** | `session_begin` | ペルソナ状態＋記憶概要（セッション開始時に第一呼出推奨） |
 | | `get_context` | `session_begin` の互換別名（旧名） |
 | | `update_context` | 感情・体調・環境・関係性を更新 |
-| | `profile_update` | 自己像（`me`）/ ユーザー像（`user`）ブロックを全文置換 |
 | **アイテム** | `item_add` | インベントリに物理アイテムを追加 |
 | | `item_equip` | 装備スロットにセット |
 | | `item_unequip` | 装備スロットを外す（外見は自動再構築） |
@@ -162,7 +160,6 @@ PostProcessStep（記憶抽出・状態更新）
 | | `wiki_grep` | 本文を行単位の正規表現で grep |
 | | `wiki_write` | ページを書く（slug 規約 `project-<slug>-<topic>` / `<persona>-<topic>`、`sources` に根拠記憶 key） |
 | | `wiki_delete` | ページ削除（`index` は拒否、検索索引からも削除） |
-| **目標** | `goal_manage` | 目標の作成/一覧/達成/取消 |
 
 MCP として公開しないチャット組み込みツール（`move` / `invoke_skill` / `list_skills` / `search_tools` / `image_generate`）は `nous/application/chat/tools/` にあり、チャット経路でのみ使う。
 
@@ -177,7 +174,6 @@ MCP として公開しないチャット組み込みツール（`move` / `invoke
 | スキル | 説明 |
 |--------|------|
 | `auto-memory` | 会話中の重要情報を自動記録 |
-| `goal-coach` | 目標管理のコーチング |
 | `image-gen` | 画像生成の指示最適化 |
 | `mood-sync` | 感情変化の自律検出・反映 |
 | `recall-weaver` | 関連記憶の想起・連鎖 |
@@ -214,13 +210,11 @@ MCP として公開しないチャット組み込みツール（`move` / `invoke
   - all-term exact マッチは boost 1.0 でバーを必ず通過
 - **注入済み記憶排除**（item 1）: チャット経路で同一 turn 内に注入済みの記憶を検索結果から除外。
 - **再 encode 排除（fingerprint）**（item 6）: Qdrant アダプタが embedding fingerprint を payload に記録し、同一 fingerprint の upsert は再 encode をスキップ。
-- **常載プロフィールドキュメント**（item 3）: `profile_update` ツールで persona_blocks に常載ブロックを登録、検索とは別に毎ターン注入。
 - **日次 wiki 編纂（item 5）**: `WikiWorker` が定刻（既定 03:00 JST = `NOUS_WIKI__RUN_AT_TZ`、`--hour` は `NOUS_WIKI__RUN_AT_HOUR`）に起動し、未編纂の記憶をトピックページへまとめ、源記憶を `archived` に落とす。LLM が空応答/切れ JSON を返した場合は max_tokens を 2 倍にして 1 回だけ再試行し、サイクル内に error が残ったら 30 分後に再挑戦する（丸 1 日空けない）。定刻に persona コンテキストがまだ 1 つも無い場合（初リクエスト前・再起動直後）も空振りとして扱い、同じ 30 分後に再挑戦する（以前は for が 0 回で静かに終わり丸 1 日を捨てていた）。編纂が使う LLM は既定で**そのペルソナのチャット設定（チャットタブのプロバイダ/モデル/鍵/base_url）を流用**し（`nous/application/wiki/llm_target.py`）、`NOUS_WIKI__API_KEY` 等を明示した場合だけ wiki 専用設定が優先される。
   1 サイクルは 3 段: (1) 前日（JST）の記憶・`session_events` の営み・人物設定から起こした暮らし（`life_enabled`、記憶には残さない）から `journal-YYYY-MM-DD` 日記ページを作る、(2) トピックページを編纂する、(3) 編纂応答の `conflicts` / `questions` を監査イベントと `open-question` 記憶に落とす（追加 LLM 呼び出しなし）。続いて `questions` を**persona に登録済みの MCP ツールだけ**で調べ（`research_enabled`、既定 `false`）、URL が取れたものだけページ末尾の `## 外部情報` に追記する。ツール 0 件なら何もしない（`skipped: no mcp tool` の 1 行）。日記を書いた直後には `journal_tomorrow_tasks`（既定 true）で日記から「明日やること」を最大 `journal_tomorrow_max`（既定 3）件起こし、`agent:task` + `cue:time:` の予定として登録する（追加 LLM 呼び出し 1 回、実行は `ProspectiveWorker` の毎時照合）。抽出に失敗しても日記は書き終えているので `warning:` 止まりでサイクルは失敗させない。
   記憶層の矛盾掃除は週 1 回（`memory_conflict_interval_hours`=168）別建てで走る: 同 project タグ + 本文 Jaccard + 数値の食い違いで候補を純関数抽出し（LLM 0 回）、`classify_contradiction` を `memory_conflict_max_pairs`=10 件まで適用、矛盾なら古い側の `valid_until` を閉じて `superseded_by` で繋ぐ（削除しない）。全件判定不能な回は `warning:` で記録し、週次ゲートを再武装しない。
 
 - **記憶の干渉とマージレビュー（audit M1）**: 記憶書込時の既存エボリューション検索結果を再利用し、類似度 `0.85–0.95` の既存側に `interference_count` を加算する（検索回数は増えない）。同じペアで 3 回に達したら `session_events` に `memory.merge_review`（`session_id=memory_write`、summary `merge review: {key} ~ {other_key}`）を 1 件置く。人手（またはエージェント）がマージを検討するキューで、自動マージはしない。
-- **期限が近い約束（audit M2）**: 各ターンのプロンプト注入は `due_cues(..., allow_overdue=False)` で期限切れを出さない（`context_loader.py`）。`ProspectiveWorker` が 1 時間ごとに全 persona の約束を掃き、キー集合が変わった時だけ `prospective.due` を `session_events` に記録する（記憶は書かない、ライブ注入と二重になるため）。
 - **感情の効き方（audit H4/H5）**: 感情強度は検索時の salience（`RankPolicy.emotion_salience_weight`=0.1）にのみ寄与し、永続 `stability` を膨らませない（`emotion_peak` 列は書込・参照とも廃止、DROP は v5）。過去に膨らんだ行はマイグレーション v13 が 1 回だけ 1.0 に clamp する（LTM は対象外）。
 
 残る常駐 worker は `WikiWorker` のみ（ConsolidationWorker は 2026-11 に撤去。Curation / Freshness / Enrichment / Decay は 2026-11-08 に廃止）。

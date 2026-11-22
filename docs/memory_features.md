@@ -50,31 +50,6 @@ When `update_context(user_info={"name": "..."})` is called, the current record i
 
 ---
 
-## Named Memory Blocks
-
-Inspired by [Letta (MemGPT)](https://letta.com/), memory blocks are structured segments
-stored in the `memory_blocks` table (`block_name` 主キー / `content` / `block_type` /
-`max_tokens` / `priority` / `metadata`)。
-
-**⚠️ v4.0 での位置づけ**: ブロックは**HTTP API とダッシュボード専用**の機能で、
-LLM のツール面（14 個の MCP ツール）には公開されていない。`session_begin()` /
-`get_context()` の出力にも自動注入されない。旧 `memory(operation="block_write" ...)`
-構文は存在しない（`memory(operation=...)` ディスパッチャ自体が廃止済み）。
-
-| 操作 | 経路 |
-|---|---|
-| 一覧 | `GET /api/blocks/{persona}` → `{"persona": ..., "blocks": [...]}` |
-| 書き込み / 更新 | `POST /api/blocks/{persona}`（`block_name` + `content` 必須。`block_type` / `max_tokens` / `priority` 任意）→ `{"ok": true, "block_name": ...}` |
-| 削除 | `DELETE /api/blocks/{persona}/{block_name}` → `{"ok": true}` |
-| 閲覧（UI） | ペルソナダッシュボード（`nous/api/http/routers/persona/persona_dashboard.py` が `blocks` を同梱） |
-| 内部 API | `memory_service.list_blocks() / write_block() / delete_block()`（`memory_blocks` テーブル、`priority` 降順） |
-
-LLM が使うペルソナ状態は `update_context()`（bi-temporal な履歴付き）と
-`session_begin()` の出力であり、ブロックとは別系統。エージェント向けのツール一覧は
-[LLM Usage Guide](./llm_usage_guide.md) を参照。
-
----
-
 ## Memory Evolution (A-MEM Pattern)
 
 新しく記憶が作成されたとき、意味的に類似する既存の記憶を検出して自動的に更新する仕組みです。[A-MEM](https://arxiv.org/html/2502.12110) の「各事実が既存の理解を継続的に洗練させる」パターンを実装しています。
@@ -263,4 +238,3 @@ v037: `ALTER TABLE memories ADD COLUMN valid_from TEXT; ADD COLUMN valid_until T
 - **譲り渡し**: 期限時に他のターン（ユーザーとの会話など）が走っていると実行を譲り、タグを外さず次の巡回（最大 1 時間後）で拾い直す
 - **過期グレース**: 期限を過ぎたタスクも `72h`（`OVERDUE_GRACE_HOURS`）以内なら対象。それより古いものは拾わない
 - **巡回対象**: 起動後に一度でも HTTP/チャットでアクセスされたペルソナだけ。触られていないペルソナの期限は拾われない
-- 約束の照合（`prospective.due` の session event、`cue:time` を持つコミットメントの通知）は毎時の巡回で行うため、表示は最大 1 時間古い

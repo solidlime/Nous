@@ -11,7 +11,7 @@
 | 層 | 場所 | 中身 | 正本性 | 失った場合 |
 |----|------|------|--------|-----------|
 | wiki | `<DATA_ROOT>/persona/<persona>/wiki/**.md` | 編纂済み知識・日記・未解決の問い・`_purged/*.jsonl`（退避 gist） | **正本** | 復元不能（最重要） |
-| SQLite | `<DATA_ROOT>/persona/<persona>/memory.sqlite` | 未編纂の生記憶・強度・ブロック・感情履歴・日記材料（`session_events`）・未解決質問・goal/promise | 状態 | 生記憶の受信トレイが消える |
+| SQLite | `<DATA_ROOT>/persona/<persona>/memory.sqlite` | 未編纂の生記憶・強度・感情履歴・日記材料（`session_events`）・未解決質問（旧 DB のみ: blocks・goal/promise テーブルが残存。新規 DB には作られない） | 状態 | 生記憶の受信トレイが消える |
 | SQLite | `<DATA_ROOT>/persona/<persona>/inventory.sqlite` | 所持品・装備・装備履歴 | 状態 | 持ち物が消える |
 | 設定 | `<DATA_ROOT>/config/config_overrides.json` | WebUI で保存した設定（**API キーを含む**） | 状態 | 既定値に戻る（`.env` は別管理） |
 | Qdrant | `<DATA_ROOT>/qdrant/`（volume） | `memory_<persona>` / `wiki_<persona>` のベクトル | **派生物（キャッシュ）** | 意味検索が弱る。再構築可能（下記 §6） |

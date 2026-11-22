@@ -38,30 +38,7 @@ class MemoryRepository(Protocol):
 
 
 class MemoryAuxiliaryRepository(Protocol):
-    """Extended repository interface for blocks, versions, goals, pagination, etc."""
-
-    # Memory blocks (Core Memory)
-    def get_block(self, block_name: str, persona: str = "default") -> Result[dict | None, RepositoryError]: ...
-
-    def save_block(
-        self,
-        block_name: str,
-        content: str,
-        block_type: str = "custom",
-        max_tokens: int = 500,
-        priority: int = 0,
-        metadata: dict | None = None,
-        persona: str = "default",
-    ) -> Result[None, RepositoryError]: ...
-
-    def list_blocks(self, persona: str = "default") -> Result[list[dict], RepositoryError]: ...
-
-    def delete_block(self, block_name: str, persona: str = "default") -> Result[None, RepositoryError]: ...
-
-    # Profile blocks (常載プロフィールドキュメント: block_name は "me"/"user") — B-2
-    def get_profile_blocks(self, persona: str = "default") -> Result[dict[str, dict], RepositoryError]: ...
-
-    def upsert_profile_block(self, persona: str, name: str, content: str) -> Result[None, RepositoryError]: ...
+    """Extended repository interface for versions, pagination, etc."""
 
     # Memory versions
     def save_version(
@@ -103,7 +80,7 @@ class MemoryAuxiliaryRepository(Protocol):
         superseded_by: str | None = None,
     ) -> Result[None, RepositoryError]: ...
 
-    # Goals / Promises (planned: tag-based retrieval via get_by_tags)
+    # Tag-based retrieval (agent:task reservations, reflection search)
     def get_by_tags(self, tags: list[str], include_consumed: bool = False) -> Result[list[Memory], RepositoryError]: ...
 
     # Pagination + all tags

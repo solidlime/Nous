@@ -98,16 +98,6 @@ class TestJSONLImporter:
         assert result.is_ok
         assert result.value["emotion"] == 1
 
-    def test_import_block_records(self, tmp_path, sqlite_conn, importer):
-        """Block records should be imported to memory_blocks table."""
-        data = {"type": "block", "block_name": "system_prompt", "content": "You are helpful."}
-        file_path = tmp_path / "import.jsonl"
-        file_path.write_text(json.dumps(data), encoding="utf-8")
-
-        result = importer.import_file(str(file_path), sqlite_conn, "test")
-        assert result.is_ok
-        assert result.value["block"] == 1
-
     def test_import_nonexistent_file_returns_failure(self, tmp_path, sqlite_conn, importer):
         """Non-existent file should return Failure."""
         result = importer.import_file(str(tmp_path / "nonexistent.jsonl"), sqlite_conn, "test")
@@ -146,7 +136,6 @@ class TestJSONLImporter:
             {"type": "state", "key": "emotion", "value": "happy"},
             {"type": "item", "name": "book"},
             {"type": "emotion", "emotion_type": "curiosity"},
-            {"type": "block", "block_name": "notes", "content": "some notes"},
         ]
         file_path = tmp_path / "import.jsonl"
         file_path.write_text("\n".join(json.dumps(r) for r in records), encoding="utf-8")
@@ -158,7 +147,8 @@ class TestJSONLImporter:
         assert counts["state"] == 1
         assert counts["item"] == 1
         assert counts["emotion"] == 1
-        assert counts["block"] == 1
+        # block レコードは読み飛ばす（Core Memory Blocks 削除後の仕様）
+        assert "block" not in counts
 
     def test_import_unknown_type_ignored(self, tmp_path, sqlite_conn, importer):
         """Records with an unknown type are ignored (not counted in any bucket)."""

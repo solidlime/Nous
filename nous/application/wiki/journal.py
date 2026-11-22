@@ -491,27 +491,16 @@ class JournalMixin:
             return ""
 
     def _persona_character(self, ctx, persona: str) -> str:
-        """人物設定 = chat config の system_prompt + 記憶から作った自己像。取れた方だけ。"""
-        parts: list[str] = []
+        """人物設定 = chat config の system_prompt のみ（仕様変更: 記憶ブロックは廃止）。"""
         try:
             from nous.domain.config.chat_config import ChatConfigFileRepository
 
             prompt = ChatConfigFileRepository(self._settings.data_root).get(persona).system_prompt
-            if prompt and prompt.strip():
-                parts.append(prompt.strip())
+            if isinstance(prompt, str) and prompt.strip():
+                return prompt.strip()[:_CHARACTER_CHARS]
         except Exception:
             logger.debug("WikiWorker: persona system_prompt load failed", exc_info=True)
-        try:
-            service = getattr(ctx, "memory_service", None)
-            if service is not None:
-                result = service.get_profile_blocks(persona)
-                blocks = result.value if isinstance(result, Success) else {}
-                me = (blocks.get("me") or {}).get("content") if isinstance(blocks, dict) else None
-                if me and me.strip():
-                    parts.append(me.strip())
-        except Exception:
-            logger.debug("WikiWorker: persona profile load failed", exc_info=True)
-        return "\n\n".join(parts)[:_CHARACTER_CHARS]
+        return ""
 
     def _build_life_prompt(self, persona: str, day: date, character: str, activity: str) -> str:
         return _LIFE_PROMPT.format(

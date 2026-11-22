@@ -183,7 +183,6 @@ class TestCliTableAllowlist:
         assert {
             "memories",
             "memory_strength",
-            "memory_blocks",
             "emotion_history",
             "context_state",
             "goals",

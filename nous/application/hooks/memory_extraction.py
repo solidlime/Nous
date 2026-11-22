@@ -112,13 +112,12 @@ async def run_hook_extraction(ctx: AppContext, persona: str, event: dict[str, An
         return
 
     try:
-        context_str, commitments_str, inventory_str = await _build_memory_llm_context(ctx)
+        context_str, inventory_str = await _build_memory_llm_context(ctx)
         result = await MemoryLLM().process(
             cast("ChatConfig", _llm_config(ctx.settings, user_text)),
             user_message=user_text,
             assistant_response=assistant_text,
             context=context_str,
-            commitments=commitments_str,
             inventory=inventory_str,
             persona_name=ctx.persona or persona,
             mode="context",
@@ -128,14 +127,12 @@ async def run_hook_extraction(ctx: AppContext, persona: str, event: dict[str, An
             _record_failure(ctx, persona, session_id, "empty result")
             return
 
-        n_facts, n_goals, n_promises = await _apply_result(ctx, persona, result, _project_tag(event))
+        n_facts, _n_insights = await _apply_result(ctx, persona, result, _project_tag(event))
         if result.get("context_update"):
             _apply_context_update(ctx, persona, result["context_update"], detail.get("tool_calls_log") or [])
         logger.info(
-            "hook_extraction: %d facts / %d goals / %d promises saved persona=%s",
+            "hook_extraction: %d facts saved persona=%s",
             n_facts,
-            n_goals,
-            n_promises,
             persona,
         )
     except Exception as e:
@@ -143,10 +140,12 @@ async def run_hook_extraction(ctx: AppContext, persona: str, event: dict[str, An
         _record_failure(ctx, persona, session_id, str(e))
 
 
-async def _apply_result(
-    ctx: AppContext, persona: str, result: dict, project_tag: str | None = None
-) -> tuple[int, int, int]:
-    """LLM 抽出結果を保存し、(facts, goals, promises) の保存件数を返す。"""
+async def _apply_result(ctx: AppContext, persona: str, result: dict, project_tag: str | None = None) -> tuple[int, int]:
+    """LLM 抽出結果を保存し、(facts, insights) の保存件数を返す。
+
+    pi-hook 経路が書き込むのは facts のみ。insights（reflection 記憶）は
+    内省パイプラインの担域で、この経路では発生しないため常に 0。
+    """
     n_facts = 0
     for fact in result.get("facts") or []:
         content = str(fact.get("content") or "").strip()
@@ -163,82 +162,7 @@ async def _apply_result(
         ):
             n_facts += 1
 
-    n_goals = 0
-    for goal in result.get("goals") or []:
-        if await _apply_commitment(
-            ctx,
-            persona,
-            goal,
-            active_tags=_with_project(["goal", "active"], project_tag),
-            achieve_tags=["goal", "achieved"],
-            cancel_tags=["goal", "cancelled"],
-            importance=0.75,
-            project_tag=project_tag,
-        ):
-            n_goals += 1
-
-    n_promises = 0
-    for promise in result.get("promises") or []:
-        if await _apply_commitment(
-            ctx,
-            persona,
-            promise,
-            active_tags=["goal", "active", "interpersonal"],
-            achieve_tags=["goal", "achieved", "archived", "interpersonal"],
-            cancel_tags=["goal", "cancelled", "archived", "interpersonal"],
-            importance=0.8,
-            project_tag=project_tag,
-        ):
-            n_promises += 1
-
-    return n_facts, n_goals, n_promises
-
-
-async def _apply_commitment(
-    ctx: AppContext,
-    persona: str,
-    item: dict,
-    *,
-    active_tags: list[str],
-    achieve_tags: list[str],
-    cancel_tags: list[str],
-    importance: float,
-    project_tag: str | None = None,
-) -> bool:
-    """goals / promises 1 件を active リスト（LLM が memory_key で参照）と照合して反映する。"""
-    action = str(item.get("action") or "create")
-    content = str(item.get("content") or "").strip()
-    memory_key = str(item.get("memory_key") or "")
-    if action in ("achieve", "fulfill") and memory_key:
-        return _set_tags(ctx, memory_key, achieve_tags)
-    if action == "cancel" and memory_key:
-        return _set_tags(ctx, memory_key, cancel_tags)
-    if action == "create" and content:
-        return await _create(
-            ctx,
-            persona,
-            content,
-            importance=importance,
-            tags=_with_project(active_tags, project_tag),
-        )
-    return False
-
-
-def _set_tags(ctx: AppContext, memory_key: str, tags: list[str]) -> bool:
-    """既存 memory の tags を差し替える（達成/中止の状態遷移）。既存の project:* は温存する。"""
-    merged = list(tags)
-    existing = ctx.memory_service.get_memory(memory_key)
-    if isinstance(existing, Success):
-        old_tags = getattr(existing.value, "tags", None)
-        if isinstance(old_tags, list):
-            for t in old_tags:
-                if isinstance(t, str) and t.startswith("project:") and t not in merged:
-                    merged.append(t)
-    upd = ctx.memory_service.update_memory(memory_key, tags=merged)
-    if isinstance(upd, Success):
-        return True
-    logger.warning("hook_extraction: tag update failed key=%s: %s", memory_key, upd.error)
-    return False
+    return n_facts, 0
 
 
 async def _create(

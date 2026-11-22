@@ -38,7 +38,6 @@ LAZY_MANIFEST: dict = {
         # overview/memories/misc chunks made every visit fetch every tab.
         "overview": {
             "scripts": [
-                "/static/features/overview/overview-blocks.js",
                 "/static/features/overview/overview-inventory.js",
                 "/static/features/overview/overview-core.js",
                 "/static/features/overview/overview-stats.js",

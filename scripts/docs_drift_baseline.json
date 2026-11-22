@@ -6,7 +6,6 @@
     "GET /api/chat/{}/attachment/{}",
     "GET /api/chat/{}/avatar/model",
     "GET /api/chat/{}/avatar/models",
-    "GET /api/chat/{}/commitments",
     "GET /api/chat/{}/config",
     "GET /api/chat/{}/config/defaults",
     "GET /api/chat/{}/events",

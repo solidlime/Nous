@@ -40,7 +40,6 @@ def test_format_lightweight_includes_one_shot_context():
     result = _format_lightweight_response(
         state,
         top_memories=[],
-        goals=[],
         equipment={},
         recent=[],
         one_shot_context={"🗣️ 口調": "ツンデレ口調"},
@@ -65,7 +64,7 @@ def test_format_lightweight_no_physical_mental_state_parts():
     from nous.api.mcp._tools_helpers import _format_lightweight_response
 
     state = _make_state(physical_state="疲れた", mental_state="集中")
-    result = _format_lightweight_response(state, top_memories=[], goals=[], equipment={}, recent=[])
+    result = _format_lightweight_response(state, top_memories=[], equipment={}, recent=[])
     assert "Body: 疲れた" not in result
     assert "Mind: 集中" not in result
 
@@ -143,7 +142,6 @@ def test_lightweight_sections_carry_created_at_relative_time():
     result = _format_lightweight_response(
         state,
         top_memories=top_memories,
-        goals=[],
         equipment={},
         recent=[],
         reflections=reflections,
@@ -176,7 +174,6 @@ def test_behavior_patterns_carry_no_relative_time():
     result = _format_lightweight_response(
         state,
         top_memories=[_timed_mem("t1", "story", created_days_ago=366)],
-        goals=[],
         equipment={},
         recent=[],
         mental_models=mental_models,

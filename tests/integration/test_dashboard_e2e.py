@@ -139,55 +139,11 @@ def _seed_emotions(persona: str = "testpersona", n: int = 4) -> None:
     db.commit()
 
 
-def _seed_goals_and_promises(persona: str = "testpersona") -> None:
-    """Insert goals and promises as memory entries with type tags."""
-    import json
-
-    db = _get_db(persona)
-    now_str = format_iso(get_now())
-    db.execute(
-        """INSERT OR REPLACE INTO memories
-           (key, content, created_at, updated_at, tags, importance,
-            emotion, emotion_intensity, privacy_level)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            "goal_001",
-            "宇宙の謎を解明する",
-            now_str,
-            now_str,
-            json.dumps(["goal", "active"], ensure_ascii=False),
-            0.8,
-            "anticipation",
-            0.7,
-            "internal",
-        ),
-    )
-    db.execute(
-        """INSERT OR REPLACE INTO memories
-           (key, content, created_at, updated_at, tags, importance,
-            emotion, emotion_intensity, privacy_level)
-           VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)""",
-        (
-            "promise_001",
-            "毎日研究を続ける",
-            now_str,
-            now_str,
-            json.dumps(["promise", "active"], ensure_ascii=False),
-            0.8,
-            "trust",
-            0.7,
-            "internal",
-        ),
-    )
-    db.commit()
-
-
 @pytest.fixture()
 async def seeded_client(client):
-    """Client with pre-seeded test data (memories, emotions, goals, promises)."""
+    """Client with pre-seeded test data (memories, emotions)."""
     _seed_memories()
     _seed_emotions()
-    _seed_goals_and_promises()
     yield client
 
 
@@ -243,7 +199,7 @@ async def test_dashboard_data_empty(client):
     assert resp.status_code == 200
     data = resp.json()
     assert data["persona"] == "testpersona"
-    for key in ("stats", "context", "recent", "blocks", "equipment", "goals"):
+    for key in ("stats", "context", "recent", "equipment"):
         assert key in data, f"Missing key '{key}' in dashboard data"
     # Empty DB → no memories
     assert data["recent"] == []
@@ -266,8 +222,6 @@ async def test_dashboard_data_with_memories(seeded_client):
     # recent returns up to 50 (dashboard fetches limit=50)
     assert len(data["recent"]) <= 50
     assert len(data["recent"]) > 0
-    # goals and promises
-    assert len(data["goals"]) >= 1
 
 
 @pytest.mark.asyncio
@@ -331,8 +285,8 @@ async def test_observations_pagination(seeded_client):
     assert data["persona"] == "testpersona"
     assert data["page"] == 1
     assert data["per_page"] == 3
-    assert data["total_count"] == 8  # 6 regular memories + 1 goal + 1 promise
-    assert data["total_pages"] == 3  # 8 memories / 3 per_page = ceil(8/3)=3
+    assert data["total_count"] == 6  # 6 regular memories
+    assert data["total_pages"] == 2  # 6 memories / 3 per_page = 2
     assert len(data["memories"]) == 3
 
     # Fetch page 2
@@ -545,64 +499,3 @@ async def test_full_dogfooding_flow(client):
 
 
 # ===================================================================
-# Goals/Promises normalization logic tests
-# ===================================================================
-
-
-def _normalize_goals(raw: list[dict]) -> list[str]:
-    """Replicate the normalization from persona.py line 109."""
-    return [g["description"] for g in raw if g.get("status") == "active" and g.get("description")]
-
-
-def _normalize_promises(raw: list[dict]) -> list[str]:
-    """Replicate the normalization from persona.py line 113."""
-    return [p["description"] for p in raw if p.get("status") == "active" and p.get("description")]
-
-
-def test_goals_normalization_active_only():
-    """active な goals のみ返される。"""
-    raw = [
-        {"id": "g1", "description": "Do X", "status": "active"},
-        {"id": "g2", "description": "Done Y", "status": "inactive"},
-        {"id": "g3", "description": "Do Z", "status": "active"},
-    ]
-    result = _normalize_goals(raw)
-    assert result == ["Do X", "Do Z"]
-    assert "Done Y" not in result
-
-
-def test_goals_normalization_empty_description_filtered():
-    """description が空の active goal はスキップされる。"""
-    raw = [
-        {"id": "g1", "description": "", "status": "active"},
-        {"id": "g2", "description": "Do X", "status": "active"},
-    ]
-    result = _normalize_goals(raw)
-    assert "" not in result
-    assert result == ["Do X"]
-
-
-def test_goals_normalization_missing_fields():
-    """status/description キーがない行はスキップされる。"""
-    raw = [
-        {"id": "g1"},  # status/description 欠如
-        {"id": "g2", "description": "Goal A", "status": "active"},
-    ]
-    result = _normalize_goals(raw)
-    assert result == ["Goal A"]
-
-
-def test_promises_normalization_logic():
-    """active な promises のみ返される。"""
-    raw = [
-        {"description": "Promise A", "status": "active"},
-        {"description": "Promise B", "status": "inactive"},
-    ]
-    result = _normalize_promises(raw)
-    assert result == ["Promise A"]
-
-
-def test_empty_list_returns_empty():
-    """空リストを渡すと空リストが返る。"""
-    assert _normalize_goals([]) == []
-    assert _normalize_promises([]) == []

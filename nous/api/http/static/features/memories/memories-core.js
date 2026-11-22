@@ -1,7 +1,7 @@
 /* =================================================================
    MEMORIES CORE — State initialization, data loading, event binding, helpers
    Namespace: N.Features.Memories.*
-   Depends on: N.Core.* (esc, toast, api, truncate, relativeTime, showConfirm)
+   Depends on: N.Core.* (esc, toast, api, showConfirm)
                N.Features.Memories.* (renderMemoryList, openMemModalByKey,
                  openCreateModal, toggleSelectMode, toggleAdvancedSearch,
                  applyAdvancedSearch, clearAdvancedSearch, batchDeleteMemories, _addEditTag)
@@ -11,7 +11,7 @@ N.Features.Memories = N.Features.Memories || {};
 
 ;(function() {
 var S = window.S;
-var { esc, toast, api, truncate, relativeTime, showConfirm, safeSetHTML, fmtDate } = window.Nous.Core;
+var { esc, api, safeSetHTML, fmtDate } = window.Nous.Core;
 
 /* ── State initialization ── */
 if (S && S.mem) Object.assign(S.mem, {
@@ -78,21 +78,18 @@ async function loadMemories(page) {
     var el = document.getElementById('memories-content');
     N.Components.skeleton.show('memories');
 
-    // --- Dashboard stats/blocks/goals/charts（Overview から移設）---
+    // --- Dashboard stats/charts（Overview から移設）---
     // v4/B6: dashCache はセクション別。v1 の全量 1 本（/api/dashboard）は引かず、
-    // stats= v2 overview、blocks/goals= v2 分割、7日分= 既存 /api/observations で賄う。
+    // stats= v2 overview、7日分= 既存 /api/observations で賄う。
     var _pid = encodeURIComponent(S.persona);
-    if (!S.dashCache) S.dashCache = { overview: null, items: null, blocks: null, images: null };
+    if (!S.dashCache) S.dashCache = { overview: null, items: null, images: null };
     var dc = S.dashCache;
     var _res = await Promise.all([
         dc.overview || api('/api/v2/overview/' + _pid),
-        dc.blocks || api('/api/v2/blocks/' + _pid),
-        api('/api/observations/' + _pid + '?mode=recent&per_page=7'),
-        api('/api/v2/goals/' + _pid)
+        api('/api/observations/' + _pid + '?mode=recent&per_page=7')
     ]);
     dc.overview = _res[0];
-    dc.blocks = _res[1].blocks || [];
-    const ds = { blocks: dc.blocks, recent: _res[2].memories || [], goals: _res[3].goals || [] };
+    const ds = { recent: _res[1].memories || [] };
     const stats = dc.overview.stats || {};
 
     // Build stats HTML
@@ -111,28 +108,6 @@ async function loadMemories(page) {
     const memTypeCounts = {};
     Object.entries(MEMORY_TYPES).forEach(([k])=>{ if(tagDist[k]) memTypeCounts[k]=tagDist[k]; });
     const hasMemTypes = Object.keys(memTypeCounts).length > 0;
-
-    // Build blocks list HTML
-    var blocksListHtml = '';
-    if (ds.blocks && ds.blocks.length > 0) {
-        ds.blocks.forEach(b => {
-            const name = typeof b === 'string' ? b : (b.name || b.block_name || 'block');
-            const content = typeof b === 'object' ? (b.content || b.value || '') : '';
-            const priority = typeof b === 'object' ? b.priority : null;
-            blocksListHtml += '<div class="memory-block-row">';
-            blocksListHtml += '<div class="memory-block-head">';
-            blocksListHtml += '<span class="memory-block-name">' + esc(name) + '</span>';
-            if (priority != null) blocksListHtml += '<span class="badge badge-yellow">P' + esc(String(priority)) + '</span>';
-            blocksListHtml += '<div class="memory-block-actions">';
-            blocksListHtml += '<button type="button" class="glass-btn" data-block-action="edit" data-bname="' + esc(name) + '" data-bcontent="' + esc(content) + '" data-bpriority="' + (priority||0) + '"><i data-lucide="pencil"></i> Edit</button>';
-            blocksListHtml += '<button type="button" class="glass-btn" data-block-action="delete" data-bname="' + esc(name) + '"><i data-lucide="trash-2"></i> Delete</button>';
-            blocksListHtml += '</div></div>';
-            if (content) blocksListHtml += '<div class="memory-muted-text">' + esc(truncate(String(content), 80)) + '</div>';
-            blocksListHtml += '</div>';
-        });
-    } else {
-        blocksListHtml = '<span class="memory-muted-text">No core memory blocks</span>';
-    }
 
     // Build chart data
     const recent = ds.recent || [];
@@ -158,39 +133,6 @@ async function loadMemories(page) {
     if (topTags.length) { dashboardHtml += '<div class="mb-4">' + topTags.map(([t,c])=>'<span class="badge badge-purple">'+esc(t)+' <span class="badge-count">('+c+')</span></span>').join(' ')+'</div>'; }
     if (hasMemTypes) { dashboardHtml += '<div class="mb-4">' + Object.entries(memTypeCounts).map(([t,c])=>'<span class="badge '+MEMORY_TYPES[t].color+'">'+MEMORY_TYPES[t].icon+' '+esc(t)+' <span class="badge-count">('+c+')</span></span>').join(' ')+'</div>'; }
     if (topEmo.length) { dashboardHtml += '<div>' + topEmo.map(([e,c])=>'<span class="badge badge-pink">'+esc(e)+' <span class="badge-count">('+c+')</span></span>').join(' ')+'</div>'; }
-    dashboardHtml += '</div>';
-
-    // Core Memory Blocks
-    dashboardHtml += '<div class="glass glass-hoverable p-6 mb-6">';
-    dashboardHtml += '<div class="card-title card-title-with-action"><span>🧠 Core Memory Blocks</span><button type="button" class="glass-btn card-action-btn" data-block-action="create"><i data-lucide="plus"></i> New Block</button></div>';
-    dashboardHtml += blocksListHtml;
-    dashboardHtml += '</div>';
-
-    // Goals section
-    var goalsListHtml = '';
-    var effectiveGoals = ds.goals || [];
-    if (effectiveGoals.length > 0) {
-        effectiveGoals.forEach(function(item) {
-            var content = typeof item === 'string' ? item : (item.content || item.description || item.title || JSON.stringify(item));
-            var status = typeof item === 'object' ? (item.status || 'active').toLowerCase() : 'active';
-            var icon;
-            if (status === 'active') icon = '<i data-lucide="refresh-cw"></i>';
-            else if (status === 'achieved' || status === 'fulfilled') icon = '<i data-lucide="check-circle"></i>';
-            else if (status === 'cancelled') icon = '<i data-lucide="x-circle"></i>';
-            else icon = '<i data-lucide="refresh-cw"></i>';
-            goalsListHtml += '<div class="goal-row">';
-            goalsListHtml += '<span>' + icon + '</span>';
-            goalsListHtml += '<span class="goal-text">' + esc(content) + '</span>';
-            var ts = typeof item === 'object' && (item.created_at || item.date);
-            if (ts) goalsListHtml += '<span class="goal-time">' + relativeTime(ts) + '</span>';
-            goalsListHtml += '</div>';
-        });
-    } else {
-        goalsListHtml = '<span class="memory-muted-text">No goals</span>';
-    }
-    dashboardHtml += '<div class="glass glass-hoverable p-6 mb-6">';
-    dashboardHtml += '<div class="card-title"><i data-lucide="target"></i> Goals <span class="card-title-count">(' + effectiveGoals.length + ')</span></div>';
-    dashboardHtml += '<div class="goals-scroll">' + goalsListHtml + '</div>';
     dashboardHtml += '</div>';
 
     // Charts placeholders
@@ -453,21 +395,4 @@ Object.assign(N.Features.Memories, {
     bindMemoryEvents: bindMemoryEvents,
 });
 
-/* CSP-safe delegation for Core Memory Block buttons (no inline onclick) */
-if (typeof document !== "undefined" && !bindMemoryEvents._blockDelegated) {
-    bindMemoryEvents._blockDelegated = true;
-    document.addEventListener("click", function (e) {
-        var btn = e.target && e.target.closest ? e.target.closest("[data-block-action]") : null;
-        if (!btn) return;
-        var action = btn.getAttribute("data-block-action");
-        var Ov = window.Nous && window.Nous.Features && window.Nous.Features.Overview;
-        if (!Ov) return;
-        if (action === "create" && typeof Ov.showCreateBlock === "function") Ov.showCreateBlock();
-        else if (action === "edit" && typeof Ov.showEditBlock === "function") {
-            Ov.showEditBlock(btn.dataset.bname, btn.dataset.bcontent, parseInt(btn.dataset.bpriority || "0", 10));
-        } else if (action === "delete" && typeof Ov.deleteBlock === "function") {
-            Ov.deleteBlock(btn.dataset.bname);
-        }
-    });
-}
 })();

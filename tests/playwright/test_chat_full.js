@@ -172,26 +172,6 @@ async function main() {
   }
 
   // ============================================================
-  // TEST 6: 目標操作
-  // ============================================================
-  console.log("\n[6] 目標操作");
-  try {
-    const inp = await waitForInput(page);
-    await inp.fill("新しい目標を追加して：全テストを通すこと");
-    await sleep(200);
-    await inp.press("Shift+Enter");
-    if (!(await waitSSE(page, 90000))) throw new Error("timeout");
-    await sleep(2000);
-    const errs = await checkToastError(page);
-    if (errs.length) throw new Error(errs.join(", "));
-    R.pass.push("目標操作成功");
-    console.log("  PASS");
-  } catch (e) {
-    R.fail.push("目標操作失敗: " + e.message);
-    console.log("  FAIL:", e.message);
-  }
-
-  // ============================================================
   // API 検証
   // ============================================================
   const apis = [

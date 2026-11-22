@@ -105,20 +105,6 @@ def test_promise_manage_removed():
     assert "promise_manage" not in names, "promise_manage should have been removed in #1"
 
 
-def test_scope_enum_values():
-    """goal_manage.scope enum equals ['self', 'interpersonal'] (post-#1)."""
-    goal_td = next(td for td in MEMORY_TOOLS if td.name == "goal_manage")
-    assert goal_td.input_schema["properties"]["scope"]["enum"] == [
-        "self",
-        "interpersonal",
-    ], "goal_manage scope enum should be ['self', 'interpersonal'] after #1"
-
-
-# ---------------------------------------------------------------------------
-# v4.0 audit M5 / M9-b — LLM-facing schema defaults
-# ---------------------------------------------------------------------------
-
-
 def test_memory_create_duplicate_check_enabled_by_default():
     """audit M5: chat 組込ツールの default は重複チェック実施（False）。"""
     td = next(td for td in MEMORY_TOOLS if td.name == "memory_create")

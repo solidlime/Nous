@@ -24,7 +24,7 @@ class LegacyImporter:
 
     Expects a persona directory (or zip) containing:
     - ``memory.sqlite``  (memories, emotion_history, user_state,
-      memory_strength, memory_blocks, goals, promises)
+      memory_strength, goals, promises)
     - ``inventory.sqlite`` (items, equipment_slots, equipment_history)
     - ``persona_context.json``
     """
@@ -53,7 +53,6 @@ class LegacyImporter:
             try:
                 counts["memories"] = self._import_memories(src)
                 counts["memory_strength"] = self._import_memory_strength(src)
-                counts["memory_blocks"] = self._import_memory_blocks(src)
                 counts["emotion_history"] = self._import_emotion_history(src)
                 counts["user_state"] = self._import_user_state(src)
                 counts["goals"] = self._import_goals(src)
@@ -213,43 +212,6 @@ class LegacyImporter:
                 count += 1
             except Exception as exc:  # noqa: BLE001
                 logger.warning("Skipping invalid memory_strength entry during import: %s", exc, exc_info=True)
-                continue
-
-        target_db.commit()
-        return count
-
-    def _import_memory_blocks(self, src_db: sqlite3.Connection) -> int:
-        target_db = self.target.get_memory_db()
-        count = 0
-
-        try:
-            rows = src_db.execute("SELECT * FROM memory_blocks").fetchall()
-        except sqlite3.OperationalError:
-            return 0
-
-        for row in rows:
-            try:
-                target_db.execute(
-                    """
-                    INSERT OR REPLACE INTO memory_blocks
-                    (block_name, content, block_type, max_tokens,
-                     priority, created_at, updated_at, metadata)
-                    VALUES (?,?,?,?,?,?,?,?)
-                    """,
-                    (
-                        row["block_name"],
-                        row["content"],
-                        row["block_type"],
-                        row["max_tokens"],
-                        row["priority"],
-                        row["created_at"],
-                        row["updated_at"],
-                        row["metadata"],
-                    ),
-                )
-                count += 1
-            except Exception as exc:  # noqa: BLE001
-                logger.warning("Skipping invalid memory_blocks entry during import: %s", exc, exc_info=True)
                 continue
 
         target_db.commit()

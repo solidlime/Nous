@@ -26,17 +26,14 @@ def _parse_int_param(params, name: str, default: int) -> int:
 
 
 async def _begin_notes(ctx, persona: str) -> list[str]:
-    """begin の notes（沈黙の間 #37 / 約束 #43）。失敗しても begin は落とさない。"""
-    from nous.application.session.session_notes import fill_silence, promise_note
+    """begin の notes（沈黙の間 #37）。失敗しても begin は落とさない。"""
+    from nous.application.session.session_notes import fill_silence
 
     notes: list[str] = []
     try:
         warning = await fill_silence(ctx, persona, getattr(ctx.settings, "session_silence_hours", None))
         if warning:
             notes.append(warning)
-        note = promise_note(ctx)
-        if note:
-            notes.append(note)
     except Exception as e:  # noqa: BLE001 — begin を守る
         logger.warning("session_begin: notes failed persona=%s: %s", persona, e)
         notes.append(f"warning: notes skipped: {e}")

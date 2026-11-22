@@ -73,7 +73,6 @@ def render_chat_main() -> str:
                             <p class="chat-welcome-hint">APIキーとプロバイダーを設定してください。<br><a href="#" data-chat-welcome-settings="1" class="chat-welcome-link"><i data-lucide="settings"></i> 設定パネルを開く</a></p>
                             <div class="chat-welcome-commands">
                                 <span class="chat-welcome-cmd">/memory</span>
-                                <span class="chat-welcome-cmd">/goal</span>
                                 <span class="chat-welcome-cmd">/help</span>
                                 <span class="chat-welcome-cmd">/search</span>
                                 <span class="chat-welcome-cmd">/image</span>

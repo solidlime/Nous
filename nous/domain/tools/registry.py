@@ -70,38 +70,6 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
             MCP: (ToolParam("project", "string|null", required=False),),
         },
     ),
-    "goal_manage": ToolSpec(
-        name="goal_manage",
-        summary="目標・約束を管理する（set / achieved / abandoned / list）",
-        surfaces=frozenset({MCP, BUILTIN, HTTP}),
-        params={
-            MCP: (
-                ToolParam("operation", "string", required=True),
-                ToolParam("content", "string", required=False),
-                ToolParam("importance", "number", required=False),
-                ToolParam("scope", "string", required=False),
-                ToolParam("memory_key", "string|null", required=False),
-                ToolParam("tags", "array<string>|null", required=False),
-            ),
-            BUILTIN: (
-                ToolParam("operation", "string", required=True),
-                ToolParam("content", "string", required=False),
-                ToolParam("importance", "number", required=False),
-                ToolParam("scope", "string", required=True),
-                ToolParam("memory_key", "string", required=False),
-                ToolParam("tags", "array", required=False),
-            ),
-            HTTP: (
-                ToolParam("operation", "string", required=True),
-                ToolParam("content", "string", required=False),
-                ToolParam("importance", "number", required=False),
-                ToolParam("scope", "string", required=True),
-                ToolParam("memory_key", "string", required=False),
-                ToolParam("tags", "array", required=False),
-            ),
-        },
-        divergence="builtin 面は scope を必須にして LLM に明示させる。MCP 面は既定 'self' で省略可。",
-    ),
     "schedule_task": ToolSpec(
         name="schedule_task",
         summary="自分で決めた予定を記憶に置く（when / prompt / recur）",
@@ -500,25 +468,6 @@ TOOL_SPECS: Final[dict[str, ToolSpec]] = {
             ),
         },
         divergence="MCP 面のみ valence / arousal / appearance を持つ（v3.x 互換フィールド）。",
-    ),
-    "profile_update": ToolSpec(
-        name="profile_update",
-        summary="自己像/ユーザー像プロフィールブロックを全体リライトする（B-5）",
-        surfaces=frozenset({MCP, BUILTIN, HTTP}),
-        params={
-            MCP: (
-                ToolParam("target", "string", required=True),
-                ToolParam("content", "string", required=True),
-            ),
-            BUILTIN: (
-                ToolParam("target", "string", required=True),
-                ToolParam("content", "string", required=True),
-            ),
-            HTTP: (
-                ToolParam("target", "string", required=True),
-                ToolParam("content", "string", required=True),
-            ),
-        },
     ),
     "wiki_ls": ToolSpec(
         name="wiki_ls",
