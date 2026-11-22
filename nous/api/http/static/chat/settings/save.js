@@ -8,14 +8,8 @@
   "use strict";
   var C = N.Core;
   var api = C.api,
-    esc = C.esc,
     toast = C.toast,
     safeSetHTML = C.safeSetHTML;
-  var showConfirm = C.showConfirm,
-    showAlert = C.showAlert;
-  var truncate = C.truncate,
-    relativeTime = C.relativeTime,
-    fmtDate = C.fmtDate;
   var S = window.S;
 
   // 空欄時のフォールバックはサーバ既定を正とする（defaults API 経由）。
@@ -45,20 +39,6 @@
       api_key: apiKeyVal,
       base_url: document.getElementById("chat-base-url").value.trim(),
 
-      temperature: parseFloat(
-        document.getElementById("chat-temperature").value,
-      ),
-      dynamic_temperature: getChecked("chat-dynamic-temperature"),
-      emotion_temperature_scale: parseFloat(
-        document.getElementById("chat-emotion-temperature-scale")?.value ||
-          "0.2",
-      ),
-      top_p: (() => {
-        var enabled = document.getElementById("chat-top-p-enabled");
-        if (enabled && !enabled.checked) return null;
-        var v = parseFloat(document.getElementById("chat-top-p")?.value);
-        return isNaN(v) ? null : v;
-      })(),
       reasoning_enabled: getChecked("chat-reasoning-enabled"),
       reasoning_effort: (() => {
         var labels = ["low", "medium", "high", "max"];
@@ -67,7 +47,6 @@
         );
         return labels[idx] || "medium";
       })(),
-      max_tokens: parseInt(document.getElementById("chat-max-tokens").value),
       max_stored_messages: parseInt(
         document.getElementById("chat-stored-msgs").value,
       ),
@@ -83,9 +62,6 @@
         ) / 100,
       context_compression_mode: document.getElementById("chat-compression-mode")
         .value,
-      context_keep_recent_turns: parseInt(
-        document.getElementById("chat-keep-recent").value,
-      ),
       context_compress_system_prompt: document.getElementById(
         "chat-compress-system",
       ).checked,

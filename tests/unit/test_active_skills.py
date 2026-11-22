@@ -140,9 +140,11 @@ def _build_prompt_with_skills(monkeypatch, enabled_skills, session_id, bodies):
     turn_ctx.context_section = ""
     turn_ctx.related_memories = ""
     turn_ctx.system_prompt = ""
+    turn_ctx.volatile_context = ""
     turn_ctx.skills_raw = []
     PromptBuildStep().run(ctx, config, turn_ctx)
-    return turn_ctx.system_prompt
+    # 静的分は system、揮発分（active_skills 含む）は [NOUS CONTEXT] 側に載る
+    return turn_ctx.system_prompt + "\n" + turn_ctx.volatile_context
 
 
 def test_prompt_injects_active_skill_body(monkeypatch):

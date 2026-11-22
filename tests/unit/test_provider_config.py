@@ -56,19 +56,3 @@ class TestProviderConfigTemperature:
     def test_temperature_always_at_most_two_decimals(self, value: float):
         cfg = ProviderConfig(temperature=value)
         assert cfg.temperature == round(cfg.temperature, 2)
-
-
-class TestProviderConfigTopP:
-    def test_top_p_rounded_to_two_decimals(self):
-        """3桁以上の top_p は小数点2桁に丸められる."""
-        cfg = ProviderConfig(top_p=0.955)
-        assert cfg.top_p == 0.95
-
-    def test_top_p_none_stays_none(self):
-        assert ProviderConfig(top_p=None).top_p is None
-
-    @pytest.mark.parametrize("value", [0.9, 0.955, 0.123456])
-    def test_top_p_always_at_most_two_decimals(self, value: float):
-        cfg = ProviderConfig(top_p=value)
-        assert cfg.top_p is not None
-        assert cfg.top_p == round(cfg.top_p, 2)

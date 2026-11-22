@@ -26,6 +26,9 @@ Summary:"""
 class SummarizerMixin:
     """LLMによる会話要約機能を提供するミックスイン。"""
 
+    # 1回の要約プロンプトに載せるメッセージ数の上限（evict 切片が巨大化しても暴走しない）。
+    SUMMARIZE_MAX_MESSAGES = 60
+
     @staticmethod
     def _should_summarize(removed: list[LLMMessage], config: ChatConfig) -> bool:
         """Check if LLM summarization should be attempted.
@@ -33,7 +36,7 @@ class SummarizerMixin:
         Conditions:
         1. Feature flag is enabled
         2. Provider is configured (has API key)
-        3. The removed slice (Stage 0) contains user content to summarize
+        3. The removed slice contains user content to summarize
         """
         if not getattr(config, "context_use_llm_summary", True):
             return False
@@ -45,12 +48,14 @@ class SummarizerMixin:
         self,
         config: ChatConfig,
         removed: list[LLMMessage],
+        refs: list[str] | None = None,
     ) -> str | None:
-        """Call LLM to summarize the Stage 0 removed message slice.
+        """Call LLM to summarize an evicted message slice (差分要約).
 
-        The removed slice is everything Stage 0 cut off (before the recent
-        window). Strips tool messages, truncates long content to the configured max chars,
-        and asks the LLM for a short summary (target from config).
+        Strips tool messages, truncates long content to the configured max chars,
+        caps the input at SUMMARIZE_MAX_MESSAGES（末尾から）, and asks the LLM for a
+        short summary (target from config). refs（evict 切片の artifact パス）は
+        原文への復帰路として要約プロンプト末尾に付ける。
 
         Returns:
             要約文字列。条件不成立時またはエラー時は None。
@@ -73,11 +78,16 @@ class SummarizerMixin:
 
         if not lines:
             return None
+        # 件数上限: 切片が巨大でも末尾 SUMMARIZE_MAX_MESSAGES 件に収める
+        lines = lines[-self.SUMMARIZE_MAX_MESSAGES :]
+        if refs:
+            lines.append("削除済み会話が参照していた添付: " + ", ".join(refs))
 
         language_resolver = LanguageResolver(config)
         lang = language_resolver.resolve()
         prompt = SUMMARIZE_PROMPT.format(
             language=LanguageResolver.display_name(lang),
+            summarize_target_chars=config.compression_config.summarize_target_chars,
             conversation="\n".join(lines),
         )
 

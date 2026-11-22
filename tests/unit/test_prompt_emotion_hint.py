@@ -34,7 +34,8 @@ def _run(state_raw: dict, texts: dict | None = None, context_section: str = "") 
     turn_ctx.state_raw = state_raw
     turn_ctx.context_section = context_section
     PromptBuildStep().run(_ctx(), _config(texts), turn_ctx)
-    return turn_ctx.system_prompt
+    # 感情行は揮発側（会話後方の [NOUS CONTEXT]）に載る
+    return turn_ctx.system_prompt + "\n" + turn_ctx.volatile_context
 
 
 def test_emotion_line_injected_once():

@@ -31,6 +31,7 @@ def _config(compress_mode: str = "auto") -> MagicMock:
 def _prompt(blocks: object, compress_mode: str = "auto") -> str:
     turn_ctx = ChatTurnContext(session_id="s", user_message="やあ")
     PromptBuildStep().run(_ctx(blocks), _config(compress_mode), turn_ctx)
+    # プロフィールは静的領域（system）に載る
     return turn_ctx.system_prompt
 
 
@@ -44,8 +45,8 @@ def test_both_blocks_injected_me_before_user():
     assert "【自己像】\n私はヘルタ。" in prompt
     assert "【ユーザー像】\nユーザーはマダム。" in prompt
     assert prompt.index("【自己像】") < prompt.index("【ユーザー像】")
-    # 動的領域（__STATIC_END__ 以降）に置かれる
-    assert prompt.index("__STATIC_END__") < prompt.index("【自己像】")
+    # 静的領域（__STATIC_END__ より前 = キャッシュ対象）に置かれる
+    assert prompt.index("【自己像】") < prompt.index("__STATIC_END__")
 
 
 def test_missing_block_is_omitted():

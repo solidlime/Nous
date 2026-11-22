@@ -100,6 +100,11 @@ _REMOVED_CONFIG_KEYS_V4: frozenset[str] = frozenset(
         "brain_monologue_enabled",
         "brain_introspection_enabled",
         "brain_introspection_prompt",
+        # sampling 廃止 + Stage0 削除 (2026-11-22 kanban #144) で落ちたノブ
+        "top_p",
+        "dynamic_temperature",
+        "emotion_temperature_scale",
+        "context_keep_recent_turns",
     }
 )
 
@@ -176,8 +181,6 @@ _TIER_BASIC: frozenset[str] = frozenset(
         # 自発発言 / 自発活動 ON/OFF（kanban #44, #47）
         "proactive_enabled",
         "activity_enabled",
-        # 応答トークン上限
-        "max_tokens",
     }
 )
 _TIER_ADVANCED: frozenset[str] = frozenset(
@@ -185,11 +188,8 @@ _TIER_ADVANCED: frozenset[str] = frozenset(
         # LLM プロバイダ/モデル/サンプリング
         "provider",
         "model",
-        "temperature",
-        "top_p",
         "reasoning_enabled",
         "reasoning_effort",
-        "dynamic_temperature",
         # ペルソナ/表示
         "system_prompt",
         "debug_mode",

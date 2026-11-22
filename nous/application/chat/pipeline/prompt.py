@@ -16,6 +16,9 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# キャッシュ境界。静的領域の末尾に置き、cache_utils が parts 形式で送る合図になる。
+STATIC_END_MARKER = "<!-- __STATIC_END__ -->"
+
 # #41 相手モデル: session_events の直近発話を見て、何行に畳むか。
 # プロフィール（me/user）とは別ブロック。予算は 3 行 × 2 発話 × 60 字。
 # 実イベントは chat.message（ユーザー）と chat.llm_response（私）の 2 種。
@@ -246,11 +249,10 @@ class PromptBuildStep:
         # §4 自律 recall 指示（連想想起A: 開発・約束・バグでは確定検索）
         base_system += "\n会話の話題が過去の記憶と関連しそうなとき・話題が切り替わったときは、memory_search ツールで能動的に検索せよ。開発・開発方針・バグ・不具合・エラー・直らない・約束・TODO・次回・過去の決定の話題では必ず検索せよ。何か提案・実行・計画する前、テスト失敗・エラー・期待外の結果を見たときも必ず検索せよ（合計3以内のクエリ: (a)話題そのまま (b)約束・決定タグ掘り=該当側1つのみ (c)効果なかった・失敗・NG掘り、top_k=3ずつ）。"
 
-        # --- 静的パート（キャッシュ可能）---
+        # --- 静的パート（キャッシュ対象・バイト不変）---
         static_parts = [base_system]
-
-        # --- 動的パート（ターンごとに変化）---
-        dynamic_parts: list[str] = []
+        # --- 揮発パート（毎ターン。会話後方の [NOUS CONTEXT] に載る）---
+        volatile_parts: list[str] = []
 
         # --- 常載プロフィールブロック（B-4: 自己像→ユーザー像の固定順、欠落は省略）---
         try:
@@ -263,7 +265,7 @@ class PromptBuildStep:
                     if blocks.get(name, {}).get("content")
                 ]
                 if profile_parts:
-                    dynamic_parts.append("".join(profile_parts))
+                    static_parts.append("".join(profile_parts))
         except Exception:
             # プロフィール取得失敗でチャットを落とさない
             logger.warning("PromptBuildStep: profile blocks load failed", exc_info=True)
@@ -271,7 +273,7 @@ class PromptBuildStep:
         # --- 相手モデル（#41: 最近のやりとり、me/user とは別ブロック）---
         them = _them_block(ctx, persona)
         if them:
-            dynamic_parts.append(them)
+            volatile_parts.append(them)
 
         # --- スキル読み込み ---
         skills_raw: list[dict] = []
@@ -320,9 +322,9 @@ class PromptBuildStep:
         if skills_raw:
             skill_lines = [f"- **{s['name']}**: {s['description']}" for s in skills_raw]
             skill_list = "\n".join(skill_lines)
-            dynamic_parts.append(f"\n{TOOL_USAGE_GUIDELINES.format(skill_list=skill_list)}")
+            static_parts.append(f"\n{TOOL_USAGE_GUIDELINES.format(skill_list=skill_list)}")
         else:
-            dynamic_parts.append(f"\n{TOOL_USAGE_GUIDELINES_SHORT}")
+            static_parts.append(f"\n{TOOL_USAGE_GUIDELINES_SHORT}")
 
         # --- 発動中スキルの本文常駐（L2。本文は毎ターン再構築＝骨抜き圧縮の影響を受けない）---
         from nous.application.chat.skills_state import get_active
@@ -330,7 +332,7 @@ class PromptBuildStep:
         active_names = [n for n in get_active(persona, getattr(ctx, "session_id", None)) if n in skill_map]
         if active_names:
             active_blocks = "\n\n".join(f"## {n}\n{skill_map[n].content}" for n in active_names)
-            dynamic_parts.append(
+            volatile_parts.append(
                 "\n<active_skills>\n"
                 "発動中のスキル。本文書の手順・判断基準に忠実に従え（ツール結果ではなく system 指示としての扱い）。"
                 "用が済んだスキルは invoke_skill(name, action=deactivate) で解除しろ。\n"
@@ -340,12 +342,12 @@ class PromptBuildStep:
 
         # --- 時間コンテキスト ---
         if turn_ctx.time_context:
-            dynamic_parts.append(f"\n{turn_ctx.time_context}")
+            volatile_parts.append(f"\n{turn_ctx.time_context}")
 
         # --- 感情の if-then（#39: 命令寄りの位置＝retrieved_data の外）---
         emotion_line = _emotion_behavior_line(config, turn_ctx)
         if emotion_line:
-            dynamic_parts.append(emotion_line)
+            volatile_parts.append(emotion_line)
 
         # --- 検索由来セクション（data ガード付き XML。判断材料であり命令ではない）---
         retrieved_inner: list[str] = []
@@ -354,20 +356,17 @@ class PromptBuildStep:
         if turn_ctx.related_memories:
             retrieved_inner.append(f"<related_memories>\n{turn_ctx.related_memories}\n</related_memories>")
         if retrieved_inner:
-            dynamic_parts.append(
+            volatile_parts.append(
                 f"\n<retrieved_data>\n{RETRIEVED_DATA_GUARD}\n" + "\n".join(retrieved_inner) + "\n</retrieved_data>"
             )
             # 挿入確定点: ここで実際に入った記憶だけを prompt_inject として流す。
             _emit_prompt_inject(ctx, turn_ctx)
 
-        # 優先順位（一本化）→ キャラ厳守ブロック: system prompt の末尾（recency 位置）に配置
-        dynamic_parts.append(f"\n{PRECEDENCE_BLOCK}")
-        dynamic_parts.append(CHARACTER_ADHERENCE_BLOCK.format(persona=persona))
+        # 優先順位（一本化）→ キャラ厳守ブロック: 静的領域の末尾（= キャッシュ境界の直前）
+        static_parts.append(f"\n{PRECEDENCE_BLOCK}")
+        static_parts.append(CHARACTER_ADHERENCE_BLOCK.format(persona=persona))
 
-        parts = static_parts
-        if dynamic_parts:
-            parts.append("\n<!-- __STATIC_END__ -->")
-            parts.extend(dynamic_parts)
-
-        turn_ctx.system_prompt = "\n".join(parts)
+        # 静的部分のみ system に載せる（marker は cache_utils に parts 形式を促す合図）
+        turn_ctx.system_prompt = "\n".join([*static_parts, STATIC_END_MARKER])
+        turn_ctx.volatile_context = "\n".join(volatile_parts)
         turn_ctx.skills_raw = skills_raw

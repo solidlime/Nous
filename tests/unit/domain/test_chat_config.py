@@ -181,7 +181,8 @@ class TestSqliteMigration:
         # Migrated values from the legacy SQLite row
         assert config.provider == "openrouter"
         assert config.model == "openai/gpt-4o"
-        assert config.temperature == 0.5
+        # temperature は内部既定に固定（旧 SQLite の保存値は採用しない）
+        assert config.temperature == 0.7
         assert config.voice_auto_play is True  # INTEGER 1 → bool
         # config.json now exists with the migrated content
         assert (persona_dir / "config.json").exists()
@@ -203,3 +204,37 @@ def test_voice_speed_clamped():
 
     assert SessionConfig(voice_speed=99.0).voice_speed == 4.0
     assert SessionConfig(voice_speed=-1.0).voice_speed == 0.25
+
+
+class TestInternalSamplingKeys:
+    """temperature / max_tokens は構築経路で必ず落ちる（内部既定が常に優先）。"""
+
+    def test_flat_temperature_and_max_tokens_ignored(self):
+        cfg = ChatConfig(persona="p", temperature=0.1, max_tokens=16)
+        assert cfg.temperature == 0.7
+        assert cfg.max_tokens == 8192
+
+    def test_nested_provider_config_dict_ignored(self):
+        cfg = ChatConfig(persona="p", provider_config={"temperature": 0.1, "max_tokens": 16})
+        assert cfg.temperature == 0.7
+        assert cfg.max_tokens == 8192
+
+    def test_nested_base_model_instance_ignored(self):
+        from nous.domain.config.provider_config import ProviderConfig
+
+        cfg = ChatConfig(persona="p", provider_config=ProviderConfig(temperature=0.1, max_tokens=16))
+        assert cfg.temperature == 0.7
+        assert cfg.max_tokens == 8192
+
+    def test_removed_sampling_fields_absent(self):
+        """top_p / dynamic_temperature / emotion_temperature_scale はフィールドごと削除。"""
+        from nous.domain.config.provider_config import ProviderConfig
+
+        for name in ("top_p", "dynamic_temperature", "emotion_temperature_scale"):
+            assert name not in ProviderConfig.model_fields
+            assert name not in ChatConfig._all_flat_fields()
+
+    def test_old_json_keys_ignored_on_load(self):
+        """保存済み JSON の旧キー（top_p 等）は extra=ignore で無視される。"""
+        cfg = ChatConfig(persona="p", **{"top_p": 0.9, "dynamic_temperature": False})
+        assert not hasattr(cfg, "top_p")

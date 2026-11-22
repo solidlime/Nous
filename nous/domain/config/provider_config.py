@@ -71,9 +71,6 @@ class ProviderConfig(BaseModel):
     extract_model: str = Field(default="", description="記憶抽出に使うモデル。空欄ならメインのモデルを使います。")
     extract_max_tokens: int = Field(default=512, description="記憶抽出時の最大トークン数。")
     tool_result_max_chars: int = Field(default=4000, description="ツール実行結果を表示・保持する最大文字数。")
-    dynamic_temperature: bool = Field(default=True, description="感情に応じてTemperatureを動的に調整します。")
-    emotion_temperature_scale: float = Field(default=0.2, description="動的温度調整の強さ（0〜1）。")
-    top_p: float | None = Field(default=None, description="サンプリングの累積確率。空欄で無効。")
     reasoning_enabled: bool = Field(default=False, description="推論（thinking）を有効にします。")
     reasoning_effort: str = Field(default="medium", description="推論の深さ（low / medium / high / max）。")
 
@@ -112,19 +109,6 @@ class ProviderConfig(BaseModel):
     @classmethod
     def _clamp_tool_result_max_chars(cls, v: int) -> int:
         return max(500, min(100000, v))
-
-    @field_validator("emotion_temperature_scale")
-    @classmethod
-    def _clamp_emotion_temperature_scale(cls, v: float) -> float:
-        return max(0.0, min(1.0, v))
-
-    @field_validator("top_p")
-    @classmethod
-    def _clamp_top_p(cls, v: float | None) -> float | None:
-        if v is None:
-            return None
-        # 小数点2桁に丸めてからクランプ（_clamp_temperature と同規約）
-        return max(0.0, min(1.0, round(v, 2)))
 
     @field_validator("reasoning_effort")
     @classmethod

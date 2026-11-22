@@ -58,7 +58,7 @@ if (window.Nous && window.Nous.Core && window.Nous.Core.store) {
 var HELP_TEXTS = {
   core:
     "LLM API への接続に必須の設定です。プロバイダー（Anthropic / OpenAI / OpenRouter など）・"
-    + "モデル名・APIキー・Temperature（創造性の度合い、0〜2）・MaxTokens（最大応答長）・"
+    + "モデル名・APIキー・"
     + "Base URL（カスタムエンドポイント）を設定します。ここが正しくないと AI は応答できません。",
   context:
     "LLM に渡す文脈（コンテキスト）の制御設定です。内部で保持する最大メッセージ数・"

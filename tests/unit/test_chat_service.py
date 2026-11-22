@@ -422,17 +422,11 @@ class TestChatConfig:
         assert cfg.temperature == 0.7
         assert cfg.max_tokens == 8192
 
-    def test_temperature_clamped(self):
-        cfg = ChatConfig(persona="test", temperature=5.0)
-        assert cfg.temperature == 2.0
-        cfg2 = ChatConfig(persona="test", temperature=-1.0)
-        assert cfg2.temperature == 0.0
-
-    def test_max_tokens_clamped(self):
-        cfg = ChatConfig(persona="test", max_tokens=99999)
-        assert cfg.max_tokens == 32768
-        cfg2 = ChatConfig(persona="test", max_tokens=0)
-        assert cfg2.max_tokens == 1
+    def test_sampling_internally_fixed(self):
+        # 2026-11-22: temperature / max_tokens は内部既定固定（保存値・入力は落ちる）
+        cfg = ChatConfig(persona="test", temperature=5.0, max_tokens=99999)
+        assert cfg.temperature == 0.7
+        assert cfg.max_tokens == 8192
 
     def test_tool_calls_clamped(self):
         cfg = ChatConfig(persona="test", max_tool_calls=500)
@@ -610,42 +604,6 @@ class TestChatConfig:
         assert reloaded2.mcp_servers[0]["name"] == "myhub"
         assert reloaded2.mcp_servers[0]["headers"]["Authorization"] == "Bearer secret-hub-token-999"
 
-    # ── Dynamic temperature + top_p (TA02) ──
-
-    def test_dynamic_temperature_default(self):
-        cfg = ChatConfig(persona="test")
-        assert cfg.dynamic_temperature is True
-
-    def test_emotion_temperature_scale_default(self):
-        cfg = ChatConfig(persona="test")
-        assert cfg.emotion_temperature_scale == 0.2
-
-    def test_emotion_temperature_scale_clamped(self):
-        cfg = ChatConfig(persona="test", emotion_temperature_scale=2.0)
-        assert cfg.emotion_temperature_scale == 1.0
-        cfg2 = ChatConfig(persona="test", emotion_temperature_scale=-0.5)
-        assert cfg2.emotion_temperature_scale == 0.0
-
-    def test_top_p_default_none(self):
-        cfg = ChatConfig(persona="test")
-        assert cfg.top_p is None
-
-    def test_top_p_clamped_low(self):
-        cfg = ChatConfig(persona="test", top_p=0.0)
-        assert cfg.top_p == 0.0  # 境界: 0.0 は許可
-
-    def test_top_p_clamped_high(self):
-        cfg = ChatConfig(persona="test", top_p=1.5)
-        assert cfg.top_p == 1.0
-
-    def test_top_p_negative(self):
-        cfg = ChatConfig(persona="test", top_p=-1.0)
-        assert cfg.top_p == 0.0  # clamp to (0.0, 1.0]
-
-    def test_top_p_accepted_value(self):
-        cfg = ChatConfig(persona="test", top_p=0.9)
-        assert cfg.top_p == 0.9
-
 
 # ─────────────────────────────────────────────────────────────
 # _sse helper tests
@@ -769,8 +727,8 @@ class TestChatService:
         assert "Connection error." in failure[0]
 
     @pytest.mark.asyncio
-    async def test_top_p_passed_to_provider_stream(self):
-        """Verify top_p from ChatConfig is forwarded to provider.stream()."""
+    async def test_top_p_not_forwarded_to_provider_stream(self):
+        """top_p はプロバイダに送らない（サンプリングは内部既定に固定）。"""
         from nous.application.chat import ChatService
 
         captured_kwargs = {}
@@ -785,42 +743,14 @@ class TestChatService:
 
         ctx = self._make_ctx()
         cfg = self._make_config(api_key="sk-valid-key")
-        cfg.top_p = 0.9
         service = ChatService()
 
         with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
             async for _ in service.chat(ctx, cfg, "sess1", "hello"):
                 pass
 
-        assert captured_kwargs.get("top_p") == 0.9
-
-    @pytest.mark.asyncio
-    async def test_top_p_none_in_kwargs_when_config_none(self):
-        """When top_p is None in ChatConfig, provider.stream() receives top_p=None."""
-        from nous.application.chat import ChatService
-
-        captured_kwargs = {}
-
-        async def mock_stream(*args, **kwargs):
-            captured_kwargs.update(kwargs)
-            yield TextDeltaEvent(content="ok")
-            yield DoneEvent(full_content="ok", tool_calls=[])
-
-        mock_provider = MagicMock()
-        mock_provider.stream = mock_stream
-
-        ctx = self._make_ctx()
-        cfg = self._make_config(api_key="sk-valid-key")
-        cfg.top_p = None  # default
-        service = ChatService()
-
-        with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
-            async for _ in service.chat(ctx, cfg, "sess1", "hello"):
-                pass
-
-        # top_p is always passed to provider.stream(); provider filters None → not sent to API
-        assert "top_p" in captured_kwargs
-        assert captured_kwargs["top_p"] is None
+        assert "top_p" not in captured_kwargs
+        assert captured_kwargs["temperature"] == 0.7
 
     @pytest.mark.asyncio
     async def test_reasoning_effort_passed_when_enabled(self):
@@ -1017,15 +947,15 @@ class TestChatService:
 
 
 # ─────────────────────────────────────────────────────────────
-# max_stored_messages truncation path highlights (§4.2)
-# ─────────────────────────────────────────────────────────────
 
 
-class TestMaxStoredMessagesHighlights:
-    """keep_recent_turns=0 構成で第2切り詰め経路（max_stored_messages スライス）発火時、
-    ハイライトが system セクション <conversation_history_summary> に現れること。"""
+class TestStage3EvictIntegration:
+    """予算超過時の Stage 3' がサービス経路で window を evict し、
+    <conversation_history_summary> を揮発ブロックへ入れること。"""
 
     def _make_ctx(self):
+        from nous.domain.shared.result import Success
+
         ctx = MagicMock()
         ctx.persona = "test_persona"
         ctx.event_bus = MagicMock()
@@ -1034,18 +964,18 @@ class TestMaxStoredMessagesHighlights:
         state.emotion = "neutral"
         state.emotion_intensity = 0.5
         state.mental_state = None
-        state.physical_state = None
-        state.environment = None
-        state.fatigue = None
-        state.warmth = None
-        state.arousal = None
-        state.last_conversation_time = None
-        state.heart_rate = None
-        state.pain = None
-        state_result = MagicMock()
-        state_result.is_ok = True
-        state_result.value = state
-        ctx.persona_service.get_context.return_value = state_result
+        state.emotion_history = []
+        ctx.persona_service.get_state.return_value = Success(state)
+        ctx.persona_service.get_emotion_history.return_value = Success([])
+        ctx.equipment_service.get_equipment.return_value = Success({})
+        ctx.persona_service.get_persona.return_value = Success(MagicMock(name="Test Persona"))
+        ctx.memory_service.get_recent.return_value = Success([])
+        ctx.memory_service.get_by_tags.return_value = Success([])
+        ctx.tool_registry = MagicMock()
+        ctx.tool_registry.list_tool_names.return_value = []
+        ctx.image_describer = MagicMock()
+        ctx.image_describer.describe = AsyncMock(return_value="")
+        ctx.image_service = None
         search_result = MagicMock()
         search_result.is_ok = True
         search_result.value = []
@@ -1053,9 +983,9 @@ class TestMaxStoredMessagesHighlights:
         return ctx
 
     @pytest.mark.asyncio
-    async def test_max_stored_messages_path_injects_highlights(self):
+    async def test_over_budget_evicts_window_and_injects_summary(self):
         from nous.application.chat import ChatService
-        from nous.infrastructure.llm.base import LLMMessage
+        from nous.application.chat.tree_session import TreeSessionWindow
 
         async def mock_stream(*args, **kwargs):
             yield TextDeltaEvent(content="ok")
@@ -1070,49 +1000,40 @@ class TestMaxStoredMessagesHighlights:
             provider="anthropic",
             api_key="sk-valid-key",
             model="claude-opus-4-5",
+            context_max_tokens=300,
+            context_compression_threshold=1.0,
+            context_use_llm_summary=False,
         )
-        cfg.context_keep_recent_turns = 0  # Stage 0 無効 → 第2経路が唯一の切り詰め
-        cfg.max_stored_messages = 4
-        cfg.context_use_llm_summary = False
 
-        session_msgs: list[LLMMessage] = []
-        for i in range(6):
-            session_msgs.append(LLMMessage(role="user", content=f"user question {i}"))
-            session_msgs.append(LLMMessage(role="assistant", content=f"assistant answer {i}"))
-
-        mock_session = MagicMock()
-        mock_session.get_labeled_messages.return_value = session_msgs
+        window = TreeSessionWindow()
+        for i in range(8):
+            window.add("user", f"user question {i} " + "u" * 200)
+            window.add("assistant", f"assistant answer {i} " + "a" * 200)
 
         captured: dict = {}
 
         def _capture_prompt_build(ctx, config, turn_ctx):
-            turn_ctx.system_prompt = "base sys\n<!-- __STATIC_END__ -->"
+            turn_ctx.system_prompt = "base sys"
+            turn_ctx.volatile_context = ""
             captured["turn_ctx"] = turn_ctx
 
         service = ChatService()
         with (
             patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider),
-            patch("nous.application.chat.service._session_manager.get_or_create", return_value=mock_session),
+            patch("nous.application.chat.service._session_manager.get_or_create", return_value=window),
             patch("nous.application.chat.service.PromptBuildStep") as mock_pbs,
         ):
             mock_pbs.return_value.run.side_effect = _capture_prompt_build
-            async for _ in service.chat(ctx, cfg, "sess-highlights", "hello"):
+            async for _ in service.chat(ctx, cfg, "sess-evict", "hello"):
                 pass
 
-        assert "turn_ctx" in captured
-        system_prompt = captured["turn_ctx"].system_prompt
-        # ハイライトが system に現れる（メッセージ偽装ではなく）
-        assert "<conversation_history_summary>" in system_prompt
-        assert "[0] user: user question 0" in system_prompt
-        assert "[7] assistant: assistant answer 3" in system_prompt
-        # 先頭3 + 末尾3（[3]〜[4] は落ちる）
-        hl_block = system_prompt.split("<conversation_history_summary>", 1)[1].split(
-            "</conversation_history_summary>", 1
-        )[0]
-        assert "[3]" not in hl_block
-        assert "[4]" not in hl_block
-        # キャッシュ境界の後ろ（動的領域）に注入される
-        assert system_prompt.index("<!-- __STATIC_END__ -->") < system_prompt.index("<conversation_history_summary>")
+        # 窓は実際に縮んでいる（第2切り詰め経路ではなく Stage 3' の永続 evict）
+        assert len(window.get_active_path()) < 16
+        assert window.history_summary
+        # 要約は揮発ブロック（静的部分ではなく）に入る
+        volatile = captured["turn_ctx"].volatile_context
+        assert "<conversation_history_summary>" in volatile
+        assert "<conversation_history_summary>" not in captured["turn_ctx"].system_prompt
 
 
 # ─────────────────────────────────────────────────────────────

@@ -30,8 +30,10 @@ class ChatTurnContext:
     # 「実際に挿入した集合」を memories_objects と合わせて与える。
     episodes_objects: list[dict] = field(default_factory=list)
     memory_debug: dict = field(default_factory=dict)
-    # PromptBuildStep が埋める
+    # PromptBuildStep が埋める（静的領域 = キャッシュ対象・バイト不変）
     system_prompt: str = ""
+    # PromptBuildStep が埋める（揮発領域 = [NOUS CONTEXT] として会話後方へ注入）
+    volatile_context: str = ""
     skills_raw: list[dict] = field(default_factory=list)
     # InferenceStep が埋める (インタラクティブに追記)
     messages: list[LLMMessage] = field(default_factory=list)

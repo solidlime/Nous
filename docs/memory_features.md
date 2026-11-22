@@ -100,26 +100,26 @@ LLM が使うペルソナ状態は `update_context()`（bi-temporal な履歴付
 
 ---
 
-## LLM Summary Compaction (Stage 4)
+## LLM Summary Compaction (Stage 3')
 
-`CompressStep` の第4段階として、機械的圧縮（行数トリム・古いツール結果クリア・メッセージ切り詰め）だけではコンテキストが予算超過している場合に、LLM を使って古い会話を要約します。
+`CompressStep` は予算超過時に、会話の head から node 単位で永続 evict し、落とした切片を LLM で要約して `history_summary` に積みます（履歴は append-only で、要約は差分として追記される）。
 
 ### 動作
 
 1. **トリガー条件**: 以下のすべてを満たす場合のみ実行
    - `context_use_llm_summary = True`（デフォルト: `True`）
    - APIキーが設定されている
-   - 会話ターン数が6以上（十分な履歴がある場合のみ価値がある）
-   - Stage 1-3 の機械圧縮後もコンテキストが予算超過
-2. 最も古いターン（直近の `keep_recent` ターンを除く全メッセージ）を抽出
-3. LLM に要約プロンプト（日本語）を送信し、**300文字以内**の要約を生成
-4. 古いメッセージを要約メッセージ `[過去の会話要約] ...` に置き換え
+   - Stage 1（古いツール結果のステータス置換）後もコンテキストが予算超過
+   - 切片に user 発言が含まれる
+2. active path の head から user 境界で node 単位に evict（1回の要約に載せるのは最大60メッセージ）
+3. LLM で差分要約を生成し、既存の `history_summary` に追記（全体 4000 文字上限、超過分は古い方から削る）
+4. 要約は次ターンの揮発ブロック（`[NOUS CONTEXT]`）として送信される
 
 ### 設定
 
 | 設定キー | デフォルト | 説明 |
 |---|---|---|
-| `context_use_llm_summary` | `True` | Stage 4 の有効/無効 |
+| `context_use_llm_summary` | `True` | Stage 3' の有効/無効 |
 
 チャット設定パネルからも切り替え可能。
 

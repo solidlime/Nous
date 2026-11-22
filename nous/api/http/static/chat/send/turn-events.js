@@ -276,7 +276,10 @@ function _finalizeTurn(evt) {
     const tokenInfo = document.createElement("div");
     tokenInfo.className = "chat-token-info";
     tokenInfo.style.cssText = "font-size:0.72rem;color:var(--text-muted);margin-top:4px;opacity:0.7;";
-    tokenInfo.textContent = "🔤 " + u.prompt_tokens + "↑ " + u.completion_tokens + "↓ = " + u.total_tokens + " 合計";
+    // cached_tokens はゲートウェイが返さなければ 0（縮退許容）
+    var cached = u.cached_tokens ? " (cache " + u.cached_tokens + ")" : "";
+    tokenInfo.textContent =
+      "🔤 " + u.prompt_tokens + "↑ " + u.completion_tokens + "↓ = " + u.total_tokens + " 合計" + cached;
     t.assistantDiv.appendChild(tokenInfo);
   }
   // Set message IDs from server

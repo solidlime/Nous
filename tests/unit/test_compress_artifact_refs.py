@@ -33,28 +33,7 @@ class TestCollectArtifactRefs:
         removed = [_tool(f'{{"artifact_path":"/f{i}"}}') for i in range(30)]
         assert len(TrimmerMixin._collect_artifact_refs(removed)) == 20
 
-
-class TestTruncationHighlightsIncludeRefs:
-    def test_refs_survive_truncation(self):
-        msgs = [
-            _tool('{"artifact_path":"/data/big.txt"}'),
-            LLMMessage(role="user", content="古い質問"),
-            LLMMessage(role="assistant", content="古い回答"),
-            LLMMessage(role="user", content="新しい質問"),
-            LLMMessage(role="assistant", content="新しい回答"),
-        ]
-        result, highlights, removed = TrimmerMixin._truncate_old_messages(msgs, keep_recent_turns=1)
-        assert len(result) == 2
-        assert removed
-        assert "/data/big.txt" in highlights
-        assert "参照ファイル" in highlights
-
-    def test_no_refs_no_section(self):
-        msgs = [
-            LLMMessage(role="user", content="古い質問"),
-            LLMMessage(role="assistant", content="古い回答"),
-            LLMMessage(role="user", content="新しい質問"),
-            LLMMessage(role="assistant", content="新しい回答"),
-        ]
-        _result, highlights, _removed = TrimmerMixin._truncate_old_messages(msgs, keep_recent_turns=1)
-        assert "/" not in highlights or "参照ファイル" not in highlights
+    def test_finds_refs_inside_segment_expanded_tool_content(self):
+        """JSON 文字列でない（dict 展開後の）tool content でも拾える。"""
+        removed = [_tool('{"status": "ok", "artifact_path": "/data/x.txt"}')]
+        assert TrimmerMixin._collect_artifact_refs(removed) == ["/data/x.txt"]

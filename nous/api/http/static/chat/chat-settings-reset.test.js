@@ -15,8 +15,7 @@ const DEFAULTS = {
   fields: {
     model: { default: '', help: 'モデル名', type: 'str', section: 'core' },
     base_url: { default: '', help: '接続先', type: 'str', section: 'core' },
-    temperature: { default: 0.7, help: '温度', type: 'float', section: 'core' },
-    top_p: { default: null, help: 'top_p', type: 'float', section: 'core' },
+    retrieval_recency_weight: { default: 0.3, help: '重み', type: 'float', section: 'retrieval' },
     reasoning_effort: { default: 'medium', help: '深さ', type: 'str', section: 'core' },
     context_compression_threshold: { default: 0.8, help: '閾値', type: 'float', section: 'context' },
     context_max_tokens: { default: null, help: '上限', type: 'int', section: 'context' },
@@ -36,11 +35,10 @@ let apiStub;
 function buildForm() {
   document.body.innerHTML = `
     <div>
-      <div><input type="range" id="chat-temperature" min="0" max="2" step="0.05" value="0.7" /></div>
+      <div><input type="range" id="chat-recency-weight" min="0" max="1" step="0.05" value="0.3" /></div>
+      <div id="chat-recency-weight-val">0.30</div>
       <div><input type="text" id="chat-model" value="" /></div>
       <div><input type="text" id="chat-base-url" value="https://api.example.com" /></div>
-      <div><input type="range" id="chat-top-p" min="0" max="1" step="0.05" value="1" disabled /></div>
-      <div class="chat-check-row"><input type="checkbox" id="chat-top-p-enabled" /><label for="chat-top-p-enabled">Top P</label></div>
       <div><input type="number" id="chat-context-max-tokens" value="" /></div>
       <div><input type="range" id="chat-reasoning-effort" min="0" max="3" step="1" value="1" /></div>
       <div><input type="range" id="chat-compression-threshold" min="50" max="100" value="80" /></div>
@@ -52,7 +50,6 @@ function buildForm() {
       </div>
       <div class="chat-check-row"><input type="checkbox" id="chat-show-timestamps" /><label for="chat-show-timestamps">ts</label></div>
       <div class="chat-check-row"><input type="checkbox" id="chat-voice-streaming" checked /><label for="chat-voice-streaming">stream</label></div>
-      <div><input type="text" id="chat-max-tokens" value="8192" /></div>
       <div><input type="number" id="chat-extract-max-tokens" value="512" /></div>
       <div><input type="number" id="chat-stored-msgs" value="200" /></div>
       <div><input type="number" id="chat-irodori-num-steps" value="" /></div>
@@ -206,7 +203,7 @@ describe('reset to default', () => {
     window.Nous.Chat.settings.apply({
       model: '',
       base_url: 'https://api.example.com',
-      temperature: 0.7,
+      retrieval_recency_weight: 0.3,
       brain_max_tokens: 0,
     });
     expect(btn('chat-model').classList.contains('is-dirty')).toBe(false);
@@ -216,73 +213,35 @@ describe('reset to default', () => {
     await window.Nous.Chat.settings.loadDefaults(true);
     window.Nous.Chat.settings.apply({
       base_url: 'https://api.example.com',
-      temperature: 1.4,
+      retrieval_recency_weight: 0.9,
     });
     window.Nous.Chat.settings.injectResetButtons();
-    expect(btn('chat-temperature').classList.contains('is-dirty')).toBe(true);
+    expect(btn('chat-recency-weight').classList.contains('is-dirty')).toBe(true);
   });
 
   it('falls back to the defaults API value when the config omits a field', async () => {
-    // apply.js used to硬code 8192/512/30 etc. The single source is the defaults
+    // apply.js used to硬code 512/30 etc. The single source is the defaults
     // API, so a server-side default change must show through.
     apiStub.mockResolvedValue({
       fields: Object.assign({}, DEFAULTS.fields, {
-        max_tokens: { default: 4096, help: '', type: 'int', section: 'core' },
+        max_stored_messages: { default: 1500, help: '', type: 'int', section: 'context' },
         extract_max_tokens: { default: 256, help: '', type: 'int', section: 'core' },
         irodori_num_steps: { default: 48, help: '', type: 'int', section: 'voice' },
       }),
     });
     await window.Nous.Chat.settings.loadDefaults(true);
     window.Nous.Chat.settings.apply({ base_url: 'https://api.example.com' });
-    expect(document.getElementById('chat-max-tokens').value).toBe('4096');
+    expect(document.getElementById('chat-stored-msgs').value).toBe('1500');
     expect(document.getElementById('chat-extract-max-tokens').value).toBe('256');
     expect(document.getElementById('chat-irodori-num-steps').value).toBe('48');
   });
 
   it('tolerates float representation noise on a numeric field', async () => {
     await setup();
-    const el = document.getElementById('chat-temperature');
-    el.value = '0.7000000000000001';
+    const el = document.getElementById('chat-recency-weight');
+    el.value = '0.30000000000000004';
     el.dispatchEvent(new Event('input', { bubbles: true }));
-    expect(btn('chat-temperature').classList.contains('is-dirty')).toBe(false);
-  });
-
-  it('does not treat an unset (null-default) optional field as divergent', async () => {
-    await setup();
-    const cb = document.getElementById('chat-top-p-enabled');
-    const range = document.getElementById('chat-top-p');
-    expect(cb.checked).toBe(false);
-    expect(range.disabled).toBe(true);
-    expect(btn('chat-top-p').classList.contains('is-dirty')).toBe(false);
-  });
-
-  it('top_p optional: enabling is divergent, reset unchecks + disables', async () => {
-    await setup();
-    const cb = document.getElementById('chat-top-p-enabled');
-    const range = document.getElementById('chat-top-p');
-    cb.checked = true;
-    range.disabled = false;
-    range.value = '0.9';
-    cb.dispatchEvent(new Event('change', { bubbles: true }));
-    expect(btn('chat-top-p').classList.contains('is-dirty')).toBe(true);
-
-    window.Nous.Chat.settings.resetField('chat-top-p');
-    expect(cb.checked).toBe(false);
-    expect(range.disabled).toBe(true);
-  });
-
-  it('top_p optional: apply wires the enable checkbox from the config', async () => {
-    await setup();
-    const cb = document.getElementById('chat-top-p-enabled');
-    const range = document.getElementById('chat-top-p');
-    window.Nous.Chat.settings.apply({ base_url: 'https://api.example.com', top_p: 0.9 });
-    expect(cb.checked).toBe(true);
-    expect(range.disabled).toBe(false);
-    expect(range.value).toBe('0.9');
-
-    window.Nous.Chat.settings.apply({ base_url: 'https://api.example.com' });
-    expect(cb.checked).toBe(false);
-    expect(range.disabled).toBe(true);
+    expect(btn('chat-recency-weight').classList.contains('is-dirty')).toBe(false);
   });
 
   it('resets the MCP JSON editor to the default list', async () => {
@@ -298,7 +257,7 @@ describe('reset to default', () => {
     await setup();
     // range → icon sits beside the track (outside)
     expect(
-      document.getElementById('chat-temperature').closest('.chat-reset-wrap')
+      document.getElementById('chat-recency-weight').closest('.chat-reset-wrap')
         .classList.contains('chat-reset-wrap-outside'),
     ).toBe(true);
     // textarea → inner overlay with extra right padding for text + scrollbar

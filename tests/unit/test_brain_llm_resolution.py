@@ -43,7 +43,7 @@ def _ctx(cfg: ChatConfig | None) -> AppContext:
     """Bare AppContext with only what _init_brain_llm touches."""
     ctx = object.__new__(AppContext)
     ctx._config = cfg  # noqa: SLF001
-    ctx.settings = _Settings()  # noqa: SLF001
+    ctx.settings = _Settings()  # type: ignore[assignment]  # noqa: SLF001
     return ctx
 
 
@@ -156,6 +156,7 @@ class TestReloadEnricher:
         assert first._provider_name == "anthropic"
 
         # flip to dedicated
+        assert ctx._config is not None
         ctx._config.session_config.brain_llm_dedicated = True
         ctx._config.session_config.brain_llm_api_key = "brain-key"
         ctx._config.session_config.brain_llm_provider = "openai"
@@ -416,7 +417,8 @@ class TestBrainLLMParamsResolver:
         # chat reasoning ON (high) → reasoning floor（9216）が適用される（resolver 集約）
         p = _resolve_brain_llm_params(_rich_cfg())
         assert p.max_tokens == 9216
-        assert p.temperature == 0.9
+        # サンプリングは内部固定: 構築時に ProviderConfig の temperature は捨てられ 0.7 になる
+        assert p.temperature == 0.7
         assert p.reasoning_effort == "high"
 
     def test_dedicated_off_chat_reasoning_off_effort_none(self):
@@ -435,7 +437,7 @@ class TestBrainLLMParamsResolver:
         cfg = _rich_cfg(brain_max_tokens=2048)
         p = _resolve_brain_llm_params(cfg)
         assert p.max_tokens == 9216
-        assert p.temperature == 0.9
+        assert p.temperature == 0.7  # 内部固定（構築時に保存値は捨てられる）
         assert p.reasoning_effort == "high"
 
     def test_temperature_zero_preserved(self):

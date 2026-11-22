@@ -84,9 +84,11 @@ def _build_prompt(system_prompt="あなたはアシスタントです。", conte
     turn_ctx.context_section = context
     turn_ctx.related_memories = memories
     turn_ctx.system_prompt = ""
+    turn_ctx.volatile_context = ""
     turn_ctx.skills_raw = []
     PromptBuildStep().run(ctx, config, turn_ctx)
-    return turn_ctx.system_prompt
+    # 静的分は system、揮発分（retrieved_data 等）は [NOUS CONTEXT] 側
+    return turn_ctx.system_prompt + "\n" + turn_ctx.volatile_context
 
 
 def test_retrieved_data_guard_present():
@@ -169,8 +171,45 @@ def test_character_adherence_tag_pair_in_constant():
 
 
 def test_prompt_build_appends_block():
-    """PromptBuildStep.run が system prompt 末尾に <character_adherence> を追加すること。"""
+    """<character_adherence> は静的領域の末尾（キャッシュ境界の直前）に置かれること。"""
     prompt = _build_prompt(system_prompt="あなたはアシスタントです。")
     assert CHARACTER_ADHERENCE_BLOCK.format(persona="test_persona").strip() in prompt
-    # キャッシュ境界より後ろ（動的領域・recency 位置）
-    assert prompt.index("<!-- __STATIC_END__ -->") < prompt.index("<character_adherence>")
+    # 静的領域（キャッシュ対象）の末尾 = 境界マーカーの直前
+    assert prompt.index("<character_adherence>") < prompt.index("<!-- __STATIC_END__ -->")
+
+
+def test_static_and_volatile_split():
+    """静的領域はプロフィール/ガイドライン/PRECEDENCE/ADHERENCE、揮発側に判断材料。
+
+    キャッシュ被覆を最大化するための分離（Part B）。揮発側が静的側に混ざると
+    毎ターン system が変わってキャッシュが効かなくなる。
+    """
+    ctx = MagicMock()
+    ctx.persona = "test_persona"
+    cfg = MagicMock()
+    cfg.system_prompt = "あなたはアシスタントです。"
+    cfg.enabled_skills = []
+    turn_ctx = MagicMock()
+    turn_ctx.time_context = "Now: 2026-11-22 12:00"
+    turn_ctx.context_section = "感情: 好奇心"
+    turn_ctx.related_memories = "- 記憶1"
+    turn_ctx.system_prompt = ""
+    turn_ctx.volatile_context = ""
+    turn_ctx.skills_raw = []
+    PromptBuildStep().run(ctx, cfg, turn_ctx)
+
+    static = turn_ctx.system_prompt
+    volatile = turn_ctx.volatile_context
+    # 静的: キャッシュ対象（persona 設定変更時のみ変わる）
+    assert "<instructions>" in static
+    assert "<precedence>" in static
+    assert "<character_adherence>" in static
+    assert static.rstrip().endswith("<!-- __STATIC_END__ -->")
+    # 揮発: 毎ターン変わる判断材料
+    assert "Now: 2026-11-22 12:00" in volatile
+    assert "<retrieved_data>" in volatile
+    assert "<related_memories>" in volatile
+    # 混入なし（コメントは除く）
+    assert "<retrieved_data>" not in static
+    assert "<precedence>" not in volatile
+    assert "<character_adherence>" not in volatile

@@ -21,6 +21,9 @@ if TYPE_CHECKING:
 
 logger = get_logger(__name__)
 
+# history_summary の上限（溢れたら古い方から捨てる）。
+HISTORY_SUMMARY_MAX_CHARS = 4000
+
 
 class TreeSessionWindow:
     """ツリー構造でメッセージを管理するセッションウィンドウ。
@@ -42,6 +45,8 @@ class TreeSessionWindow:
         self._batch_size: int = batch_size
         self._max_messages: int = max_messages
         self._version: int = 0
+        # 予算駆動 evict で切り出した会話の累積要約（payload 内に永続化）。
+        self._history_summary: str = ""
         self.pending_memory_task: asyncio.Task | None = None
         self.evict_callback: Callable[[list[dict]], None] | None = None
         # 同一セッションで既にプロンプトへ注入した記憶 key（ASIST memoryIds 方式）。
@@ -157,6 +162,36 @@ class TreeSessionWindow:
         """即時永続化。"""
         self._persist()
 
+    # ── history_summary（予算駆動 evict の永続基線）─────────────
+
+    @property
+    def history_summary(self) -> str:
+        """evict 済み会話の累積要約（未生成なら空文字）。"""
+        return self._history_summary
+
+    def append_history_summary(self, delta: str) -> str:
+        """差分要約を既存要約へ連結し、上限超過分は古い方から捨てる。"""
+        if not delta:
+            return self._history_summary
+        merged = f"{self._history_summary}\n---\n{delta}" if self._history_summary else delta
+        if len(merged) > HISTORY_SUMMARY_MAX_CHARS:
+            merged = merged[-HISTORY_SUMMARY_MAX_CHARS:]
+        self._history_summary = merged
+        self._persist()
+        return merged
+
+    def evict_path_head(self, count: int) -> list[dict]:
+        """アクティブパス先頭から count ノードを永続削除して返す（evict_callback は発火しない）。
+
+        cap evict（add() 内）は記憶側（summarize_and_store）へ流すが、予算駆動
+        evict は history_summary 側へ流す — 二重要約を避けるための分離。
+        """
+        evicted = self._evict_oldest(count)
+        if evicted:
+            self._version += 1
+            self._persist()
+        return evicted
+
     # ── SessionWindow 後方互換 ──────────────────────────────────
 
     @property
@@ -253,6 +288,7 @@ class TreeSessionWindow:
                 "root_id": self._root_id,
                 "active_leaf_id": self._active_leaf_id,
                 "version": self._version,
+                "history_summary": self._history_summary,
                 "nodes": list(self._nodes.values()),
             }
             messages_json = json.dumps(data, ensure_ascii=False)
@@ -304,6 +340,7 @@ class TreeSessionWindow:
                 window._root_id = data.get("root_id")
                 window._active_leaf_id = data.get("active_leaf_id")
                 window._version = data.get("version", 0)
+                window._history_summary = data.get("history_summary") or ""
                 for raw_node in data.get("nodes", []):
                     window._nodes[raw_node["id"]] = raw_node
             elif isinstance(data, list):

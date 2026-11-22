@@ -43,7 +43,8 @@ def _prompt(events: list | None, blocks: dict | None = None) -> str:
     config.enabled_skills = []
     turn_ctx = ChatTurnContext(session_id="s", user_message="やあ")
     PromptBuildStep().run(ctx, config, turn_ctx)
-    return turn_ctx.system_prompt
+    # them ブロックは揮発側（[NOUS CONTEXT]）に載る
+    return turn_ctx.system_prompt + "\n" + turn_ctx.volatile_context
 
 
 def test_them_block_folds_last_three_exchanges_in_order():

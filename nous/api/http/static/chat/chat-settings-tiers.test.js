@@ -19,7 +19,7 @@ const HIDDEN = 'chat-tier-hidden';
 const DEFAULTS = {
   fields: {
     model: { default: '', help: 'モデル名', tier: 'basic' },
-    top_p: { default: null, help: 'Top P の上限', tier: 'advanced' },
+    reasoning_enabled: { default: false, help: '推論の有効化', tier: 'advanced' },
     brain_link_separation_threshold: {
       default: 0.75,
       help: 'リンク分離しきい値（シナプス結合の類似度）',
@@ -42,8 +42,7 @@ function buildForm() {
           <span>詳細設定を表示</span>
         </label>
         <div><div class="chat-field-label">モデル</div><input type="text" id="chat-model" value="" /></div>
-        <div><div class="chat-field-label">Top P</div><input type="range" id="chat-top-p" value="1" /></div>
-        <div class="chat-check-row"><input type="checkbox" id="chat-top-p-enabled" /><label for="chat-top-p-enabled">Top P を指定する</label></div>
+        <div class="chat-check-row"><input type="checkbox" id="chat-reasoning-enabled" /><label for="chat-reasoning-enabled">推論を有効にする</label></div>
         <div><div class="chat-field-label">SEP 分離しきい値</div><input type="number" id="chat-brain-separation-threshold" value="0.75" /></div>
         <div><div class="chat-field-label">リンク分離しきい値</div><input type="number" id="chat-brain-separation-threshold" value="0.75" /></div>
         <div><div class="chat-field-label">最小サンプル数</div><input type="number" id="chat-mental-model-min-samples" value="3" /></div>
@@ -104,7 +103,7 @@ describe('3-tier settings visibility', () => {
     expect(window.Nous.Chat.settings.tierOf('brain_link_separation_threshold')).toBe('expert');
     expect(isHidden('chat-brain-separation-threshold')).toBe(true);
     expect(isHidden('chat-model')).toBe(false);
-    expect(isHidden('chat-top-p')).toBe(false);
+    expect(isHidden('chat-reasoning-enabled')).toBe(false);
     expect(toggle().checked).toBe(false);
   });
 

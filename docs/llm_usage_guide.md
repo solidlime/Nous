@@ -433,42 +433,12 @@ Never ask "should I remember this?" — just do it.
 
 ---
 
-## 10. Dynamic Temperature / 動的温度調整
+## 10. Sampling / サンプリング設定（内部固定）
 
-Dynamic Temperature adjusts the LLM's `temperature` parameter based on the persona's current emotional state, creating more natural variation in conversation tone.
+サンプリング（`temperature` / `max_tokens` / `top_p`）は Nous 内部の固定値で動く。設定パネル・`ChatConfig` のどちらからも変更できず、保存済みの旧値も読み込み時に無視される（`temperature=0.7`、`max_tokens=8192`、`top_p` は送信しない）。
 
-### Configuration
-
-```python
-# ChatConfig fields
-dynamic_temperature: bool = True         # Enable/disable (default: True)
-emotion_temperature_scale: float = 0.2   # Emotion influence [0.0–1.0] (default: 0.2)
-top_p: float | None = None              # Optional top_p override (default: None = model default)
-```
-
-### How it works
-
-When `dynamic_temperature` is enabled, the pipeline calculates an emotion-adjusted temperature before each LLM call:
-
-```python
-base_temperature = config.temperature  # e.g. 0.7
-emotion_modulation = emotion_intensity * emotion_temperature_scale  # e.g. 0.6 * 0.2 = 0.12
-effective_temperature = base_temperature + emotion_modulation
-```
-
-- **High-arousal emotions** (anger, excitement, joy) → higher temperature → more varied/creative responses
-- **Low-arousal emotions** (sadness, contentment, neutral) → lower temperature → more focused/consistent responses
-- `emotion_temperature_scale` controls how strongly emotion affects temperature: `0.0` disables modulation, `1.0` allows up to ±1.0 shift
-
-### When to use
-
-- **Keep enabled** (default) for natural conversation variety
-- **Disable** (`dynamic_temperature=False`) if you need fully deterministic responses
-- **Adjust scale** per persona: higher for expressive personalities, lower for stoic ones
-
-### WebUI
-
-Dynamic Temperature settings are available in the Chat Config section of the WebUI Settings page. Changes take effect on the next message.
+- 感情による温度補正（旧 `dynamic_temperature` / `emotion_temperature_scale`）は 2026-11-22 に廃止。感情はプロンプト側の if-then 行だけで表現する
+- 決定性が必要な場合はプロバイダ/モデル側の設定で担保する（Nous からは上書きしない）
 
 ---
 

@@ -7,15 +7,7 @@
 ((N) => {
   "use strict";
   var C = N.Core;
-  var api = C.api,
-    esc = C.esc,
-    toast = C.toast,
-    safeSetHTML = C.safeSetHTML;
-  var showConfirm = C.showConfirm,
-    showAlert = C.showAlert;
-  var truncate = C.truncate,
-    relativeTime = C.relativeTime,
-    fmtDate = C.fmtDate;
+  var api = C.api;
   var S = window.S;
 
   // ------------------------------------------------------------------
@@ -30,13 +22,8 @@
     ["chat-model", "model"],
     ["chat-api-key", "api_key"],
     ["chat-base-url", "base_url"],
-    ["chat-temperature", "temperature"],
-    ["chat-dynamic-temperature", "dynamic_temperature"],
-    ["chat-emotion-temperature-scale", "emotion_temperature_scale"],
-    ["chat-top-p", "top_p", "optional", "chat-top-p-enabled"],
     ["chat-reasoning-enabled", "reasoning_enabled"],
     ["chat-reasoning-effort", "reasoning_effort", "effort"],
-    ["chat-max-tokens", "max_tokens"],
     ["chat-language", "language"],
     ["chat-show-timestamps", "show_message_timestamps"],
     ["chat-max-tool-calls", "max_tool_calls"],
@@ -45,7 +32,6 @@
     ["chat-context-max-tokens", "context_max_tokens"],
     ["chat-compression-threshold", "context_compression_threshold", "percent"],
     ["chat-compression-mode", "context_compression_mode"],
-    ["chat-keep-recent", "context_keep_recent_turns"],
     ["chat-memory-preload", "memory_preload_count"],
     ["chat-memory-digest", "memory_digest_count"],
     ["chat-compress-system", "context_compress_system_prompt"],

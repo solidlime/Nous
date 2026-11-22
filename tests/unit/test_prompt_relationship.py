@@ -147,12 +147,15 @@ class TestBuildRelationshipContext:
         )
         turn_ctx.related_memories = ""
         turn_ctx.system_prompt = ""
+        turn_ctx.volatile_context = ""
         turn_ctx.skills_raw = []
 
         step = PromptBuildStep()
         step.run(ctx, config, turn_ctx)
 
+        # context_section は揮発側（会話後方の [NOUS CONTEXT]）に載る
         # Header is stripped in prepare.py integration; content should be in prompt
-        assert "関係性コンテキスト" not in turn_ctx.system_prompt
-        assert "3日前から知り合い" in turn_ctx.system_prompt
-        assert "2 日会話した" in turn_ctx.system_prompt
+        prompt = turn_ctx.system_prompt + chr(10) + turn_ctx.volatile_context
+        assert "関係性コンテキスト" not in prompt
+        assert "3日前から知り合い" in prompt
+        assert "2 日会話した" in prompt

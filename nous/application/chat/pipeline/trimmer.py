@@ -2,9 +2,9 @@
 
 from __future__ import annotations
 
+import re
 from typing import TYPE_CHECKING
 
-from nous.domain.shared.time_utils import get_now
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -16,6 +16,9 @@ logger = get_logger(__name__)
 class TrimmerMixin:
     """メッセージ切り詰め機能を提供するミックスイン。"""
 
+    # ツール結果に埋まった保存先（workspace artifact / shell log）を拾う正規表現。
+    _ARTIFACT_REF_RE = re.compile(r'"(?:artifact_path|log_path)"\s*:\s*"([^"]+)"')
+
     @staticmethod
     def _adjust_slice_start(messages: list[LLMMessage], start: int) -> int:
         """スライス開始位置が tool メッセージを指す場合、1件前に広げて
@@ -26,55 +29,6 @@ class TrimmerMixin:
         while start < 0 and start > -len(messages) and messages[start].role == "tool":
             start -= 1
         return start
-
-    import re
-
-    _RELATED_MEMORIES_RE = re.compile(r"<related_memories>\n(.*?)\n</related_memories>", re.DOTALL)
-
-    @staticmethod
-    def _trim_system_prompt(prompt: str, mode: str, total_tokens: int = 0, budget_tokens: int = 0) -> str:
-        """Trim the <related_memories> block by reducing memory list size.
-
-        Only the related-memories block is ever trimmed; everything else
-        (core instructions, skill discovery layer, character block) is
-        protected. Matching is anchored on the explicit XML tags — unlike
-        the old generic "\\n--- " split, memory/state text containing
-        "--- " can never be mistaken for a section boundary.
-        """
-        m = TrimmerMixin._RELATED_MEMORIES_RE.search(prompt)
-        if not m:
-            return prompt
-
-        # Limits per mode (how many memory lines to keep)
-        mode_limits = {
-            "light": 8,
-            "normal": 4,
-            "aggressive": 2,
-        }
-        limit = mode_limits.get(mode, 4)  # default = normal
-
-        # Auto mode: dynamic based on budget excess ratio
-        if mode == "auto" and total_tokens > 0 and budget_tokens > 0:
-            ratio = total_tokens / budget_tokens
-            if ratio < 1.2:
-                limit = 8
-            elif ratio < 1.5:
-                limit = 4
-            else:
-                limit = 2
-
-        body = m.group(1)
-        lines = body.split("\n")
-        memory_lines = [line for line in lines if line.strip().startswith("- ")]
-        if len(memory_lines) <= limit:
-            return prompt
-
-        kept = memory_lines[:limit]
-        removed = len(memory_lines) - limit
-        kept.append(f"  （他 {removed} 件の関連記憶 — 必要なら memory_search で検索）")
-        new_block = "<related_memories>\n" + "\n".join(kept) + "\n</related_memories>"
-        logger.debug("CompressStep: trimmed related_memories (mode=%s, limit=%d)", mode, limit)
-        return prompt[: m.start()] + new_block + prompt[m.end() :]
 
     @staticmethod
     def _clear_old_tool_results(messages: list[LLMMessage]) -> list[LLMMessage]:
@@ -130,35 +84,6 @@ class TrimmerMixin:
         return result
 
     @staticmethod
-    def _build_truncation_highlights(removed: list[LLMMessage], removed_count: int, keep_recent: int) -> str:
-        """Build truncation highlights for the system prompt section.
-
-        Format: `[N] user: {snippet}` / `[N] assistant: {snippet}` — roles are
-        explicit for BOTH roles. N is the index in the original message list
-        (removed is a prefix, so its positions are the original indices).
-        First 3 + last 3 (≤6 keeps all), 80-char snippets, newlines → spaces.
-        Includes the truncation time. Returns "" when nothing to show.
-        """
-        candidates = [(i, m) for i, m in enumerate(removed) if m.role in ("user", "assistant") and m.content]
-        if not candidates:
-            return ""
-        if len(candidates) > 6:
-            candidates = candidates[:3] + candidates[-3:]
-
-        parts = [
-            f"過去{removed_count}件のメッセージを切り詰めました（{get_now().strftime('%Y-%m-%d %H:%M')}）。",
-        ]
-        if keep_recent > 0:
-            parts.append(f"直近{keep_recent}ターンのみ保持。")
-        for i, m in candidates:
-            snippet = (m.content or "")[:80].replace("\n", " ")
-            parts.append(f"[{i}] {m.role}: {snippet}")
-        return "\n".join(parts)
-
-    # ツール結果に埋まった保存先（workspace artifact / shell log）を拾う正規表現。
-    _ARTIFACT_REF_RE = re.compile(r'"(?:artifact_path|log_path)"\s*:\s*"([^"]+)"')
-
-    @staticmethod
     def _collect_artifact_refs(removed: list[LLMMessage], limit: int = 20) -> list[str]:
         """切り捨てるメッセージに含まれる保存先パスを重複なしで集める。
 
@@ -172,48 +97,3 @@ class TrimmerMixin:
                     if len(seen) >= limit:
                         return seen
         return seen
-
-    @staticmethod
-    def _truncate_old_messages(
-        messages: list[LLMMessage],
-        keep_recent_turns: int,
-    ) -> tuple[list[LLMMessage], str, list[LLMMessage]]:
-        """Cut off old messages beyond keep_recent_turns, keeping only recent ones intact.
-
-        Old messages (user/assistant/tool) before the last N turns are removed
-        entirely — nothing is inserted in their place (the old fake assistant
-        note is gone; the missing context is covered by the system-side
-        highlights section). Returns the highlights and the removed slice so
-        the caller can inject them into the system prompt / Stage 3 summary.
-
-        When keep_recent_turns == 0, no truncation is performed.
-
-        Returns:
-            (messages_after_truncation, highlights, removed) — highlights/removed
-            are ""/[] when nothing was removed.
-        """
-        keep_count = keep_recent_turns * 2  # user + assistant = one turn
-        if keep_recent_turns == 0 or len(messages) <= keep_count:
-            return messages, "", []
-
-        # スライス開始位置が tool メッセージを指す場合、1件前に広げて
-        # 対応する assistant(tool_calls) を含める（孤児 tool 防止）
-        start = TrimmerMixin._adjust_slice_start(messages, -keep_count)
-
-        # Keep only the last keep_count messages intact
-        recent = messages[start:]
-        removed = messages[:start]
-        removed_count = len(messages) - len(recent)
-
-        highlights = TrimmerMixin._build_truncation_highlights(removed, removed_count, keep_recent_turns)
-        refs = TrimmerMixin._collect_artifact_refs(removed)
-        if refs:
-            highlights = "\n".join([highlights, "参照ファイル（原文はここにある）:"] + refs)
-
-        logger.debug(
-            "CompressStep: removed %d old messages (kept %d recent turns)",
-            removed_count,
-            keep_recent_turns,
-        )
-
-        return recent, highlights, removed

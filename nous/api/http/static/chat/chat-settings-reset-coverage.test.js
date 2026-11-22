@@ -65,7 +65,8 @@ describe('reset coverage (save.js keys ⊆ RESET_FIELDS keys)', () => {
   const { entries, keys: resetKeySet } = resetKeys();
 
   it('parses both tables', () => {
-    expect(saveKeys.length).toBeGreaterThan(100);
+    // 2026-11-22: サンプリング系 (temperature/max_tokens/top_p 等) の収集を廃止
+    expect(saveKeys.length).toBeGreaterThan(90);
     expect(entries.length).toBeGreaterThan(80);
   });
 

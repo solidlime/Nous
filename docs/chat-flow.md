@@ -210,15 +210,18 @@ yield ": heartbeat\n\n"
 
 `nous/application/chat/pipeline/prompt.py`。
 
-- ペルソナ定義 + 現在状態 + 記憶 + スキル + 時間文脈を組み立てる
-- **プレフィックスキャッシュを壊さない順序**で並べる（変わらないものを先、毎ターン変わるものを後）
+- 静的部（ペルソナ定義 + プロフィール + ツールガイドライン + 優先順位/順守ブロック）と
+  揮発部（現在状態 + 記憶 + スキル + 時間文脈）を分離して組み立てる
+- 静的部は `turn_ctx.system_prompt`（`__STATIC_END__` マーカー付き）、揮発部は
+  `turn_ctx.volatile_context` に入り、最新 user メッセージ前の
+  `[NOUS CONTEXT]` 合成メッセージとして会話の後ろに注入される
+  → プロバイダのプレフィックスキャッシュが毎ターン同じ前置きに乗る
 - `skills_raw` に注入したスキルを記録（PostStep のデバッグ用）
 
-### 5.4 感情由来の温度
+### 5.4 サンプリング
 
-`config.dynamic_temperature` が有効なら `EmotionDrivenSampler.compute()` で
-基準温度を感情・強度で補正する。`emotion_intensity` は境界で正規化
-（欠損・非数値・範囲外は 0.5）。
+`temperature` / `max_tokens` は内部固定（0.7 / 8192）、`top_p` は送信しない。
+`ChatConfig` の保存値は `_distribute_flat_fields` で捨てられる。
 
 ### 5.5 `CompressStep`＋切り詰め
 
@@ -228,7 +231,9 @@ yield ": heartbeat\n\n"
 - **LLM メッセージで数える**（`tool` メッセージも 1 件）
 - スライス先頭が `tool` になる場合は `_adjust_slice_start` で広げる。
   孤立した `tool` メッセージはプロバイダが 400 を返すため
-- 落とした区間は `_build_truncation_highlights` で要約化し、履歴要約として注入
+- Stage 1: 直近 3 assistant ターンより古いツール結果をステータス 1 行に置換
+- Stage 3': 予算が足りなければ active path の head から node 単位で永続 evict し、
+  落とした切片を差分要約として `history_summary` に積む（user 境界で切る）
 - 実際に圧縮したら `ContextCompressedSSE` を流す（フロントが「圧縮した」と表示できる）
 
 ### 5.6 `InferenceStep` — ストリームとツールループ
@@ -447,7 +452,6 @@ session.flush()   # done を出す前に必ずディスクへ
 | `memory_preload_count` | PrepareStep | 先に注入する記憶の件数（既定 5、0 で無効） |
 | `memory_min_score` | PrepareStep | 記憶の足切り |
 | `memory_digest_count` | PrepareStep | recency digest の件数 |
-| `dynamic_temperature` / `emotion_temperature_scale` | service | 感情由来の温度補正 |
 | `auto_extract` | PostProcessStep | 記憶抽出を行うか |
 | `session_summarize` | PostProcessStep | 退避メッセージの要約 |
 | `enable_parallel_tools` | InferenceStep | ツールの並列実行 |

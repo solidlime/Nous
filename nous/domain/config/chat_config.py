@@ -50,6 +50,9 @@ def _get_base_type(annotation: object) -> type:
     return cast("type", annotation)
 
 
+# 内部既定に固定するサンプリング系フィールド（構築経路で必ず落とす）
+_INTERNAL_SAMPLING_KEYS: frozenset[str] = frozenset({"temperature", "max_tokens"})
+
 # Sub-config field name → class mapping
 _SUB_CONFIG_MAP: dict[str, type[BaseModel]] = {
     "provider_config": ProviderConfig,
@@ -111,6 +114,18 @@ class ChatConfig(BaseModel):
         """Accept flat field names (api_key, model, ...) AND nested configs."""
         if not isinstance(data, dict):
             return data
+
+        # temperature / max_tokens は内部既定に固定（保存値・旧UI入力で上書きさせない）。
+        # 単一のチョークポイント: フラット/ネスト両形態から落とす。
+        data = {k: v for k, v in data.items() if k not in _INTERNAL_SAMPLING_KEYS}
+        for cfg_name in _SUB_CONFIG_MAP:
+            sub = data.get(cfg_name)
+            if isinstance(sub, dict):
+                data[cfg_name] = {k: v for k, v in sub.items() if k not in _INTERNAL_SAMPLING_KEYS}
+            elif isinstance(sub, BaseModel):
+                data[cfg_name] = {
+                    k: getattr(sub, k) for k in type(sub).model_fields if k not in _INTERNAL_SAMPLING_KEYS
+                }
 
         # サブ設定の全フィールド名セット
         all_sub_keys: set[str] = set()
@@ -308,7 +323,7 @@ class ChatConfigFileRepository:
                 if bf in data and data[bf] is not None:
                     data[bf] = bool(data[bf])
             # 不要なキーを除去、None でないキーのみ
-            nullable = {"updated_at", "context_max_tokens", "top_p"}
+            nullable = {"updated_at", "context_max_tokens"}
             result = {k: v for k, v in data.items() if k in all_fields and (v is not None or k in nullable)}
             return result
         except Exception:

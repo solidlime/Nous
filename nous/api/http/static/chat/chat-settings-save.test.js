@@ -15,13 +15,10 @@ let S;
 const REQUIRED = [
   ['input', 'chat-model', 'test-model'],
   ['input', 'chat-base-url', 'https://api.example.com'],
-  ['input', 'chat-temperature', '0.7'],
-  ['input', 'chat-max-tokens', '8192'],
   ['input', 'chat-stored-msgs', '200'],
   ['input', 'chat-context-max-tokens', ''],
   ['input', 'chat-compression-threshold', '80'],
   ['select', 'chat-compression-mode', 'auto'],
-  ['input', 'chat-keep-recent', '2'],
   ['input', 'chat-compress-system', 'true'],
   ['input', 'chat-compress-history', 'true'],
   ['input', 'chat-memory-preload', '5'],
@@ -96,11 +93,12 @@ test('success POSTs the collected form, applies the response and restores the bu
   const payload = JSON.parse(opts.body);
   expect(payload.model).toBe('test-model');
   expect(payload.base_url).toBe('https://api.example.com');
-  expect(payload.temperature).toBe(0.7);
-  expect(payload.max_tokens).toBe(8192);
   expect(payload.context_max_tokens).toBeNull(); // empty input → null, not NaN
   expect(payload.context_compression_threshold).toBe(0.8); // 80% → 0.8
-  expect(payload.top_p).toBeNull(); // top-p disabled
+  // サンプリングは内部固定: 収集も送信もしない（top_p/dynamic_temperature 廃止）
+  expect(payload.temperature).toBeUndefined();
+  expect(payload.max_tokens).toBeUndefined();
+  expect(payload.top_p).toBeUndefined();
   expect(payload.mcp_servers).toEqual([]);
   expect(payload.enabled_skills).toEqual(['search']);
 

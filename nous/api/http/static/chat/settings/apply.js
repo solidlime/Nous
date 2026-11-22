@@ -87,15 +87,6 @@
     // 既定値の単一の正は defaults API（N.Chat.settings._defaultOf）。
     // ここでのリテラルは API 未取得時の保険。
     var _defaultOf = N.Chat.settings._defaultOf;
-    set("chat-temperature", cfg.temperature ?? (_defaultOf("temperature") ?? 0.7));
-    setChecked("chat-dynamic-temperature", cfg.dynamic_temperature !== false);
-    set(
-      "chat-emotion-temperature-scale",
-      cfg.emotion_temperature_scale ??
-        (_defaultOf("emotion_temperature_scale") ?? 0.2),
-    );
-    set("chat-top-p", cfg.top_p ?? (_defaultOf("top_p") ?? 1));
-    set("chat-max-tokens", cfg.max_tokens || (_defaultOf("max_tokens") ?? 8192));
     set(
       "chat-max-tool-calls",
       cfg.max_tool_calls || (_defaultOf("max_tool_calls") ?? 5),
@@ -108,46 +99,6 @@
       cfg.extract_max_tokens || (_defaultOf("extract_max_tokens") ?? 512),
     );
     setChecked("chat-enable-memory-tools", cfg.enable_memory_tools !== false);
-    // Temperature display sync
-    const tempEl = document.getElementById("chat-temp-val");
-    const tempSlider = document.getElementById("chat-temperature");
-    if (tempEl && tempSlider) {
-      tempEl.textContent = parseFloat(tempSlider.value).toFixed(2);
-    }
-    // Dynamic temperature control
-    const dynTempCb = document.getElementById("chat-dynamic-temperature");
-    const emotionScaleEl = document.getElementById(
-      "chat-emotion-temperature-scale",
-    );
-    if (dynTempCb && emotionScaleEl) {
-      emotionScaleEl.disabled = !dynTempCb.checked;
-      if (!dynTempCb._bound) {
-        dynTempCb._bound = true;
-        dynTempCb.onchange = function () {
-          emotionScaleEl.disabled = !this.checked;
-        };
-      }
-    }
-    // Top P display sync
-    const topPVal = document.getElementById("chat-top-p-val");
-    const topPSlider = document.getElementById("chat-top-p");
-    if (topPVal && topPSlider) {
-      var v = parseFloat(topPSlider.value);
-      topPVal.textContent = isNaN(v) ? "—" : v.toFixed(2);
-    }
-    // Top P is optional: null = unset → disable the slider and send null on save.
-    var topPEnabled = document.getElementById("chat-top-p-enabled");
-    if (topPEnabled) {
-      topPEnabled.checked = cfg.top_p != null;
-      if (topPSlider) topPSlider.disabled = !topPEnabled.checked;
-      topPEnabled.onchange = function () {
-        var s = document.getElementById("chat-top-p");
-        if (!s) return;
-        s.disabled = !this.checked;
-        if (this.checked)
-          s.dispatchEvent(new Event("input", { bubbles: true }));
-      };
-    }
     // Reasoning settings (R7/R8)
     const reasoningLabels = ["low", "medium", "high", "max"];
     setChecked("chat-reasoning-enabled", cfg.reasoning_enabled === true);
@@ -220,7 +171,7 @@
     // Context compression settings
     set(
       "chat-stored-msgs",
-      cfg.max_stored_messages ?? (_defaultOf("max_stored_messages") ?? 200),
+      cfg.max_stored_messages ?? (_defaultOf("max_stored_messages") ?? 1000),
     );
     set("chat-context-max-tokens", cfg.context_max_tokens ?? "");
     var _compressionPct = Math.round(
@@ -234,11 +185,6 @@
       "chat-compression-mode",
       cfg.context_compression_mode ||
         (_defaultOf("context_compression_mode") ?? "auto"),
-    );
-    set(
-      "chat-keep-recent",
-      cfg.context_keep_recent_turns ??
-        (_defaultOf("context_keep_recent_turns") ?? 2),
     );
     set(
       "chat-memory-preload",

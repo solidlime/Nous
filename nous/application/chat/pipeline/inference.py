@@ -61,7 +61,6 @@ class InferenceStep:
         session_messages: list[LLMMessage],
         turn_ctx: ChatTurnContext,
         registry: ToolRegistry,
-        effective_temp: float | None = None,
     ) -> AsyncIterator[
         TextDeltaSSE
         | ThinkingDeltaSSE
@@ -93,7 +92,7 @@ class InferenceStep:
 
         messages = await self._build_initial_messages(config, provider, session_messages, turn_ctx)
 
-        temperature = effective_temp if effective_temp is not None else config.temperature
+        temperature = config.temperature
         max_continuation_rounds = 3
         _continuation_rounds = 0
         _blocked = False
@@ -137,7 +136,6 @@ class InferenceStep:
                 tools=visible_tools,
                 temperature=temperature,
                 max_tokens=config.max_tokens,
-                top_p=config.top_p,
                 reasoning_effort=config.reasoning_effort if config.reasoning_enabled else None,
             ):
                 if isinstance(event, TextDeltaEvent):
@@ -285,9 +283,17 @@ class InferenceStep:
         """セッション履歴＋recency digest＋画像/テキストの最新 user メッセージを組み立てる。"""
         messages = list(session_messages)
 
-        # §1 Recency digest: 最新 user 発言の直前に合成メッセージ（非永続化・毎ターン再構築）
-        if getattr(turn_ctx, "recency_digest", ""):
-            messages.append(LLMMessage(role="user", content=turn_ctx.recency_digest))
+        # §1 揮発ブロック（recency digest + 現在状態/記憶/スキル/要約）は最新 user 発言の
+        # 直前に 1 通の合成 user メッセージとして置く（非永続化・毎ターン再構築）。
+        # 静的側は system に載っており、会話接頭辞のキャッシュを壊さない。
+        # 非 str（テストの MagicMock 等）は載せない
+        volatile = "\n".join(
+            p
+            for p in (getattr(turn_ctx, "recency_digest", ""), getattr(turn_ctx, "volatile_context", ""))
+            if isinstance(p, str) and p
+        )
+        if volatile:
+            messages.append(LLMMessage(role="user", content=f"[NOUS CONTEXT]\n{volatile}"))
 
         if turn_ctx.images:
             if not provider.supports_vision():

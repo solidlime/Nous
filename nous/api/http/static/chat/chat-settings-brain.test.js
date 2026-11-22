@@ -15,13 +15,10 @@ const __dirname = dirname(fileURLToPath(import.meta.url));
 const REQUIRED_SAVE_IDS = [
   ['input', 'chat-model', 'test-model'],
   ['input', 'chat-base-url', 'https://api.example.com'],
-  ['input', 'chat-temperature', '0.7'],
-  ['input', 'chat-max-tokens', '8192'],
   ['input', 'chat-stored-msgs', '200'],
   ['input', 'chat-context-max-tokens', ''],
   ['input', 'chat-compression-threshold', '80'],
   ['select', 'chat-compression-mode', 'auto'],
-  ['input', 'chat-keep-recent', '2'],
   ['input', 'chat-compress-system', 'true'],
   ['input', 'chat-compress-history', 'true'],
   ['input', 'chat-memory-preload', '5'],
@@ -74,8 +71,6 @@ function buildForm() {
     + '<input type="text" id="chat-brain-llm-base-url" value="" />'
     + '<input type="password" id="chat-brain-llm-api-key" value="" />'
     + '</div>'
-    + '<input type="checkbox" id="chat-top-p-enabled" />'
-    + '<input type="range" id="chat-top-p" min="0" max="1" step="0.05" value="1" disabled />'
     + '<input type="checkbox" id="chat-voice-streaming" checked />';
   document.body.innerHTML = `<div>${html}${brains}</div>`;
 }
@@ -297,27 +292,6 @@ describe('brain simulation settings', () => {
     apiStub.mockResolvedValueOnce({});
     await window.Nous.Chat.settings.save();
     expect(JSON.parse(apiStub.mock.calls[1][1].body).voice_streaming).toBe(false);
-  });
-
-  it('top_p: unchecked sends null, checked sends the parsed value', async () => {
-    window.Nous.Chat.settings.apply({});
-    const postBodies = () => apiStub.mock.calls
-      .filter((c) => c[1] && c[1].body)
-      .map((c) => JSON.parse(c[1].body));
-
-    // unset → null
-    document.getElementById('chat-base-url').value = 'https://api.example.com';
-    apiStub.mockResolvedValueOnce({});
-    await window.Nous.Chat.settings.save();
-    expect(postBodies()[0].top_p).toBeNull();
-
-    // enabled → numeric value (save's apply() reset the form, so re-arm it)
-    document.getElementById('chat-base-url').value = 'https://api.example.com';
-    document.getElementById('chat-top-p-enabled').checked = true;
-    document.getElementById('chat-top-p').value = '0.9';
-    apiStub.mockResolvedValueOnce({});
-    await window.Nous.Chat.settings.save();
-    expect(postBodies()[1].top_p).toBe(0.9);
   });
 });
 

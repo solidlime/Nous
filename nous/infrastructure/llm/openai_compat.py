@@ -266,10 +266,14 @@ class OpenAICompatProvider(LLMProvider):
                 async for chunk in stream:
                     # Collect usage from streaming chunks (final chunk or usage-only chunk)
                     if chunk.usage:
+                        # キャッシュ観測: prompt_tokens_details が無いゲートウェイ
+                        # (None) / cached_tokens 欠落 (None) の二段で防御する。
+                        details = getattr(chunk.usage, "prompt_tokens_details", None)
                         usage_info = {
                             "prompt_tokens": chunk.usage.prompt_tokens,
                             "completion_tokens": chunk.usage.completion_tokens,
                             "total_tokens": chunk.usage.total_tokens,
+                            "cached_tokens": getattr(details, "cached_tokens", None) or 0,
                         }
 
                     delta = chunk.choices[0].delta if chunk.choices else None

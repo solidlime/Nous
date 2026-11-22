@@ -14,7 +14,6 @@ from nous.application.chat.pipeline.inference import InferenceStep
 from nous.application.chat.pipeline.post import PostProcessStep
 from nous.application.chat.pipeline.prepare import PrepareStep
 from nous.application.chat.pipeline.prompt import PromptBuildStep
-from nous.application.chat.pipeline.trimmer import TrimmerMixin
 from nous.application.chat.session_store import SessionManager
 from nous.application.chat.tools.definitions import get_filtered_tools
 from nous.application.chat.tools.registry import ToolRegistry
@@ -319,31 +318,6 @@ class ChatService:
             # PromptBuildStep: system プロンプト組み立て
             PromptBuildStep().run(ctx, config, turn_ctx)
 
-            # TA03: Compute effective temperature from persona emotion
-            from nous.domain.sampling import EmotionDrivenSampler
-
-            effective_temp: float | None = None
-            if config.dynamic_temperature:
-                from nous.domain.value_objects import normalize_importance
-
-                state_raw = turn_ctx.state_raw
-                emotion = state_raw.get("emotion", "neutral")
-                # f2: 欠損・範囲外・非数値を境界で正規化
-                try:
-                    intensity = normalize_importance(
-                        float(state_raw.get("emotion_intensity", 0.5))
-                        if state_raw.get("emotion_intensity") is not None
-                        else None
-                    )
-                except (TypeError, ValueError):
-                    intensity = 0.5
-                effective_temp = EmotionDrivenSampler.compute(
-                    base_temp=config.temperature,
-                    emotion=emotion,
-                    intensity=intensity,
-                    scale=config.emotion_temperature_scale,
-                )
-
             # InferenceStep + PostProcessStep: MCPプール共有
             async with MCPClientPool(config.mcp_servers) as mcp_pool:
                 builtin = get_filtered_tools(config) if config.enable_memory_tools else []
@@ -369,29 +343,8 @@ class ChatService:
 
                 session_messages = session.get_labeled_messages()
 
-                # CompressStep: コンテキスト圧縮（トークン予算超過 / max_stored_messages 超過時に圧縮）
-                messages = await CompressStep().run(ctx, config, turn_ctx, session_messages)
-
-                # max_stored_messages によるメッセージ数制限（LLMMessage数でカウント）
-                max_msgs = config.max_stored_messages
-                if len(messages) >= max_msgs:
-                    before_count = len(messages)
-                    # スライス先頭が tool なら assistant(tool_calls) を含むよう広げる（孤児 tool 防止）
-                    start = TrimmerMixin._adjust_slice_start(messages, -max_msgs)
-                    removed = messages[:start]
-                    if removed:
-                        # 第2切り詰め経路でも同一ヘルパーでハイライト生成・注入
-                        # （重複実装禁止。keep_recent_turns=0 構成ではこの経路が唯一の切り詰め）
-                        highlights = TrimmerMixin._build_truncation_highlights(removed, len(removed), 0)
-                        if highlights:
-                            CompressStep._append_history_summary(turn_ctx, highlights)
-                    messages = messages[start:]
-                    logger.info(
-                        "Truncated session messages: %d → %d (max_stored_messages=%d)",
-                        before_count,
-                        len(messages),
-                        max_msgs,
-                    )
+                # CompressStep: トークン予算超過時に window から永続 evict して圧縮する
+                messages = await CompressStep().run(ctx, config, turn_ctx, session_messages, session)
 
                 # Notify frontend if compression occurred
                 comp_info = getattr(turn_ctx, "_compression_info", None)
@@ -424,9 +377,7 @@ class ChatService:
                 # Collect and stream LLM response
                 full_response = ""
                 llm_error = ""
-                async for event in InferenceStep().run(
-                    ctx, config, messages, turn_ctx, registry, effective_temp=effective_temp
-                ):
+                async for event in InferenceStep().run(ctx, config, messages, turn_ctx, registry):
                     yield event.to_sse()
                     # Collect text deltas for chat.llm_response event
                     from nous.application.chat.events import ErrorSSE, TextDeltaSSE

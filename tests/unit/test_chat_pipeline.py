@@ -747,30 +747,29 @@ class TestPrepareStepTimeContext:
 
 
 # ──────────────────────────────────────────────
-# TA03: Dynamic Temperature — EmotionDrivenSampler integration
+# ──────────────────────────────────────────────
+# サンプリング内部化 — temperature は config 固定値・top_p は送らない
 # ──────────────────────────────────────────────
 
 
-class TestDynamicTemperatureInference:
-    """InferenceStep が effective_temp を受け取り、provider.stream() に正しく伝搬する。"""
+class TestSamplingInternalizedInference:
+    """InferenceStep は config.temperature をそのまま渡し、top_p を送らない。"""
 
-    @pytest.mark.asyncio
-    async def test_uses_effective_temp_when_provided(self):
-        """effective_temp が指定された場合、provider.stream() にそれが使われる。"""
+    async def _run(self, captured: list[dict | None]) -> None:
         from unittest.mock import MagicMock, patch
 
         from nous.application.chat.pipeline.inference import InferenceStep
         from nous.infrastructure.llm.base import TextDeltaEvent
 
-        # Mock provider: async generator for stream()
         async def _mock_stream(**kwargs):
+            captured[0] = kwargs
             yield TextDeltaEvent(content="hello")
 
         mock_provider = MagicMock()
         mock_provider.stream = _mock_stream
 
         config = MagicMock()
-        config.debug_mode = False  # この環境には /data が無いため書き込みを無効化
+        config.debug_mode = False
         config.temperature = 0.7
         config.max_tokens = 100
         config.provider = "anthropic"
@@ -780,7 +779,6 @@ class TestDynamicTemperatureInference:
         config.max_tool_calls = 0
         config.enable_parallel_tools = True
         config.tool_result_max_chars = 4000
-        config.top_p = None
 
         turn_ctx = MagicMock()
         turn_ctx.images = []
@@ -788,149 +786,115 @@ class TestDynamicTemperatureInference:
         turn_ctx.full_response = ""
         turn_ctx.user_message = "test"
         turn_ctx.system_prompt = "test sys"
+        turn_ctx.volatile_context = ""
         turn_ctx.tool_calls_log = []
         turn_ctx.skills_raw = []
 
-        registry = MagicMock()
-
-        ctx = MagicMock()
-        session_messages = []
-
-        effective_temp = 0.85
-
         with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
-            events = []
-            async for event in InferenceStep().run(
-                ctx, config, session_messages, turn_ctx, registry, effective_temp=effective_temp
-            ):
-                events.append(event)
-
-        # Verify effective_temp != base_temp
-        assert effective_temp != config.temperature, "effective_temp should differ from base_temp"
-        assert len(events) == 1
-
-    @pytest.mark.asyncio
-    async def test_uses_config_temp_when_effective_temp_none(self):
-        """effective_temp が None の場合、config.temperature が使われる。"""
-        from unittest.mock import MagicMock, patch
-
-        from nous.application.chat.pipeline.inference import InferenceStep
-        from nous.infrastructure.llm.base import TextDeltaEvent
-
-        captured_temp = [None]  # mutable capture
-
-        async def _mock_stream(**kwargs):
-            captured_temp[0] = kwargs.get("temperature")
-            yield TextDeltaEvent(content="hello")
-
-        mock_provider = MagicMock()
-        mock_provider.stream = _mock_stream
-
-        config = MagicMock()
-        config.debug_mode = False  # この環境には /data が無いため書き込みを無効化
-        config.temperature = 0.7
-        config.max_tokens = 100
-        config.provider = "anthropic"
-        config.get_effective_api_key.return_value = "test-key"
-        config.get_effective_model.return_value = "claude-3"
-        config.get_effective_base_url.return_value = ""
-        config.max_tool_calls = 0
-        config.enable_parallel_tools = True
-        config.tool_result_max_chars = 4000
-        config.top_p = None
-
-        turn_ctx = MagicMock()
-        turn_ctx.images = []
-        turn_ctx.tool_call_count = 0
-        turn_ctx.full_response = ""
-        turn_ctx.user_message = "test"
-        turn_ctx.system_prompt = "test sys"
-        turn_ctx.tool_calls_log = []
-        turn_ctx.skills_raw = []
-
-        registry = MagicMock()
-        ctx = MagicMock()
-        session_messages = []
-
-        with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
-            events = []
-            async for event in InferenceStep().run(
-                ctx, config, session_messages, turn_ctx, registry, effective_temp=None
-            ):
-                events.append(event)
-
-        assert captured_temp[0] == config.temperature
-        assert len(events) == 1
-
-    @pytest.mark.asyncio
-    async def test_effective_temp_passed_to_stream(self):
-        """provider.stream() は effective_temp を temperature パラメータとして受け取る。"""
-        from unittest.mock import MagicMock, patch
-
-        from nous.application.chat.pipeline.inference import InferenceStep
-        from nous.infrastructure.llm.base import TextDeltaEvent
-
-        captured_kwargs: list[dict | None] = [None]
-
-        async def _mock_stream(**kwargs):
-            captured_kwargs[0] = kwargs
-            yield TextDeltaEvent(content="hello")
-
-        mock_provider = MagicMock()
-        mock_provider.stream = _mock_stream
-
-        config = MagicMock()
-        config.debug_mode = False  # この環境には /data が無いため書き込みを無効化
-        config.temperature = 0.7
-        config.max_tokens = 100
-        config.provider = "anthropic"
-        config.get_effective_api_key.return_value = "test-key"
-        config.get_effective_model.return_value = "claude-3"
-        config.get_effective_base_url.return_value = ""
-        config.max_tool_calls = 0
-        config.enable_parallel_tools = True
-        config.tool_result_max_chars = 4000
-        config.top_p = None
-
-        turn_ctx = MagicMock()
-        turn_ctx.images = []
-        turn_ctx.tool_call_count = 0
-        turn_ctx.full_response = ""
-        turn_ctx.user_message = "test"
-        turn_ctx.system_prompt = "test sys"
-        turn_ctx.tool_calls_log = []
-        turn_ctx.skills_raw = []
-
-        registry = MagicMock()
-        ctx = MagicMock()
-        session_messages = []
-
-        with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
-            async for _ in InferenceStep().run(ctx, config, session_messages, turn_ctx, registry, effective_temp=0.85):
+            async for _ in InferenceStep().run(MagicMock(), config, [], turn_ctx, MagicMock()):
                 pass
 
-        assert captured_kwargs[0] is not None
-        assert captured_kwargs[0]["temperature"] == 0.85
+    @pytest.mark.asyncio
+    async def test_temperature_is_config_value(self):
+        captured: list = [None]
+        await self._run(captured)
+        assert captured[0] is not None
+        assert captured[0]["temperature"] == 0.7
 
     @pytest.mark.asyncio
-    async def test_emotion_driven_sampler_compute_integration(self):
-        """EmotionDrivenSampler.compute() が期待通り effective_temp を計算する。"""
-        from nous.domain.sampling import EmotionDrivenSampler
+    async def test_top_p_not_sent(self):
+        captured: list = [None]
+        await self._run(captured)
+        assert "top_p" not in captured[0]
 
-        base_temp = 0.7
-        # anger → modifier = +0.15, intensity=0.8, scale=0.2
-        # effective_modifier = 0.15 * 0.8 * 0.2 = 0.024
-        # effective_temp = 0.7 + 0.024 = 0.724 → rounded to 2 decimals = 0.72
-        result = EmotionDrivenSampler.compute(base_temp, "anger", 0.8, scale=0.2)
-        assert result == pytest.approx(0.72, rel=1e-3)
+    def test_run_signature_has_no_effective_temp(self):
+        import inspect
+
+        from nous.application.chat.pipeline.inference import InferenceStep
+
+        params = inspect.signature(InferenceStep.run).parameters
+        assert "effective_temp" not in params
+
+
+# ──────────────────────────────────────────────
+# 揮発ブロック — [NOUS CONTEXT] 合成 user メッセージ（Part B）
+# ──────────────────────────────────────────────
+
+
+class TestVolatileContextInjection:
+    """volatile_context と recency_digest が 1 通の合成 user メッセージになる。"""
+
+    async def _run(self, turn_ctx, captured: list[list]) -> None:
+        from unittest.mock import MagicMock, patch
+
+        from nous.application.chat.pipeline.inference import InferenceStep
+        from nous.infrastructure.llm.base import TextDeltaEvent
+
+        async def _mock_stream(**kwargs):
+            captured[0] = kwargs["messages"]
+            yield TextDeltaEvent(content="hello")
+
+        mock_provider = MagicMock()
+        mock_provider.stream = _mock_stream
+
+        config = MagicMock()
+        config.debug_mode = False
+        config.temperature = 0.7
+        config.max_tokens = 100
+        config.provider = "anthropic"
+        config.get_effective_api_key.return_value = "test-key"
+        config.get_effective_model.return_value = "claude-3"
+        config.get_effective_base_url.return_value = ""
+        config.max_tool_calls = 0
+        config.enable_parallel_tools = True
+        config.tool_result_max_chars = 4000
+        config.show_message_timestamps = False
+        turn_ctx.tool_calls_log = []
+        turn_ctx.skills_raw = []
+
+        with patch("nous.application.chat.pipeline.inference.get_provider", return_value=mock_provider):
+            async for _ in InferenceStep().run(MagicMock(), config, [], turn_ctx, MagicMock()):
+                pass
+
+    def _turn_ctx(self, digest: str = "", volatile: str = ""):
+        from unittest.mock import MagicMock
+
+        turn_ctx = MagicMock()
+        turn_ctx.images = []
+        turn_ctx.tool_call_count = 0
+        turn_ctx.full_response = ""
+        turn_ctx.user_message = "今回の質問"
+        turn_ctx.system_prompt = "static sys"
+        turn_ctx.recency_digest = digest
+        turn_ctx.volatile_context = volatile
+        return turn_ctx
 
     @pytest.mark.asyncio
-    async def test_emotion_driven_sampler_neutral_no_change(self):
-        """neutral emotion → modifier=0 → effective_temp == base_temp. base_temp is 0.5 already without dynamic temp."""
-        from nous.domain.sampling import EmotionDrivenSampler
+    async def test_volatile_and_digest_merged_into_one_message(self):
+        captured: list = [None]
+        await self._run(
+            self._turn_ctx(digest="直近記憶", volatile="<related_memories>- 記憶1</related_memories>"), captured
+        )
 
-        result = EmotionDrivenSampler.compute(0.7, "neutral", 0.9, scale=0.2)
-        assert result == pytest.approx(0.7, rel=1e-3)
+        msgs = captured[0]
+        assert msgs[-1].role == "user"
+        assert msgs[-1].content == "今回の質問"
+        synthetic = msgs[-2]
+        assert synthetic.role == "user"
+        assert synthetic.content.startswith("[NOUS CONTEXT]")
+        assert "直近記憶" in synthetic.content
+        assert "<related_memories>- 記憶1</related_memories>" in synthetic.content
+        # 合成は 1 通だけ（分割して 2 通にしない）
+        assert sum(1 for m in msgs if "NOUS CONTEXT" in str(m.content)) == 1
+
+    @pytest.mark.asyncio
+    async def test_no_context_no_synthetic_message(self):
+        captured: list = [None]
+        await self._run(self._turn_ctx(), captured)
+
+        msgs = captured[0]
+        assert len(msgs) == 1
+        assert msgs[0].content == "今回の質問"
 
 
 # ──────────────────────────────────────────────
@@ -1607,7 +1571,7 @@ class TestBuildDigest:
 
 
 class TestTrimOrderToolResultsBeforeMemorySections:
-    """§3: 圧縮時ツール結果置換が先に走り、予算内なら関連記憶セクションが生き残る。"""
+    """Stage 1（ツール結果置換）が先に走り、予算内なら揮発ブロックは無傷。"""
 
     @pytest.mark.asyncio
     async def test_trim_order_tool_results_before_memory_sections(self):
@@ -1617,36 +1581,51 @@ class TestTrimOrderToolResultsBeforeMemorySections:
         from nous.application.chat.pipeline.compress import CompressStep
         from nous.infrastructure.llm.base import LLMMessage
 
-        big_json = '{"success": true, "data": "' + "x" * 1000 + '"}'
+        big_json = (
+            chr(123)
+            + chr(34)
+            + "success"
+            + chr(34)
+            + ": true, "
+            + chr(34)
+            + "data"
+            + chr(34)
+            + ": "
+            + chr(34)
+            + "x" * 1000
+            + chr(34)
+            + chr(125)
+        )
         messages = []
         for i in range(12):
             messages.append(LLMMessage(role="assistant", content=f"a{i}"))
             messages.append(LLMMessage(role="tool", content=big_json, tool_call_id=f"t{i}"))
 
-        memory_lines = "\n".join(f"- 記憶{i}" for i in range(10))
+        memory_lines = chr(10).join(f"- 記憶{i}" for i in range(10))
         turn_ctx = cast(
             "ChatTurnContext",
-            SimpleNamespace(system_prompt=f"base\n<related_memories>\n{memory_lines}\n</related_memories>"),
+            SimpleNamespace(
+                system_prompt="base static",
+                volatile_context=f"<related_memories>{chr(10)}{memory_lines}{chr(10)}</related_memories>",
+                user_message="",
+            ),
         )
 
         config = MagicMock()
-        config.context_keep_recent_turns = 0
         config.context_compress_history = True
-        config.context_compress_system_prompt = True
-        config.context_compression_mode = "normal"
-        config.max_stored_messages = 1000
         config.get_effective_model.return_value = "claude-3"
         config.context_max_tokens = 3000
         config.context_compression_threshold = 0.9
 
+        # session 無し（Stage 3' 不発）でも Stage 1 だけで予算内に収まる
         result = await CompressStep().run(MagicMock(), config, turn_ctx, messages)
 
-        # Stage 1（ツール結果置換）で予算内に収まった → Stage 2 未実行
         tool_msgs = [m for m in result if m.role == "tool"]
         assert all(m.content == "[ツール実行: 成功]" for m in tool_msgs[:8])
         assert all(m.content == big_json for m in tool_msgs[8:])
-        # 関連記憶 10 行すべて生き残る（トリムされていない）
-        assert turn_ctx.system_prompt.count("- 記憶") == 10
+        # 揮発ブロック（関連記憶）は予算内なので一切触られない
+        assert turn_ctx.volatile_context.count("- 記憶") == 10
+        assert turn_ctx.system_prompt == "base static"
 
 
 class TestTaskStateInjection:

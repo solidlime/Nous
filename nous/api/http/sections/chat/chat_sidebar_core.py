@@ -41,42 +41,6 @@ def _render_core_section() -> str:
                                     <div class="chat-field-label">Base URL <span style="color:var(--accent-blue);font-size:0.7rem;">（必須）</span></div>
                                     <input type="text" id="chat-base-url" class="chat-field-input" placeholder="https://api.commandcode.ai/provider/v1" />
                                 </div>
-                                <div>
-                                    <div class="chat-field-label chat-field-label-row">
-                                        <span>Temperature</span>
-                                        <span id="chat-temp-val" class="chat-field-value">0.7</span>
-                                    </div>
-                                    <input type="range" id="chat-temperature" class="chat-field-input" min="0" max="2" step="0.05" value="0.7"
-                                        data-mirror="chat-temp-val" data-mirror-format="fixed2" />
-                                </div>
-                                <div class="chat-sub-block">
-                                    <h4><i data-lucide="thermometer"></i> 動的温度調整</h4>
-                                    <div class="chat-check-row">
-                                        <input type="checkbox" id="chat-dynamic-temperature" class="chat-config-checkbox" checked
-                                            data-toggle-target="chat-emotion-temperature-scale" data-toggle-mode="disabled" />
-                                        <label for="chat-dynamic-temperature">動的温度調整を有効にする</label>
-                                    </div>
-                                    <div>
-                                        <div class="chat-field-label chat-field-label-row">
-                                            <span>感情温度スケール</span>
-                                            <span id="chat-emotion-temp-scale-val" class="chat-field-value">0.20</span>
-                                        </div>
-                                        <input type="range" id="chat-emotion-temperature-scale" class="chat-field-input" min="0" max="1" step="0.05" value="0.2"
-                                            data-mirror="chat-emotion-temp-scale-val" data-mirror-format="fixed2" />
-                                    </div>
-                                    <div class="chat-check-row">
-                                        <input type="checkbox" id="chat-top-p-enabled" />
-                                        <label for="chat-top-p-enabled">Top P を指定する</label>
-                                    </div>
-                                    <div>
-                                        <div class="chat-field-label chat-field-label-row">
-                                            <span>Top P</span>
-                                            <span id="chat-top-p-val" class="chat-field-value">1.00</span>
-                                        </div>
-                                        <input type="range" id="chat-top-p" class="chat-field-input" min="0" max="1" step="0.05" value="1" disabled
-                                            data-mirror="chat-top-p-val" data-mirror-format="topP" />
-                                    </div>
-                                </div>
                                 <div class="chat-sub-block">
                                     <h4><i data-lucide="brain"></i> 思考モード（Reasoning）</h4>
                                     <div class="chat-check-row">
@@ -92,10 +56,6 @@ def _render_core_section() -> str:
                                         <input type="range" id="chat-reasoning-effort" class="chat-field-input" min="0" max="3" step="1" value="1" disabled
                                             data-mirror="chat-reasoning-effort-val" data-mirror-format="effort" />
                                     </div>
-                                </div>
-                                <div>
-                                    <div class="chat-field-label">Max Tokens</div>
-                                    <input type="number" id="chat-max-tokens" class="chat-field-input" min="1" max="131072" value="8192" />
                                 </div>
                                 <div>
                                     <div class="chat-field-label">言語</div>
@@ -138,7 +98,7 @@ def _render_context_section() -> str:
                                   <div style="padding-top:8px;">
 
                                   <div class="chat-field-label">保存メッセージ数</div>
-                                  <input type="number" id="chat-stored-msgs" class="chat-field-input" value="200" min="2" max="2000" />
+                                  <input type="number" id="chat-stored-msgs" class="chat-field-input" value="1000" min="2" max="2000" />
                                   <div class="chat-field-hint">SQLiteに保存する最大メッセージ数（セッション永続化用）</div>
 
                                   <div class="chat-field-label">トークン上限</div>
@@ -155,10 +115,6 @@ def _render_context_section() -> str:
                                     <option value="normal">標準</option>
                                     <option value="aggressive">強力</option>
                                   </select>
-
-                                  <div class="chat-field-label">完全保持ターン数</div>
-                                  <input type="number" id="chat-keep-recent" class="chat-field-input" value="2" min="0" />
-                                  <span class="setting-hint">AIが要約せず完全に保持する最新の会話ターン数です。</span>
 
                                   <div class="chat-field-label">記憶プリロード数</div>
                                   <input type="number" id="chat-memory-preload" class="chat-field-input" value="5" min="0" max="20" />
