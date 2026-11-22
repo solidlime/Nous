@@ -1,5 +1,7 @@
 # 約束・Goals・Core Memory Blocks 削除計画（v2 — 事前アーキテクチャ判断反映済み）
 
+> **ステータス: 実装完了** (2026-11-22)。実装: 3d289d5c (113 files, +262/−5303, 4レーン+追尾掃除)。REVIEW: ルアン・メェイ PASS — 掃き残し5件は同コミット反映。GATE 全緑（pytest 3385/vitest 420/ruff/mypy baseline 同期/docs-drift 66-67%/実ブラウザ 3面）。残課題は末尾の完了記録へ。
+
 日付: 2026-11-22 / トリエージ: 本格 → フルパイプライン + 事前アーキテクチャ判断
 v2: ルアン・メェイ（Oracle）事前判断 BLOCK → 指摘18件を全反映（判定記録は末尾）。
 **注意: 本文の行番号は目安（実ファイルとずれあり）。実装は行番号ではなくシンボル名・コード内容で位置を特定すること。**
@@ -149,3 +151,11 @@ v2: ルアン・メェイ（Oracle）事前判断 BLOCK → 指摘18件を全反
 - 判定: **BLOCK**（v1 計画に対し18件: BLOCKER 5 / MAJOR 5 / FYI 7 / NIT 1）
 - v2 で全件反映: ① commitments 兼用 → insights 専用で残置（最重要）② cue.py keep-list に3定数追加 ③ hook の第2書き込み経路（_apply_commitment・3要素タプル）完全削除 ④ test_tool_called_invariant.py 追加 ⑤ _tools_persona.py の tokens import 削除 ⑥ docs v2 合成見出しの部分削除 ⑦ memory_extractor/prompts/hook の連鎖 ⑧ prospective_worker の run_agent_tasks 残置明記 ⑨ Lane 4 テスト拡充（legacy_schema_init_80 の DELETE FROM 問題含む）⑩ mypy baseline 再生成 ⑪ sections/base.py を Lane 1 所有へ ⑫ _hidden 残置 ⑬ dashCache.blocks 追加箇所 ⑭ definitions.py schedule_task 説明 ⑮ docs_drift_baseline は commitments 残置で無修正 ⑯ activity.js prospective.due ⑰ legacy goals/promises は残置明記 ⑱ PROMISE_MAX_CHARS 削除
 - 静的確認のみ（pytest/mypy/vitest 未実行）→ GATE フェーズで全検証
+
+## 完了記録（2026-11-22）
+
+- **実装コミット**: 3d289d5c — 113 files (+262/−5303)。4レーン並列（#011 glm-5.3 ×4）+ オーケストレーター追尾掃除（static 未使用 import 4ファイル・mypy-baseline 手動行削除同期・shell-critical.css 注記）
+- **REVIEW**: ルアン・メェイ **PASS**。指摘7件のうち5件（死 mock 3行・docstring 1語・古びコメント×2・backup_restore.md 注記）をコミット前に反映。残る指摘→下記残課題
+- **GATE 実測**: pytest 3385 passed/0 failed/4 skipped（収集0）・vitest 39 files/420 tests・ruff 0・mypy baseline 同期済み（新規エラー0）・coverage 66-67%（閾値60%クリア）・docs-drift OK (mcp_tools=18, http_routes=77)・実ブラウザ: chat（/goal 消滅・insights 描画・memories タブ・検索・感情表示）+ overview 3面 異常なし
+- **逸脱（報告済み・REVIEW 静的支持）**: test_prospective_cue.py は「due 境界分」でなく全削除（agent:task 系は test_prospective_worker_tasks.py に全量別存続だったため）／test_tools_persona.py 見出し抑制テストは top/recent 重複除外機構で同等検証に書き換え／test_memory_versions.py はリスト外だが stale block fake 掃除で追加／CSS は列挙外クラスも grep 死確認済みで追尾削除
+- **残課題**: ① recall-weaver SKILL.md の promise 掘り手順（書き込み経路消滅後の運用方針 — 過去記憶のみ掘るで良いか次回確定、~/.agents/skills 側にも同期）② playwright 両 .js は期待更新+node --check のみで CI 初回実行時に実機検証 ③ Windows 本番 pi 拡張 session-start-inject.ts の節抽出挙動は事後報告対象 ④ 契約テスト実行は pact-python 導入環境で（未インストール・既存赤）⑤ jsonl の blocks は今後インポートされない（仕様変更・既計画どおり）
