@@ -129,7 +129,9 @@ async def main() -> int:
             result = close()
             if asyncio.iscoroutine(result):
                 await result
-    print(f"合計孤児: {total_orphans}" + ("（削除済み）" if args.apply else "（dry-run のため未削除 — --apply で実行）"))
+    print(
+        f"合計孤児: {total_orphans}" + ("（削除済み）" if args.apply else "（dry-run のため未削除 — --apply で実行）")
+    )
     return 0
 
 
