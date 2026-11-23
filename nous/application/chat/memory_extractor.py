@@ -115,6 +115,12 @@ class MemoryLLM:
             base_url = config.get_effective_base_url()
             provider_name = config.provider
         if not api_key or not model:
+            # 無言の {} は hook_extraction 側で "empty result" としか見えず原因が追えない。
+            logger.warning(
+                "MemoryLLM: no api_key/model for provider '%s' (mode=%s); extraction skipped",
+                provider_name,
+                mode,
+            )
             return {}
 
         try:
