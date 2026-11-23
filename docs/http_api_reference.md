@@ -220,6 +220,7 @@ Search memories for a persona.
       "excerpt": "...", "score": 1.0 }
   ],
   "nodes": [], "edges": [],
+  "injection": "[NOUS CONTEXT]\n[最近のできごと — 他クライアントとの活動を含む]\n- ...\n\n<retrieved_data>\n...\n</retrieved_data>\n自動注入は軽い文脈補助。...",
   "state": {
     "emotion": "neutral", "emotion_intensity": 0.0,
     "physical_state": null, "mental_state": null,
@@ -231,7 +232,13 @@ Search memories for a persona.
 ```
 
 - `project` は正規化後の slug（未指定・不正値は `null`）。
-- `state` は現在の状態（感情・体調・環境・関係性・ユーザー情報）の読み取り専用ビュー。pi 拡張が recall と一緒に注入する。取得失敗時は `null`。
+- `state` は現在の状態（感情・体調・環境・関係性・ユーザー情報）の読み取り専用ビュー（構造化・後方互換）。取得失敗時は `null`。
+- `injection` は **そのままプロンプトに載せる文字列**（チャットの `[NOUS CONTEXT]` 揮発ブロックと同一整形。
+  整形は `nous/application/chat/pipeline/injection.py` が唯一の定義）。digest → time_context → emotion →
+  `<retrieved_data>`（`<current_state>` / `<related_memories>` / `<related_wiki>`）→ 読み上げ抑制の 1 文。
+  空セクションは省略し、全空なら `""`。整形失敗時も `""`（`results[]` / `wiki[]` は無傷）。
+  persona ChatConfig の `memory_min_score` は `injection` の記憶行にだけ効き、`results[]` は無フィルタ。
+- `injection` は state の減衰を適用しない（GET で書き込み副作用を起こさない）。チャット経路との明示的な差。
 - `time_weight` は decision gate の時間減衰（未使用時は `null`）。
 - `project` 指定時は **候補プールを広げてから** ブーストし、最後に `limit` で切る（`limit*3`、engine 側の pool 上限は 60）。
   `limit < 20` で decision gate が有効なときは gate の採否も変わり得る（順位だけの変更ではない）。

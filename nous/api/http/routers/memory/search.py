@@ -207,6 +207,61 @@ def _state_digest(ctx, persona: str) -> dict | None:
         return None
 
 
+def _load_chat_config(persona: str):
+    """persona の ChatConfig。読み込み失敗はデフォルトに倒す（注入だけが欠ける）。"""
+    from nous.config.settings import get_settings
+    from nous.domain.config.chat_config import ChatConfig, ChatConfigFileRepository
+
+    try:
+        return ChatConfigFileRepository(get_settings().data_root).get(persona)
+    except Exception:
+        logger.warning("chat config load failed for '%s': using defaults", persona, exc_info=True)
+        return ChatConfig(persona=persona)
+
+
+async def _build_injection(ctx, persona: str, rows: list, wiki_hits: list, config) -> str:
+    """チャットと同じ整形で注入ブロックを組み立てる（pi 拡張がそのまま載せる）。
+
+    ``_passes_min_score`` は注入の記憶行にだけ適用する（``results[]`` は無フィルタ）。
+    """
+    from nous.application.chat.pipeline.context_loader import _build_context_section
+    from nous.application.chat.pipeline.injection import build_injection_block, format_memory_lines, format_wiki_lines
+    from nous.application.chat.pipeline.memory_retriever import _passes_min_score
+    from nous.application.chat.pipeline.prepare import _build_time_context, state_to_raw
+
+    min_score = getattr(config, "memory_min_score", None)
+    memories, _ = format_memory_lines([r for r in rows if _passes_min_score(r, min_score)])
+
+    state = None
+    state_result = ctx.persona_service.get_context(persona)
+    if isinstance(state_result, Success):
+        state = state_result.value
+    context_section = ""
+    if state is not None:
+        # 減衰は適用しない（GET で書き込み副作用を起こさない — chat との明示的な差）。
+        context_section = await _build_context_section(
+            ctx,
+            state,
+            None,
+            compress_mode=getattr(config, "context_compression_mode", "auto"),
+            emotion_bands=(
+                getattr(config, "emotion_hint_low", 0.35),
+                getattr(config, "emotion_hint_high", 0.7),
+            ),
+            config=config,
+        )
+
+    return build_injection_block(
+        ctx,
+        time_context=_build_time_context(state) if state is not None else "",
+        state_raw=state_to_raw(state) if state is not None else {},
+        context_section=context_section,
+        memories=memories,
+        wiki=format_wiki_lines(wiki_hits, k=2),
+        config=config,
+    )
+
+
 def register_search_routes(mcp) -> None:
     @mcp.custom_route("/api/search/{persona}", methods=["GET"])
     async def search_memories(request: Request) -> JSONResponse:
@@ -324,6 +379,12 @@ def register_search_routes(mcp) -> None:
             except Exception as wiki_exc:
                 logger.debug("wiki search unavailable: %s", wiki_exc)
                 wiki_hits = []
+            # 注入ブロック（chat と同一整形）。失敗しても本文検索・results[] は返す。
+            try:
+                injection = await _build_injection(ctx, persona, result.value, wiki_hits, _load_chat_config(persona))
+            except Exception as injection_exc:
+                logger.debug("injection build unavailable: %s", injection_exc)
+                injection = ""
             results = [
                 {
                     "memory": _memory_to_dict(r.memory),
@@ -345,6 +406,8 @@ def register_search_routes(mcp) -> None:
                     "nodes": entity_nodes,
                     "edges": entity_edges,
                     "state": _state_digest(ctx, persona),
+                    # pi 拡張はこの文字列をそのまま注入する（整形は Python 側に一本化）
+                    "injection": injection,
                 }
             )
         # 最終防衛線

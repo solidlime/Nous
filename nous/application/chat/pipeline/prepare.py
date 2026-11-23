@@ -24,6 +24,7 @@ from nous.application.chat.pipeline.emotion_decay import (  # noqa: F401
     _RECENCY_LAMBDA,
     _compute_recency_decay,
 )
+from nous.application.chat.pipeline.injection import _build_digest, state_to_raw  # noqa: F401
 from nous.application.chat.pipeline.memory_retriever import (  # noqa: F401
     _format_memory_hint,
     _passes_min_score,
@@ -31,7 +32,6 @@ from nous.application.chat.pipeline.memory_retriever import (  # noqa: F401
     _search_memories,
 )
 from nous.domain.shared.result import Success
-from nous.domain.shared.time_utils import relative_time_str
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
@@ -80,31 +80,6 @@ def _recall_query_with_task_context(ctx, session, current_user_message: str) -> 
     recall_query = _build_recall_query(session, current_user_message)
     terms = _task_context_terms(ctx)
     return f"{recall_query} {terms}" if terms else recall_query
-
-
-def _build_digest(ctx, config) -> str:
-    """§1 Recency digest: 直近記憶を updated_at 降順で N 件（クエリ一致不要・consumed 済みも含む）。"""
-    n = int(getattr(config, "memory_digest_count", 5) or 0)
-    if n <= 0:
-        return ""
-    try:
-        result = ctx.memory_service.get_recent(limit=n)
-        memories = result.value if isinstance(result, Success) else []
-        if not memories:
-            return ""
-        lines = ["[最近のできごと — 他クライアントとの活動を含む]"]
-        for m in memories:
-            content = (getattr(m, "content", "") or "").strip()[:200]
-            if not content:
-                continue
-            updated_at = getattr(m, "updated_at", None)
-            ts = relative_time_str(updated_at) if updated_at else ""
-            ts_str = f" ({ts})" if ts else ""
-            lines.append(f"- {ts_str}{content}")
-        return "\n".join(lines) if len(lines) > 1 else ""
-    except Exception:
-        logger.warning("PrepareStep: digest build failed", exc_info=True)
-        return ""
 
 
 def _build_body_decay_note(before: dict, after: dict, before_last_conv) -> str:
@@ -198,15 +173,8 @@ class PrepareStep:
             if relationship_note:
                 decay_note = f"{decay_note}\n{relationship_note}" if decay_note else relationship_note
 
-            # state_raw: シリアライズ可能な dict
-            turn_ctx.state_raw = (
-                {
-                    k: str(v) if not isinstance(v, (str, int, float, bool, list, dict, type(None))) else v
-                    for k, v in vars(state).items()
-                }
-                if hasattr(state, "__dict__")
-                else {}
-            )
+            # state_raw: シリアライズ可能な dict（両経路で共有）
+            turn_ctx.state_raw = state_to_raw(state)
 
             # time_context ブロック（揮発側: [NOUS CONTEXT] の user メッセージに入る。
             # system prompt に入れると分単位で変わるため cache が毎ターン切れる）。
@@ -247,9 +215,6 @@ class PrepareStep:
             results = await asyncio.gather(context_task, memory_task, return_exceptions=True)
             context_section = results[0]
             memory_result = results[1]
-
-            # §1 Recency digest（同期 API のため gather 後に構築）
-            turn_ctx.recency_digest = _build_digest(ctx, config)
 
             if not isinstance(context_section, str):
                 logger.warning("PrepareStep: context_section build failed: %s", context_section)

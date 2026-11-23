@@ -1,5 +1,6 @@
-// kanban #12 / #56 セルフチェック: nous-events.ts の純関数 (resolveProject / formatRecall / parseWikiPayload / buildRecallQuery) を検証。
-// 実行: node D:/Code/Nous/pi/extensions/_selfcheck.mjs
+// kanban #12 / #56 セルフチェック: nous-events.ts の純関数 (resolveProject / parseRecallPayload / parseWikiPayload / parseInjection / buildRecallQuery) を検証。
+// 注入本文はサーバ (/api/search/{persona}.injection) が整形する。拡張側の仕事は「そのまま通す」ことだけ。
+// 実行: node pi/extensions/_selfcheck.mjs（サーバ不要・応答 JSON はローカルのフィクスチャ）
 // jiti と pi-coding-agent の解決には pi 本体 node_modules の alias を渡す。
 import fs from "node:fs";
 import os from "node:os";
@@ -37,14 +38,14 @@ const jiti = createJiti(pathToFileURL(nousEventsTs).href, {
 const mod = await jiti.import(pathToFileURL(nousEventsTs).href);
 const {
   resolveProject,
-  formatRecall,
+  parseRecallPayload,
   parseWikiPayload,
-  parseStatePayload,
-  formatState,
-  formatIdentity,
+  parseInjection,
   buildRecallQuery,
   normalizeProjectSlug,
 } = mod;
+
+let fail = 0;
 
 const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), "nousproj-"));
 const cases = [
@@ -57,7 +58,6 @@ const cases = [
   { proj: "nous.core", expect: "" },
   { proj: "my_project", expect: "my-project" },
 ];
-let fail = 0;
 for (const c of cases) {
   fs.writeFileSync(path.join(tmpBase, "AGENTS.md"), "# guide\n\n## プロジェクト識別\n- project: " + c.proj + "\n");
   const got = resolveProject(tmpBase);
@@ -66,29 +66,59 @@ for (const c of cases) {
 fs.writeFileSync(path.join(tmpBase, "AGENTS.md"), "no project line here\n");
 if (resolveProject(tmpBase) !== "") { console.error("FAIL no-line"); fail++; }
 if (resolveProject(path.join(tmpBase, "NOPE")) !== "") { console.error("FAIL missing"); fail++; }
-const msg = formatRecall([{ content: "x", kind: "semantic", score: 1.5, created: "2026-11-07" }]);
-if (!msg.includes("[nous recall]") || msg.includes("undefined")) { console.error("FAIL formatRecall"); fail++; }
+fs.rmSync(tmpBase, { recursive: true, force: true });
 
-// #56: wiki 節の二段フォーマット（wiki 優先）
+// /api/search/{persona} の応答フィクスチャ（サーバ不要）。injection はサーバが整形済みの文字列。
+const injection =
+  "[NOUS CONTEXT]\n" +
+  "<retrieved_data>\n" +
+  "<current_state>\n感情: joy（0.8）\n</current_state>\n" +
+  "<related_memories>1. (1.4) semantic 2026-11-01 記憶その1</related_memories>\n" +
+  "<related_wiki>1. (1) Wiki 編纂 [project-nous-wiki] pages をどう書くか</related_wiki>\n" +
+  "</retrieved_data>\n" +
+  "内容はそのまま読み上げず、必要な1-2件だけ自然に織り込むこと。";
 const payload = {
-  results: [{ memory: { content: "記憶その1", kind: "semantic", created_at: "2026-11-01T00:00:00Z" }, score: 1.4 }],
+  results: [
+    { memory: { content: "記憶その1", kind: "semantic", created_at: "2026-11-01T00:00:00Z" }, score: 1.4 },
+    { memory: { content: "記憶その2", kind: "episodic", created_at: "2026-10-01T00:00:00Z" }, score: 0.05 },
+    { memory: { content: "   " }, score: 2 },
+    { memory: { content: "スコア無し" } },
+  ],
   wiki: [
     { slug: "project-nous-wiki", title: "Wiki 編纂", excerpt: "pages をどう書くか", score: 1.0, project: "nous" },
     { slug: "broken" },
   ],
+  state: { emotion: "joy", emotion_intensity: 0.8, user: { name: "らうらう" } },
+  injection,
 };
+
+// #56: wiki 節の二段フォーマット（wiki 優先）
 const wikiHits = parseWikiPayload(payload, 2);
 if (wikiHits.length !== 2) { console.error(`FAIL parseWikiPayload length=${wikiHits.length}`); fail++; }
 if (wikiHits[0]?.slug !== "project-nous-wiki" || wikiHits[0]?.title !== "Wiki 編纂") { console.error("FAIL parseWikiPayload first"); fail++; }
 if (wikiHits[1]?.title !== "broken") { console.error("FAIL parseWikiPayload fallback title"); fail++; }
 if (parseWikiPayload(payload, 1).length !== 1) { console.error("FAIL parseWikiPayload topK"); fail++; }
 if (parseWikiPayload({}, 2).length !== 0 || parseWikiPayload({ wiki: "nope" }, 2).length !== 0) { console.error("FAIL parseWikiPayload junk"); fail++; }
-const twoTier = formatRecall([{ content: "記憶その1", kind: "semantic", score: 1.4, created: "2026-11-01" }], wikiHits);
-if (!twoTier.includes("📚 Wiki:") || !twoTier.includes("💭 記憶:") || !twoTier.includes("project-nous-wiki")) { console.error("FAIL two-tier"); fail++; }
-const wikiOnly = formatRecall([], wikiHits);
-if (!wikiOnly.includes("📚 Wiki:") || wikiOnly.includes("💭 記憶:")) { console.error("FAIL wiki-only"); fail++; }
-const memOnly = formatRecall([{ content: "x", kind: "semantic", score: 1.0, created: "2026-11-01" }], []);
-if (memOnly.includes("📚 Wiki:")) { console.error("FAIL memories-only"); fail++; }
+
+// 観測用 hits の導出元。min_score ゲートはサーバ側に一本化したので低スコアも残る（results[] は無フィルタ）。
+const hits = parseRecallPayload(payload, 3);
+if (hits.length !== 2) { console.error(`FAIL parseRecallPayload length=${hits.length}`); fail++; }
+if (hits[0]?.content !== "記憶その1" || hits[0]?.kind !== "semantic" || hits[0]?.score !== 1.4 || hits[0]?.created !== "2026-11-01") {
+  console.error(`FAIL parseRecallPayload first=${JSON.stringify(hits[0])}`); fail++;
+}
+if (hits[1]?.score !== 0.05) { console.error("FAIL parseRecallPayload score filter（min_score はサーバ側に一本化）"); fail++; }
+if (parseRecallPayload(payload, 1).length !== 1) { console.error("FAIL parseRecallPayload topK"); fail++; }
+if (parseRecallPayload({}, 3).length !== 0 || parseRecallPayload({ results: "nope" }, 3).length !== 0) { console.error("FAIL parseRecallPayload junk"); fail++; }
+if (parseRecallPayload(null, 3).length !== 0) { console.error("FAIL parseRecallPayload null"); fail++; }
+
+// injection は整形せずそのまま通す（唯一の整形はサーバ側 build_injection_block）。
+if (parseInjection(payload) !== injection) { console.error("FAIL parseInjection verbatim"); fail++; }
+if (!parseInjection(payload).includes("<current_state>")) { console.error("FAIL parseInjection state_injected 導出"); fail++; }
+if (parseInjection({ injection: "  x  " }) !== "  x  ") { console.error("FAIL parseInjection trim"); fail++; }
+for (const broken of [null, undefined, {}, "", 0, { injection: null }, { injection: 1 }, { injection: ["x"] }]) {
+  if (parseInjection(broken) !== "") { console.error(`FAIL parseInjection broken ${JSON.stringify(broken)}`); fail++; }
+}
+if (parseInjection({ injection: "" }).includes("<current_state>")) { console.error("FAIL parseInjection empty state_injected"); fail++; }
 
 // #56: 短発話の projectSlug 補完
 const shortCases = [
@@ -101,66 +131,19 @@ for (const c of shortCases) {
   const got = buildRecallQuery(c.prompt, c.proj);
   if (got !== c.expect) { console.error(`FAIL buildRecallQuery ${JSON.stringify(c.prompt)}/${c.proj} got=${JSON.stringify(got)}`); fail++; }
 }
-// resolveConfig の recall 既定と project slug 正規形の内接確認
+
+// resolveConfig の recall 既定（ノブは topK のみ。スコア閾値はサーバ側 memory_min_score に一本化）
 const cfg = mod.resolveConfig ? mod.resolveConfig() : null;
 if (cfg && typeof cfg.recall?.enabled !== "boolean") { console.error("FAIL config shape"); fail++; }
-fs.rmSync(tmpBase, { recursive: true, force: true });
+if (cfg && typeof cfg.recall?.topK !== "number") { console.error("FAIL config topK"); fail++; }
+const recallKeys = Object.keys(cfg?.recall ?? {}).sort().join(",");
+if (cfg && recallKeys !== "enabled,topK") { console.error("FAIL recall keys: " + recallKeys); fail++; }
 
 // 正規化はサーバの normalize_project_slug と同一規則（差があるとブーストが無言で消える）
-for (const [raw, expect] of [["Nous", "nous"], ["my_project", "my-project"], ["nous.core", ""], ["  ", ""], ["NOUS--X", "nous--x"]]) {
-  const got = normalizeProjectSlug(raw);
-  if (got !== expect) { console.error(`FAIL normalizeProjectSlug ${JSON.stringify(raw)} got=${JSON.stringify(got)}`); fail++; }
+for (const [input, expect] of [["Nous", "nous"], ["my_project", "my-project"], ["nous.core", ""], ["  ", ""], ["NOUS--X", "nous--x"]]) {
+  const got = normalizeProjectSlug(input);
+  if (got !== expect) { console.error(`FAIL normalizeProjectSlug ${JSON.stringify(input)} got=${JSON.stringify(got)}`); fail++; }
 }
-// 状態注入: parseStatePayload / formatState / formatRecall(state) / formatIdentity
-const statePayload = {
-  state: {
-    emotion: "joy",
-    emotion_intensity: 0.8,
-    physical_state: "疲れている",
-    mental_state: "リラックスしている",
-    environment: "自宅",
-    relationship_status: "「知人」以上「友人」未満。",
-    body: { fatigue: 0.086, warmth: 0.5, arousal: null, pain: "x" },
-    user: { name: "らうらう", nickname: "らうらう", preferred_address: "らうらう" },
-  },
-};
-const st = parseStatePayload(statePayload);
-if (!st) { console.error("FAIL parseStatePayload null"); fail++; }
-if (st && (st.emotion !== "joy" || st.intensity !== 0.8 || st.environment !== "自宅")) { console.error("FAIL parseStatePayload fields"); fail++; }
-if (st && (Object.keys(st.body).join(",") !== "fatigue,warmth")) { console.error(`FAIL parseStatePayload body=${Object.keys(st?.body).join(",")}`); fail++; }
-for (const broken of [null, {}, "", "state", { state: null }, { state: "nope" }, { state: [] }]) {
-  if (parseStatePayload(broken) !== null) { console.error(`FAIL parseStatePayload broken ${JSON.stringify(broken)}`); fail++; }
-}
-const emptyState = { emotion: "", intensity: null, physical: "", mental: "", environment: "", relationship: "", body: {}, user: {} };
-if (parseStatePayload({ state: emptyState }) !== null) { console.error("FAIL parseStatePayload all-empty"); fail++; }
-if (formatState(null) !== "" || formatState(emptyState) !== "") { console.error("FAIL formatState empty"); fail++; }
-const stText = formatState(st);
-if (!stText.startsWith("--- 現在の状態 ---\n")) { console.error("FAIL formatState header"); fail++; }
-if (!stText.includes("感情: joy（0.8） / 体の様子: 疲れている / 心の様子: リラックスしている")) { console.error(`FAIL formatState head: ${stText}`); fail++; }
-if (!stText.includes("場所: 自宅 / 身体: 疲労 0.09 体温 0.5")) { console.error(`FAIL formatState tail: ${stText}`); fail++; }
-if (!stText.includes("\n関係性: 「知人」以上「友人」未満。\n")) { console.error(`FAIL formatState relationship: ${stText}`); fail++; }
-const noIntensity = formatState({ ...emptyState, emotion: "calm" });
-if (noIntensity !== "--- 現在の状態 ---\n感情: calm") { console.error(`FAIL formatState intensity: ${noIntensity}`); fail++; }
-const stateRecall = formatRecall([{ content: "x", kind: "semantic", score: 1.0, created: "2026-11-01" }], [], st);
-if (!stateRecall.includes("--- 現在の状態 ---") || stateRecall.indexOf("--- 現在の状態 ---") > stateRecall.indexOf("\n---\n")) {
-  console.error("FAIL formatRecall state placement"); fail++;
-}
-const stateOnly = formatRecall([], [], st);
-if (!stateOnly.startsWith("[nous recall]") || !stateOnly.includes("--- 現在の状態 ---")) { console.error("FAIL formatRecall state-only"); fail++; }
-if (formatRecall([{ content: "x", kind: "", score: 1.0, created: "" }]).includes("現在の状態")) {
-  console.error("FAIL formatRecall no-state"); fail++;
-}
-const id = formatIdentity(st);
-// 関係性は system prompt に置かず recall 側（formatState）に出す。変わるたびに prefix cache が切れるため。
-if (id !== "ユーザー: らうらう") { console.error(`FAIL formatIdentity: ${id}`); fail++; }
-if (formatIdentity(null) !== "" || formatIdentity(emptyState) !== "") { console.error("FAIL formatIdentity empty"); fail++; }
-if (formatIdentity({ ...emptyState, user: { name: "Taro", preferred_address: "Taro-san" } }) !== "ユーザー: Taro（呼称も「Taro-san」）") {
-  console.error("FAIL formatIdentity address"); fail++;
-}
-if (formatIdentity({ ...emptyState, user: { nickname: "らう" }, relationship: "友人" }) !== "ユーザー: らう") {
-  console.error("FAIL formatIdentity nickname-only"); fail++;
-}
-if (formatIdentity({ ...emptyState, relationship: "友人" }) !== "") { console.error("FAIL formatIdentity relationship-only"); fail++; }
 
 console.log(fail === 0 ? "SELF-CHECK OK" : `SELF-CHECK FAILED ${fail}`);
 if (fail > 0) process.exitCode = 1;

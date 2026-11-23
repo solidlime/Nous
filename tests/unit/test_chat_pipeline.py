@@ -822,7 +822,7 @@ class TestSamplingInternalizedInference:
 
 
 class TestVolatileContextInjection:
-    """volatile_context と recency_digest が 1 通の合成 user メッセージになる。"""
+    """揮発ブロック（digest + 記憶。[NOUS CONTEXT] ヘッダはブロック側）が 1 通になる。"""
 
     async def _run(self, turn_ctx, captured: list[list]) -> None:
         from unittest.mock import MagicMock, patch
@@ -856,7 +856,7 @@ class TestVolatileContextInjection:
             async for _ in InferenceStep().run(MagicMock(), config, [], turn_ctx, MagicMock()):
                 pass
 
-    def _turn_ctx(self, digest: str = "", volatile: str = ""):
+    def _turn_ctx(self, volatile: str = ""):
         from unittest.mock import MagicMock
 
         turn_ctx = MagicMock()
@@ -865,16 +865,14 @@ class TestVolatileContextInjection:
         turn_ctx.full_response = ""
         turn_ctx.user_message = "今回の質問"
         turn_ctx.system_prompt = "static sys"
-        turn_ctx.recency_digest = digest
         turn_ctx.volatile_context = volatile
         return turn_ctx
 
     @pytest.mark.asyncio
     async def test_volatile_and_digest_merged_into_one_message(self):
         captured: list = [None]
-        await self._run(
-            self._turn_ctx(digest="直近記憶", volatile="<related_memories>- 記憶1</related_memories>"), captured
-        )
+        block = "[NOUS CONTEXT]\n直近記憶\n<related_memories>- 記憶1</related_memories>"
+        await self._run(self._turn_ctx(volatile=block), captured)
 
         msgs = captured[0]
         assert msgs[-1].role == "user"
@@ -884,6 +882,7 @@ class TestVolatileContextInjection:
         assert synthetic.content.startswith("[NOUS CONTEXT]")
         assert "直近記憶" in synthetic.content
         assert "<related_memories>- 記憶1</related_memories>" in synthetic.content
+        assert synthetic.content == block
         # 合成は 1 通だけ（分割して 2 通にしない）
         assert sum(1 for m in msgs if "NOUS CONTEXT" in str(m.content)) == 1
 
@@ -1785,7 +1784,6 @@ class TestInferenceBugfixes:
         turn_ctx.tool_calls_log = tool_calls_log if tool_calls_log is not None else []
         turn_ctx.skills_raw = []
         turn_ctx.segments = []
-        turn_ctx.recency_digest = ""
         turn_ctx.was_truncated = False
         return turn_ctx
 

@@ -182,128 +182,8 @@ export function parseWikiPayload(payload: unknown, topK: number): RecallWikiHit[
   return hits;
 }
 
-/** /api/search/{persona} の応答から現在の状態を抽出（壊れていれば null）。 */
-export interface RecallState {
-  emotion: string;
-  intensity: number | null;
-  physical: string;
-  mental: string;
-  environment: string;
-  relationship: string;
-  body: Record<string, number>;
-  user: Record<string, string>;
-}
-
-function asRecord(value: unknown): Record<string, unknown> | null {
-  return value && typeof value === "object" && !Array.isArray(value) ? (value as Record<string, unknown>) : null;
-}
-
-export function parseStatePayload(payload: unknown): RecallState | null {
-  const raw = asRecord((payload as any)?.state);
-  if (!raw) return null;
-  const str = (value: unknown) => (typeof value === "string" ? value.trim() : "");
-  const body: Record<string, number> = {};
-  for (const [key, value] of Object.entries(asRecord(raw.body) ?? {})) {
-    if (typeof value === "number" && Number.isFinite(value)) body[key] = value;
-  }
-  const user: Record<string, string> = {};
-  for (const [key, value] of Object.entries(asRecord(raw.user) ?? {})) {
-    const text = typeof value === "string" ? value.trim() : "";
-    if (text) user[key] = text;
-  }
-  const state: RecallState = {
-    emotion: str(raw.emotion),
-    intensity: typeof raw.emotion_intensity === "number" && Number.isFinite(raw.emotion_intensity) ? raw.emotion_intensity : null,
-    physical: str(raw.physical_state),
-    mental: str(raw.mental_state),
-    environment: str(raw.environment),
-    relationship: str(raw.relationship_status),
-    body,
-    user,
-  };
-  const empty =
-    !state.emotion &&
-    !state.physical &&
-    !state.mental &&
-    !state.environment &&
-    !state.relationship &&
-    Object.keys(body).length === 0 &&
-    Object.keys(user).length === 0;
-  return empty ? null : state;
-}
-
-// 身体指標の表示順とラベル（未知キーはキー名のまま末尾）。
-const BODY_ORDER = ["fatigue", "warmth", "arousal", "heart_rate", "pain"];
-const BODY_LABELS: Record<string, string> = {
-  fatigue: "疲労",
-  warmth: "体温",
-  arousal: "覚醒",
-  heart_rate: "心拍",
-  pain: "痛み",
-};
-
-/** recall に足す「現在の状態」ブロック。空なら "". */
-export function formatState(state: RecallState | null): string {
-  if (!state) return "";
-  const lines: string[] = [];
-  const head: string[] = [];
-  if (state.emotion) {
-    const intensity = state.intensity === null ? "" : `（${state.intensity}）`;
-    head.push(`感情: ${state.emotion}${intensity}`);
-  }
-  if (state.physical) head.push(`体の様子: ${state.physical}`);
-  if (state.mental) head.push(`心の様子: ${state.mental}`);
-  if (head.length > 0) lines.push(head.join(" / "));
-  // 関係性は更新頻度が高くないが、system prompt 側に置くと更新のたびに prefix cache が切れる
-  if (state.relationship) lines.push(`関係性: ${state.relationship}`);
-
-  const tail: string[] = [];
-  if (state.environment) tail.push(`場所: ${state.environment}`);
-  const keys = [
-    ...BODY_ORDER.filter((key) => key in state.body),
-    ...Object.keys(state.body).filter((key) => !BODY_ORDER.includes(key)),
-  ];
-  const body = keys
-    .map((key) => `${BODY_LABELS[key] ?? key} ${Math.round(state.body[key] * 100) / 100}`)
-    .join(" ");
-  if (body) tail.push(`身体: ${body}`);
-  if (tail.length > 0) lines.push(tail.join(" / "));
-
-  return lines.length === 0 ? "" : ["--- 現在の状態 ---", ...lines].join("\n");
-}
-
-/** system prompt に固定する身元ブロックの中身（タグは Pi が付ける）。空なら "".
- *
- * ここは**滅多に変わらないものだけ**置く。毎ターン同じ文字列を返せば prefix cache は保たれるが、
- * 1文字でも変わると system prompt の patch が出て cache が切れる。 */
-export function formatIdentity(state: RecallState | null): string {
-  if (!state) return "";
-  const name = state.user.name ?? "";
-  const nickname = state.user.nickname ?? "";
-  const address = state.user.preferred_address ?? "";
-  const lines: string[] = [];
-  const who = name || nickname;
-  if (who) {
-    const call = address || nickname;
-    lines.push(call && call !== who ? `ユーザー: ${who}（呼称も「${call}」）` : `ユーザー: ${who}`);
-  }
-  return lines.join("\n");
-}
-
-// 直近に観測した身元ブロック。section は毎ターン base から作り直されるので、取得失敗や早期 return の
-// ターンでも落とさないよう保持する（消えると system prompt が変わって cache が切れる）。
-let cachedIdentity = "";
-
-/** `user_identity` section を載せ直す。新しい値があればキャッシュも更新する。 */
-function applyIdentity(event: any, identity?: string): void {
-  if (identity) cachedIdentity = identity;
-  if (!cachedIdentity || !event?.systemPromptOptions) return;
-  if (event.systemPromptOptions.sections) event.systemPromptOptions.sections.user_identity = cachedIdentity;
-  else event.systemPromptOptions.sections = { user_identity: cachedIdentity };
-}
-
 /** /api/search/{persona} の応答から注入対象を抽出（壊れていれば空配列）。 */
-export function parseRecallPayload(payload: unknown, minScore: number, topK: number): RecallHit[] {
+export function parseRecallPayload(payload: unknown, topK: number): RecallHit[] {
   const rows = (payload as any)?.results;
   if (!Array.isArray(rows)) return [];
   const hits: RecallHit[] = [];
@@ -312,7 +192,7 @@ export function parseRecallPayload(payload: unknown, minScore: number, topK: num
     const content = typeof memory?.content === "string" ? memory.content.trim() : "";
     if (!content) continue;
     const score = typeof row?.score === "number" ? row.score : Number(row?.score);
-    if (!Number.isFinite(score) || score < minScore) continue;
+    if (!Number.isFinite(score)) continue;
     hits.push({
       content: ellipsize(content.replace(/\s+/g, " ").trim(), MAX_RECALL_CONTENT),
       kind: typeof memory.kind === "string" ? memory.kind : "",
@@ -324,6 +204,12 @@ export function parseRecallPayload(payload: unknown, minScore: number, topK: num
   return hits;
 }
 
+/** /api/search/{persona} の整形済み注入ブロック。空文字なら注入なし（整形の唯一の定義はサーバ側）。 */
+export function parseInjection(payload: unknown): string {
+  const raw = (payload as any)?.injection;
+  return typeof raw === "string" ? raw : "";
+}
+
 /** recall に送るクエリを組み立てる。短い発話は projectSlug を語彙として足す。 */
 export function buildRecallQuery(prompt: string, projectSlug: string): string {
   const text = prompt.replace(/\s+/g, " ").trim();
@@ -332,44 +218,9 @@ export function buildRecallQuery(prompt: string, projectSlug: string): string {
   return text;
 }
 
-/** 注入する custom message 本文を組み立てる。 */
-export function formatRecall(
-  hits: RecallHit[],
-  wiki: RecallWikiHit[] = [],
-  state: RecallState | null = null,
-): string {
-  const lines: string[] = [
-    "[nous recall] 直近のユーザー発言に関連する過去の記憶（nous-events による自動注入・浅い要約）:",
-  ];
-  if (wiki.length > 0) {
-    lines.push("📚 Wiki:");
-    wiki.forEach((hit, i) => {
-      lines.push(`${i + 1}. (${hit.score}) ${hit.title} [${hit.slug}] ${hit.excerpt}`);
-    });
-  }
-  if (hits.length > 0) {
-    lines.push("💭 記憶:");
-    hits.forEach((hit, i) => {
-      const bits: string[] = [`(${hit.score})`];
-      if (hit.kind) bits.push(hit.kind);
-      if (hit.created) bits.push(hit.created);
-      lines.push(`${i + 1}. ${bits.join(" ")} ${hit.content}`);
-    });
-  }
-  const stateBlock = formatState(state);
-  if (stateBlock) lines.push(stateBlock);
-  lines.push("---");
-  lines.push(
-    "自動注入は毎ユーザーターンの軽い文脈補助。約束・決定・失敗理由の掘り下げや不十分な場合は recall-weaver に従い memory_search/wiki_grep・wiki_read で追加取得する。内容はそのまま読み上げず、必要な1-2件だけ自然に織り込むこと。",
-  );
-  return lines.join("\n");
-}
-
 interface RecallConfig {
   enabled: boolean;
   topK: number;
-  /** REST /api/search の composite スコアで切る最低値（0 = フィルタ無効。尺度が非正規化なので既定は無効）。 */
-  minScore: number;
 }
 
 interface HookConfig {
@@ -431,12 +282,9 @@ export function resolveConfig(): HookConfig {
   const searchApiKey = resolveSearchApiKey(nous, envFile, apiKey);
 
   const recallRaw: any = nous?.recall;
-  const recall: RecallConfig = { enabled: recallRaw?.enabled === true, topK: 3, minScore: 0 };
+  const recall: RecallConfig = { enabled: recallRaw?.enabled === true, topK: 3 };
   if (typeof recallRaw?.top_k === "number" && Number.isFinite(recallRaw.top_k)) {
     recall.topK = Math.max(1, Math.min(10, Math.round(recallRaw.top_k)));
-  }
-  if (typeof recallRaw?.min_score === "number" && Number.isFinite(recallRaw.min_score)) {
-    recall.minScore = Math.max(0, Math.min(1, recallRaw.min_score));
   }
 
   return { endpoint, apiKey: apiKey.trim(), searchApiKey, persona, recall };
@@ -460,8 +308,9 @@ export default function nousEvents(pi: ExtensionAPI): void {
   let config: HookConfig = {
     endpoint: DEFAULT_ENDPOINT,
     apiKey: "",
+    searchApiKey: "",
     persona: DEFAULT_PERSONA,
-    recall: { enabled: false, topK: 3, minScore: 0 },
+    recall: { enabled: false, topK: 3 },
   };
   let warnedNoKey = false;
   let userText = "";
@@ -490,11 +339,13 @@ export default function nousEvents(pi: ExtensionAPI): void {
 
   /** fire-and-forget POST。失敗は 1 行ログ、例外は外へ出さない。 */
   function post(events: unknown[]): void {
-    if (!config.apiKey) return;
+    // 送信先は http(s) のみ（設定由来の値でも sink で allowlist を通す）
+    const endpoint = /^https?:\/\//.test(config.endpoint) ? config.endpoint : "";
+    if (!config.apiKey || !endpoint) return;
     const body = JSON.stringify({ session_id: sessionId, persona: config.persona, events });
     const task = (async () => {
       try {
-        const res = await fetch(config.endpoint, {
+        const res = await fetch(endpoint, {
           method: "POST",
           headers: { "content-type": "application/json", authorization: `Bearer ${config.apiKey}` },
           body,
@@ -559,7 +410,6 @@ export default function nousEvents(pi: ExtensionAPI): void {
     async (event: any, ctx: any) => {
       const setStatus = (text: string) => ctx?.ui?.setStatus?.("nous", text);
       try {
-        applyIdentity(event); // 前のターンで載せた section を載せ直す（base は毎回素の状態から作り直される）
         refreshProject(ctx?.sessionManager?.getCwd?.() ?? "");
         if (!config.recall?.enabled || !config.searchApiKey) return;
         if (event?.messageType !== "user") return; // custom 起点の run には差し込まない
@@ -569,15 +419,12 @@ export default function nousEvents(pi: ExtensionAPI): void {
         if (!query) return;
         const started = Date.now();
         const payload = await fetchRecall(ellipsize(query, MAX_QUERY), config.recall.topK, projectSlug);
-        const hits = parseRecallPayload(payload, config.recall.minScore, config.recall.topK);
+        const hits = parseRecallPayload(payload, config.recall.topK);
         const wikiHits = parseWikiPayload(payload, WIKI_TOP_K);
-        const state = parseStatePayload(payload);
-        // 固定部（ユーザー名・呼称）は system prompt の追加 section に置く。
-        // systemPrompt を返すとプロンプト全体を差し替えてキャッシュが壊れるので触らない。
-        const identity = formatIdentity(state);
-        applyIdentity(event, identity);
+        const injection = parseInjection(payload);
+        const stateInjected = injection.includes("<current_state>");
         const ms = Date.now() - started;
-        if (hits.length === 0 && wikiHits.length === 0 && !state) {
+        if (!injection) {
           setStatus(`nous recall: none · ${ms}ms`);
           return;
         }
@@ -591,20 +438,19 @@ export default function nousEvents(pi: ExtensionAPI): void {
               wiki_hits: wikiHits.length,
               wiki_slugs: wikiHits.map((w) => w.slug),
               project: projectSlug || null,
-              min_score: config.recall.minScore,
-              state_injected: Boolean(state),
+              state_injected: stateInjected,
               ms,
             },
           ),
         ]);
         console.error(`[nous-events] recall: injected ${hits.length} memories + ${wikiHits.length} wiki (${ms}ms)`);
         setStatus(
-          `nous recall: ${hits.length}💭 ${wikiHits.length}📚${state ? " +state" : ""} · top ${(wikiHits[0]?.score ?? hits[0]?.score ?? 0).toFixed(2)} · ${ms}ms`,
+          `nous recall: ${hits.length}💭 ${wikiHits.length}📚${stateInjected ? " +state" : ""} · top ${(wikiHits[0]?.score ?? hits[0]?.score ?? 0).toFixed(2)} · ${ms}ms`,
         );
         return {
           message: {
             customType: "nous-recall",
-            content: formatRecall(hits, wikiHits, state),
+            content: injection,
             display: false,
           },
         };

@@ -280,20 +280,16 @@ class InferenceStep:
         session_messages: list[LLMMessage],
         turn_ctx: ChatTurnContext,
     ) -> list[LLMMessage]:
-        """セッション履歴＋recency digest＋画像/テキストの最新 user メッセージを組み立てる。"""
+        """セッション履歴＋画像/テキストの最新 user メッセージを組み立てる。"""
         messages = list(session_messages)
 
-        # §1 揮発ブロック（recency digest + 現在状態/記憶/スキル/要約）は最新 user 発言の
-        # 直前に 1 通の合成 user メッセージとして置く（非永続化・毎ターン再構築）。
+        # 揮発ブロック（[NOUS CONTEXT] ヘッダ込み・injection.build_injection_block が整形）は
+        # 最新 user 発言の直前に 1 通の合成 user メッセージとして置く（非永続化・毎ターン再構築）。
         # 静的側は system に載っており、会話接頭辞のキャッシュを壊さない。
         # 非 str（テストの MagicMock 等）は載せない
-        volatile = "\n".join(
-            p
-            for p in (getattr(turn_ctx, "recency_digest", ""), getattr(turn_ctx, "volatile_context", ""))
-            if isinstance(p, str) and p
-        )
-        if volatile:
-            messages.append(LLMMessage(role="user", content=f"[NOUS CONTEXT]\n{volatile}"))
+        volatile = getattr(turn_ctx, "volatile_context", "")
+        if isinstance(volatile, str) and volatile:
+            messages.append(LLMMessage(role="user", content=volatile))
 
         if turn_ctx.images:
             if not provider.supports_vision():

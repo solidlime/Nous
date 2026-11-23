@@ -4,11 +4,13 @@ from __future__ import annotations
 
 import asyncio
 import uuid
-from datetime import UTC, datetime
 from typing import TYPE_CHECKING
 
+from nous.application.chat.pipeline.injection import (  # noqa: F401  (再輸出: prepare.py:24 のチェーン維持)
+    _format_memory_hint,
+    format_memory_lines,
+)
 from nous.domain.memory.query_service import resolve_decision_config
-from nous.domain.memory.recall_annotator import RecallAnnotator
 from nous.domain.search.engine import SearchQuery, SearchResult
 from nous.domain.search.policy import RankPolicy
 from nous.domain.shared.result import Success
@@ -18,36 +20,8 @@ from nous.infrastructure.logging.structured import get_logger
 if TYPE_CHECKING:
     from nous.application.use_cases import AppContext
     from nous.domain.config.chat_config import ChatConfig
-    from nous.domain.memory.entities import Memory
 
 logger = get_logger(__name__)
-
-
-def _format_memory_hint(ann) -> str:
-    """アノテーションを自然な日本語のヒント文字列に変換。"""
-    cert_map = {"confident": "確か", "tentative": "たしか", "vague": "うろ覚え", "forgotten": ""}
-    cert = cert_map.get(ann.certainty, "")
-
-    time_map = {
-        "recent": "最近",
-        "days_7": "この前",
-        "days_30": "こないだ",
-        "days_90": "前に",
-        "years": "昔",
-        "long_ago": "ずっと前",
-    }
-    time_hint = time_map.get(ann.time_hint, "")
-
-    source_hint = ""
-    if ann.source_hint == "llm_inferred":
-        source_hint = "推測"
-    elif ann.source_hint == "reflected":
-        source_hint = "洞察"
-
-    parts = [p for p in [cert, time_hint, source_hint] if p]
-    if not parts:
-        return ""
-    return "（" + "・".join(parts) + "）"
 
 
 def _passes_min_score(item, min_score: float | None) -> bool:
@@ -173,36 +147,7 @@ async def _search_memories(
         top[0].score,
     )
 
-    annotator = RecallAnnotator()
-    now = datetime.now(tz=UTC)
-    lines: list[str] = []
-    memories_list: list[Memory] = []
-    for r in top:
-        m = r.memory
-        created_at = getattr(m, "created_at", None)
-        if created_at is not None:
-            if created_at.tzinfo is None:
-                created_at = created_at.replace(tzinfo=UTC)
-            age_days = max(0.0, (now - created_at).total_seconds() / 86400.0)
-        else:
-            age_days = 30.0  # default fallback
-        ann = annotator.annotate(
-            confidence=float(getattr(m, "confidence", 1.0)),
-            age_days=age_days,
-            source_type=str(getattr(m, "source_type", "user_stated")),
-            kind=str(getattr(m, "kind", "semantic")),
-        )
-        if not ann.should_mention:
-            continue
-        memories_list.append(m)
-        if injected_keys is not None:
-            injected_keys.add(m.key)
-        hint = _format_memory_hint(ann)
-        content = getattr(m, "content", str(m))
-        if hint:
-            lines.append(f"{hint} {content}")
-        else:
-            lines.append(content)
+    formatted, memories_list = format_memory_lines(top, injected_keys=injected_keys)
     debug_results = [
         {
             "content": getattr(r.memory, "content", str(r.memory)),
@@ -212,7 +157,7 @@ async def _search_memories(
         }
         for r in top
     ]
-    return "\n".join(lines), {"queries": queries, "results": debug_results}, memories_list
+    return formatted, {"queries": queries, "results": debug_results}, memories_list
 
 
 async def _search_episodes(

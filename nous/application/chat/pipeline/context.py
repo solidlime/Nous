@@ -20,7 +20,6 @@ class ChatTurnContext:
     context_section: str = ""
     time_context: str = ""  # <time_context> ブロック（揮発側: [NOUS CONTEXT] の user メッセージに入る）
     related_memories: str = ""
-    recency_digest: str = ""  # PrepareStep が埋める（§1 直近記憶ダイジェスト）
     state_raw: dict = field(default_factory=dict)
     memories_raw: list[dict] = field(default_factory=list)
     memories_objects: list = field(default_factory=list)
