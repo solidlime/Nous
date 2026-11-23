@@ -6,8 +6,23 @@ import os from "node:os";
 import path from "node:path";
 import { pathToFileURL } from "node:url";
 
-const piRoot = "C:/Users/Owner/AppData/Roaming/npm/node_modules/@earendil-works/pi-coding-agent";
-const jitiLib = `${piRoot}/node_modules/jiti/lib/jiti.mjs`;
+// pi 本体の解決: env → 既知パス候補（Linux/mac の npm-global, Windows の Roaming）。
+const PI_ROOT_CANDIDATES = [
+  process.env.PI_CODING_AGENT_ROOT,
+  "/root/.npm-global/lib/node_modules/@agegr/pi-web/node_modules/@earendil-works/pi-coding-agent",
+  "C:/Users/Owner/AppData/Roaming/npm/node_modules/@earendil-works/pi-coding-agent",
+];
+const piRoot = PI_ROOT_CANDIDATES.find((dir) => typeof dir === "string" && dir && fs.existsSync(dir));
+if (!piRoot) {
+  throw new Error(`pi-coding-agent が見つからない（PI_CODING_AGENT_ROOT を設定するか既知パスに配置）: ${PI_ROOT_CANDIDATES.filter(Boolean).join(", ")}`);
+}
+// jiti は pi 本体の node_modules 配下か、その兄弟（@agegr/pi-web/node_modules）に居る。
+const jitiLib = [
+  `${piRoot}/node_modules/jiti/lib/jiti.mjs`,
+  path.resolve(piRoot, "../jiti/lib/jiti.mjs"),
+  path.resolve(piRoot, "../../jiti/lib/jiti.mjs"),
+].find((file) => fs.existsSync(file));
+if (!jitiLib) throw new Error(`jiti が見つからない（piRoot=${piRoot}）`);
 const nousEventsTs = path.resolve(import.meta.dirname, "nous-events.ts");
 
 const jitiMod = await import(pathToFileURL(jitiLib).href);
@@ -20,7 +35,16 @@ const jiti = createJiti(pathToFileURL(nousEventsTs).href, {
   },
 });
 const mod = await jiti.import(pathToFileURL(nousEventsTs).href);
-const { resolveProject, formatRecall, parseWikiPayload, buildRecallQuery, normalizeProjectSlug } = mod;
+const {
+  resolveProject,
+  formatRecall,
+  parseWikiPayload,
+  parseStatePayload,
+  formatState,
+  formatIdentity,
+  buildRecallQuery,
+  normalizeProjectSlug,
+} = mod;
 
 const tmpBase = fs.mkdtempSync(path.join(os.tmpdir(), "nousproj-"));
 const cases = [
@@ -87,5 +111,54 @@ for (const [raw, expect] of [["Nous", "nous"], ["my_project", "my-project"], ["n
   const got = normalizeProjectSlug(raw);
   if (got !== expect) { console.error(`FAIL normalizeProjectSlug ${JSON.stringify(raw)} got=${JSON.stringify(got)}`); fail++; }
 }
+// 状態注入: parseStatePayload / formatState / formatRecall(state) / formatIdentity
+const statePayload = {
+  state: {
+    emotion: "joy",
+    emotion_intensity: 0.8,
+    physical_state: "疲れている",
+    mental_state: "リラックスしている",
+    environment: "自宅",
+    relationship_status: "「知人」以上「友人」未満。",
+    body: { fatigue: 0.086, warmth: 0.5, arousal: null, pain: "x" },
+    user: { name: "らうらう", nickname: "らうらう", preferred_address: "らうらう" },
+  },
+};
+const st = parseStatePayload(statePayload);
+if (!st) { console.error("FAIL parseStatePayload null"); fail++; }
+if (st && (st.emotion !== "joy" || st.intensity !== 0.8 || st.environment !== "自宅")) { console.error("FAIL parseStatePayload fields"); fail++; }
+if (st && (Object.keys(st.body).join(",") !== "fatigue,warmth")) { console.error(`FAIL parseStatePayload body=${Object.keys(st?.body).join(",")}`); fail++; }
+for (const broken of [null, {}, "", "state", { state: null }, { state: "nope" }, { state: [] }]) {
+  if (parseStatePayload(broken) !== null) { console.error(`FAIL parseStatePayload broken ${JSON.stringify(broken)}`); fail++; }
+}
+const emptyState = { emotion: "", intensity: null, physical: "", mental: "", environment: "", relationship: "", body: {}, user: {} };
+if (parseStatePayload({ state: emptyState }) !== null) { console.error("FAIL parseStatePayload all-empty"); fail++; }
+if (formatState(null) !== "" || formatState(emptyState) !== "") { console.error("FAIL formatState empty"); fail++; }
+const stText = formatState(st);
+if (!stText.startsWith("--- 現在の状態 ---\n")) { console.error("FAIL formatState header"); fail++; }
+if (!stText.includes("感情: joy（0.8） / 体の様子: 疲れている / 心の様子: リラックスしている")) { console.error(`FAIL formatState head: ${stText}`); fail++; }
+if (!stText.includes("場所: 自宅 / 身体: 疲労 0.09 体温 0.5")) { console.error(`FAIL formatState tail: ${stText}`); fail++; }
+const noIntensity = formatState({ ...emptyState, emotion: "calm" });
+if (noIntensity !== "--- 現在の状態 ---\n感情: calm") { console.error(`FAIL formatState intensity: ${noIntensity}`); fail++; }
+const stateRecall = formatRecall([{ content: "x", kind: "semantic", score: 1.0, created: "2026-11-01" }], [], st);
+if (!stateRecall.includes("--- 現在の状態 ---") || stateRecall.indexOf("--- 現在の状態 ---") > stateRecall.indexOf("\n---\n")) {
+  console.error("FAIL formatRecall state placement"); fail++;
+}
+const stateOnly = formatRecall([], [], st);
+if (!stateOnly.startsWith("[nous recall]") || !stateOnly.includes("--- 現在の状態 ---")) { console.error("FAIL formatRecall state-only"); fail++; }
+if (formatRecall([{ content: "x", kind: "", score: 1.0, created: "" }]).includes("現在の状態")) {
+  console.error("FAIL formatRecall no-state"); fail++;
+}
+const id = formatIdentity(st);
+if (!id.includes("ユーザー: らうらう") || !id.includes("関係性: 「知人」以上「友人」未満。")) { console.error(`FAIL formatIdentity: ${id}`); fail++; }
+if (formatIdentity(null) !== "" || formatIdentity(emptyState) !== "") { console.error("FAIL formatIdentity empty"); fail++; }
+if (formatIdentity({ ...emptyState, user: { name: "Taro", preferred_address: "Taro-san" } }) !== "ユーザー: Taro（呼称も「Taro-san」）") {
+  console.error("FAIL formatIdentity address"); fail++;
+}
+if (formatIdentity({ ...emptyState, user: { nickname: "らう" }, relationship: "友人" }) !== "ユーザー: らう\n関係性: 友人") {
+  console.error("FAIL formatIdentity nickname-only"); fail++;
+}
+if (formatIdentity({ ...emptyState, relationship: "友人" }) !== "関係性: 友人") { console.error("FAIL formatIdentity relationship-only"); fail++; }
+
 console.log(fail === 0 ? "SELF-CHECK OK" : `SELF-CHECK FAILED ${fail}`);
 if (fail > 0) process.exitCode = 1;
