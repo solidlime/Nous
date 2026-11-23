@@ -219,11 +219,19 @@ Search memories for a persona.
     { "slug": "project-nous-arch", "title": "...", "project": "nous",
       "excerpt": "...", "score": 1.0 }
   ],
-  "nodes": [], "edges": []
+  "nodes": [], "edges": [],
+  "state": {
+    "emotion": "neutral", "emotion_intensity": 0.0,
+    "physical_state": null, "mental_state": null,
+    "environment": "自宅", "relationship_status": "「知人」以上「友人」未満。",
+    "body": { "fatigue": 0.086, "warmth": 0.5, "arousal": 0.0, "heart_rate": 0.5 },
+    "user": { "name": "らうらう", "nickname": "らうらう" }
+  }
 }
 ```
 
 - `project` は正規化後の slug（未指定・不正値は `null`）。
+- `state` は現在の状態（感情・体調・環境・関係性・ユーザー情報）の読み取り専用ビュー。pi 拡張が recall と一緒に注入する。取得失敗時は `null`。
 - `time_weight` は decision gate の時間減衰（未使用時は `null`）。
 - `project` 指定時は **候補プールを広げてから** ブーストし、最後に `limit` で切る（`limit*3`、engine 側の pool 上限は 60）。
   `limit < 20` で decision gate が有効なときは gate の採否も変わり得る（順位だけの変更ではない）。

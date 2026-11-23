@@ -257,3 +257,41 @@ async def test_project_boost_sorts_by_final_rank_key(client, monkeypatch):
     assert [row["memory"]["key"] for row in body["results"]] == ["plain-fresh", "proj-old"]
     assert body["results"][1]["score"] == 1.125  # 表示スコアはブースト後のまま
     assert body["results"][1]["time_weight"] == 0.5
+
+
+async def test_search_response_includes_state(client):
+    """応答は現在の状態（感情・体調・環境・関係性・ユーザー情報）を 1 つの dict で返す。"""
+    r = await client.get("/api/search/search_api_test?q=x")
+    assert r.status_code == 200
+    body = r.json()
+    assert "state" in body
+    state = body["state"]
+    assert isinstance(state, dict)
+    assert {
+        "emotion",
+        "emotion_intensity",
+        "physical_state",
+        "mental_state",
+        "environment",
+        "relationship_status",
+        "body",
+        "user",
+    } <= set(state)
+
+
+async def test_search_state_failure_is_null(client, monkeypatch):
+    """状態取得が例外を投げても検索は 200 を返し、state は null。"""
+    from nous.application.use_cases import AppContextRegistry
+
+    warm = await client.get("/api/search/search_api_test?q=x")
+    assert warm.status_code == 200
+    ctx = AppContextRegistry.get("search_api_test")
+
+    def _boom(*_args, **_kwargs):
+        raise RuntimeError("state unavailable")
+
+    monkeypatch.setattr(ctx.persona_service, "get_context", _boom)
+
+    r = await client.get("/api/search/search_api_test?q=x")
+    assert r.status_code == 200
+    assert r.json()["state"] is None

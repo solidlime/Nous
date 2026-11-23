@@ -172,6 +172,41 @@ def _merge_entity_layer(ctx, memories: list, nodes: list, edges: list, edge_set:
             )
 
 
+_BODY_METRICS = ("fatigue", "warmth", "arousal", "heart_rate", "pain")
+
+
+def _state_digest(ctx, persona: str) -> dict | None:
+    """現在の状態を 1 つの dict に畳む（pi 拡張が recall と一緒に注入する読み取り専用ビュー）。
+
+    取得失敗は None。検索自体は落とさない。
+    """
+    try:
+        result = ctx.persona_service.get_context(persona)
+        if not isinstance(result, Success):
+            return None
+        state = result.value
+        body: dict[str, float] = {}
+        for key in _BODY_METRICS:
+            value = getattr(state, key, None)
+            # bool は isinstance(True, int) が真になるので明示的に落とす
+            if isinstance(value, bool) or not isinstance(value, (int, float)):
+                continue
+            body[key] = round(float(value), 3)
+        return {
+            "emotion": state.emotion,
+            "emotion_intensity": state.emotion_intensity,
+            "physical_state": state.physical_state,
+            "mental_state": state.mental_state,
+            "environment": state.environment,
+            "relationship_status": state.relationship_status,
+            "body": body,
+            "user": dict(getattr(state, "user_info", None) or {}),
+        }
+    except Exception:
+        logger.debug("state digest failed", exc_info=True)
+        return None
+
+
 def register_search_routes(mcp) -> None:
     @mcp.custom_route("/api/search/{persona}", methods=["GET"])
     async def search_memories(request: Request) -> JSONResponse:
@@ -309,6 +344,7 @@ def register_search_routes(mcp) -> None:
                     "wiki": wiki_hits,
                     "nodes": entity_nodes,
                     "edges": entity_edges,
+                    "state": _state_digest(ctx, persona),
                 }
             )
         # 最終防衛線
