@@ -470,7 +470,7 @@ def _truncate(text: str, limit: int) -> str:
 
 
 def _build_time_context(state) -> str:
-    """Build <TIME_CONTEXT> block for injection at the TOP of system prompt."""
+    """Build <time_context> block（揮発側。[NOUS CONTEXT] の user メッセージに載る）。"""
     from zoneinfo import ZoneInfo
 
     from nous.config.settings import get_settings

@@ -208,7 +208,8 @@ class PrepareStep:
                 else {}
             )
 
-            # TIME_CONTEXT ブロック（システムプロンプト先頭注入用）。
+            # time_context ブロック（揮発側: [NOUS CONTEXT] の user メッセージに入る。
+            # system prompt に入れると分単位で変わるため cache が毎ターン切れる）。
             # ``show_message_timestamps`` は UI のタイムスタンプ表示設定であり、
             # LLM の時計を止める設定ではない（ここで止めると「今が何時か」を知らないまま
             # 会話する。以前はこれで ``<time_context>`` が丸ごと消えていた）。

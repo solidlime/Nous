@@ -18,7 +18,7 @@ class ChatTurnContext:
     turn_id: str = ""
     # PrepareStep が埋める
     context_section: str = ""
-    time_context: str = ""  # ★ <TIME_CONTEXT> ブロック（システムプロンプト先頭に注入）
+    time_context: str = ""  # <time_context> ブロック（揮発側: [NOUS CONTEXT] の user メッセージに入る）
     related_memories: str = ""
     recency_digest: str = ""  # PrepareStep が埋める（§1 直近記憶ダイジェスト）
     state_raw: dict = field(default_factory=dict)
