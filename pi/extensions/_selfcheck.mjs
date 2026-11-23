@@ -138,6 +138,7 @@ const stText = formatState(st);
 if (!stText.startsWith("--- 現在の状態 ---\n")) { console.error("FAIL formatState header"); fail++; }
 if (!stText.includes("感情: joy（0.8） / 体の様子: 疲れている / 心の様子: リラックスしている")) { console.error(`FAIL formatState head: ${stText}`); fail++; }
 if (!stText.includes("場所: 自宅 / 身体: 疲労 0.09 体温 0.5")) { console.error(`FAIL formatState tail: ${stText}`); fail++; }
+if (!stText.includes("\n関係性: 「知人」以上「友人」未満。\n")) { console.error(`FAIL formatState relationship: ${stText}`); fail++; }
 const noIntensity = formatState({ ...emptyState, emotion: "calm" });
 if (noIntensity !== "--- 現在の状態 ---\n感情: calm") { console.error(`FAIL formatState intensity: ${noIntensity}`); fail++; }
 const stateRecall = formatRecall([{ content: "x", kind: "semantic", score: 1.0, created: "2026-11-01" }], [], st);
@@ -150,15 +151,16 @@ if (formatRecall([{ content: "x", kind: "", score: 1.0, created: "" }]).includes
   console.error("FAIL formatRecall no-state"); fail++;
 }
 const id = formatIdentity(st);
-if (!id.includes("ユーザー: らうらう") || !id.includes("関係性: 「知人」以上「友人」未満。")) { console.error(`FAIL formatIdentity: ${id}`); fail++; }
+// 関係性は system prompt に置かず recall 側（formatState）に出す。変わるたびに prefix cache が切れるため。
+if (id !== "ユーザー: らうらう") { console.error(`FAIL formatIdentity: ${id}`); fail++; }
 if (formatIdentity(null) !== "" || formatIdentity(emptyState) !== "") { console.error("FAIL formatIdentity empty"); fail++; }
 if (formatIdentity({ ...emptyState, user: { name: "Taro", preferred_address: "Taro-san" } }) !== "ユーザー: Taro（呼称も「Taro-san」）") {
   console.error("FAIL formatIdentity address"); fail++;
 }
-if (formatIdentity({ ...emptyState, user: { nickname: "らう" }, relationship: "友人" }) !== "ユーザー: らう\n関係性: 友人") {
+if (formatIdentity({ ...emptyState, user: { nickname: "らう" }, relationship: "友人" }) !== "ユーザー: らう") {
   console.error("FAIL formatIdentity nickname-only"); fail++;
 }
-if (formatIdentity({ ...emptyState, relationship: "友人" }) !== "関係性: 友人") { console.error("FAIL formatIdentity relationship-only"); fail++; }
+if (formatIdentity({ ...emptyState, relationship: "友人" }) !== "") { console.error("FAIL formatIdentity relationship-only"); fail++; }
 
 console.log(fail === 0 ? "SELF-CHECK OK" : `SELF-CHECK FAILED ${fail}`);
 if (fail > 0) process.exitCode = 1;

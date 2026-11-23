@@ -254,6 +254,8 @@ export function formatState(state: RecallState | null): string {
   if (state.physical) head.push(`体の様子: ${state.physical}`);
   if (state.mental) head.push(`心の様子: ${state.mental}`);
   if (head.length > 0) lines.push(head.join(" / "));
+  // 関係性は更新頻度が高くないが、system prompt 側に置くと更新のたびに prefix cache が切れる
+  if (state.relationship) lines.push(`関係性: ${state.relationship}`);
 
   const tail: string[] = [];
   if (state.environment) tail.push(`場所: ${state.environment}`);
@@ -270,7 +272,10 @@ export function formatState(state: RecallState | null): string {
   return lines.length === 0 ? "" : ["--- 現在の状態 ---", ...lines].join("\n");
 }
 
-/** system prompt に固定する身元ブロックの中身（タグは Pi が付ける）。空なら "". */
+/** system prompt に固定する身元ブロックの中身（タグは Pi が付ける）。空なら "".
+ *
+ * ここは**滅多に変わらないものだけ**置く。毎ターン同じ文字列を返せば prefix cache は保たれるが、
+ * 1文字でも変わると system prompt の patch が出て cache が切れる。 */
 export function formatIdentity(state: RecallState | null): string {
   if (!state) return "";
   const name = state.user.name ?? "";
@@ -282,8 +287,19 @@ export function formatIdentity(state: RecallState | null): string {
     const call = address || nickname;
     lines.push(call && call !== who ? `ユーザー: ${who}（呼称も「${call}」）` : `ユーザー: ${who}`);
   }
-  if (state.relationship) lines.push(`関係性: ${state.relationship}`);
   return lines.join("\n");
+}
+
+// 直近に観測した身元ブロック。section は毎ターン base から作り直されるので、取得失敗や早期 return の
+// ターンでも落とさないよう保持する（消えると system prompt が変わって cache が切れる）。
+let cachedIdentity = "";
+
+/** `user_identity` section を載せ直す。新しい値があればキャッシュも更新する。 */
+function applyIdentity(event: any, identity?: string): void {
+  if (identity) cachedIdentity = identity;
+  if (!cachedIdentity || !event?.systemPromptOptions) return;
+  if (event.systemPromptOptions.sections) event.systemPromptOptions.sections.user_identity = cachedIdentity;
+  else event.systemPromptOptions.sections = { user_identity: cachedIdentity };
 }
 
 /** /api/search/{persona} の応答から注入対象を抽出（壊れていれば空配列）。 */
@@ -543,6 +559,7 @@ export default function nousEvents(pi: ExtensionAPI): void {
     async (event: any, ctx: any) => {
       const setStatus = (text: string) => ctx?.ui?.setStatus?.("nous", text);
       try {
+        applyIdentity(event); // 前のターンで載せた section を載せ直す（base は毎回素の状態から作り直される）
         refreshProject(ctx?.sessionManager?.getCwd?.() ?? "");
         if (!config.recall?.enabled || !config.searchApiKey) return;
         if (event?.messageType !== "user") return; // custom 起点の run には差し込まない
@@ -555,16 +572,12 @@ export default function nousEvents(pi: ExtensionAPI): void {
         const hits = parseRecallPayload(payload, config.recall.minScore, config.recall.topK);
         const wikiHits = parseWikiPayload(payload, WIKI_TOP_K);
         const state = parseStatePayload(payload);
-        // 固定部（ユーザー名・呼称・関係性）は system prompt の追加 section に置く。
+        // 固定部（ユーザー名・呼称）は system prompt の追加 section に置く。
         // systemPrompt を返すとプロンプト全体を差し替えてキャッシュが壊れるので触らない。
         const identity = formatIdentity(state);
-        if (identity && event?.systemPromptOptions) {
-          const opts = event.systemPromptOptions;
-          if (!opts.sections) opts.sections = {};
-          opts.sections.user_identity = identity;
-        }
+        applyIdentity(event, identity);
         const ms = Date.now() - started;
-        if (hits.length === 0 && wikiHits.length === 0 && !identity) {
+        if (hits.length === 0 && wikiHits.length === 0 && !state) {
           setStatus(`nous recall: none · ${ms}ms`);
           return;
         }
