@@ -443,7 +443,6 @@ export default function nousEvents(pi: ExtensionAPI): void {
             },
           ),
         ]);
-        console.error(`[nous-events] recall: injected ${hits.length} memories + ${wikiHits.length} wiki (${ms}ms)`);
         setStatus(
           `nous recall: ${hits.length}💭 ${wikiHits.length}📚${stateInjected ? " +state" : ""} · top ${(wikiHits[0]?.score ?? hits[0]?.score ?? 0).toFixed(2)} · ${ms}ms`,
         );
