@@ -305,6 +305,19 @@ export function resolveConfig(): HookConfig {
   return { endpoint, apiKey: apiKey.trim(), searchApiKey, persona, recall };
 }
 
+// サブエージェント（人形）のセッションか。pi-web は子セッションのヘッダに
+// parentSession を書く。人形には本体の私的記憶を渡さない（除外ガード）。
+// getHeader が無い版では false を返す（注入が止まるより出す方が安全側。
+// 止めたいなら grep で getHeader の有無を確認すること）。
+export function isSubagentSession(ctx: any): boolean {
+  try {
+    const header = ctx?.sessionManager?.getHeader?.();
+    return Boolean(header?.parentSession);
+  } catch {
+    return false;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // 拡張本体（状態はセッションごとにこの関数スコープへ閉じる）
 // ---------------------------------------------------------------------------
@@ -429,6 +442,7 @@ export default function nousEvents(pi: ExtensionAPI): void {
       const setStatus = (text: string) => ctx?.ui?.setStatus?.("nous", text);
       try {
         pendingInjection = "";
+        if (isSubagentSession(ctx)) return; // 人形には本体の記憶を注入しない
         refreshProject(ctx?.sessionManager?.getCwd?.() ?? "");
         if (!config.recall?.enabled || !config.searchApiKey) return;
         if (event?.messageType !== "user") return; // custom 起点の run には差し込まない
