@@ -210,6 +210,21 @@ export function parseInjection(payload: unknown): string {
   return typeof raw === "string" ? raw : "";
 }
 
+/** 注入ブロックを最新 user 発言の直前に差し込んだ新しい配列を返す（純関数・元配列は触らない）。 */
+export function withInjection(messages: any[], injection: string): any[] {
+  if (!injection) return messages;
+  let at = -1;
+  for (let i = messages.length - 1; i >= 0; i -= 1) {
+    if (messages[i]?.role === "user") {
+      at = i;
+      break;
+    }
+  }
+  const block = { role: "user", content: [{ type: "text", text: injection }], timestamp: Date.now() };
+  if (at < 0) return [...messages, block];
+  return [...messages.slice(0, at), block, ...messages.slice(at)];
+}
+
 /** recall に送るクエリを組み立てる。短い発話は projectSlug を語彙として足す。 */
 export function buildRecallQuery(prompt: string, projectSlug: string): string {
   const text = prompt.replace(/\s+/g, " ").trim();
@@ -318,6 +333,9 @@ export default function nousEvents(pi: ExtensionAPI): void {
   let lastFlushedTurn = -1; // 同一ターンの二重送信防止（idempotency key = turn 番号）
   let assistantTexts: string[] = [];
   let projectSlug = "";
+  // 直近ターンの注入ブロック。before_agent_start で作り、context フックで 1 リクエストにだけ載せる
+  // （履歴には残さない＝コンテキストに積み上がらない）。
+  let pendingInjection = "";
   let lastCwd = "";
   let tools: ToolLog[] = [];
   const pendingTools = new Map<string, { tool: string; args_summary: string; arg_keys: string[] }>();
@@ -410,6 +428,7 @@ export default function nousEvents(pi: ExtensionAPI): void {
     async (event: any, ctx: any) => {
       const setStatus = (text: string) => ctx?.ui?.setStatus?.("nous", text);
       try {
+        pendingInjection = "";
         refreshProject(ctx?.sessionManager?.getCwd?.() ?? "");
         if (!config.recall?.enabled || !config.searchApiKey) return;
         if (event?.messageType !== "user") return; // custom 起点の run には差し込まない
@@ -446,19 +465,24 @@ export default function nousEvents(pi: ExtensionAPI): void {
         setStatus(
           `nous recall: ${hits.length}💭 ${wikiHits.length}📚${stateInjected ? " +state" : ""} · top ${(wikiHits[0]?.score ?? hits[0]?.score ?? 0).toFixed(2)} · ${ms}ms`,
         );
-        return {
-          message: {
-            customType: "nous-recall",
-            content: injection,
-            display: false,
-          },
-        };
+        pendingInjection = injection;
+        return;
       } catch (err) {
         setStatus("nous recall: error");
         logFailure(`recall: ${err instanceof Error ? err.message : String(err)}`);
       }
     },
   );
+
+  // 注入は履歴に書かず、そのリクエストにだけ足す（chat の揮発ブロックと同じ扱い）。
+  pi.on("context", (event: any) => {
+    try {
+      if (!pendingInjection) return;
+      return { messages: withInjection(event?.messages ?? [], pendingInjection) };
+    } catch (err) {
+      logFailure(`context: ${err instanceof Error ? err.message : String(err)}`);
+    }
+  });
 
   pi.on("session_start", (event: any, ctx: any) => {
     try {

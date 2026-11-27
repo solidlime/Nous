@@ -145,5 +145,25 @@ for (const [input, expect] of [["Nous", "nous"], ["my_project", "my-project"], [
   if (got !== expect) { console.error(`FAIL normalizeProjectSlug ${JSON.stringify(input)} got=${JSON.stringify(got)}`); fail++; }
 }
 
+// 注入は最新 user 発言の直前に入る。履歴配列は書き換えない。
+{
+  const { withInjection } = mod;
+  const msgs = [
+    { role: "user", content: "a" },
+    { role: "assistant", content: "b" },
+    { role: "user", content: "c" },
+    { role: "assistant", content: "d" },
+  ];
+  const snapshot = JSON.stringify(msgs);
+  const out = withInjection(msgs, "BLOCK");
+  if (out.length !== 5) { console.error("FAIL withInjection length"); fail++; }
+  if (out[2]?.content?.[0]?.text !== "BLOCK") { console.error("FAIL withInjection position"); fail++; }
+  if (out[3]?.content !== "c") { console.error("FAIL withInjection keeps user msg"); fail++; }
+  if (JSON.stringify(msgs) !== snapshot) { console.error("FAIL withInjection mutated input"); fail++; }
+  if (withInjection(msgs, "") !== msgs) { console.error("FAIL withInjection empty passthrough"); fail++; }
+  const noUser = withInjection([{ role: "assistant", content: "x" }], "BLOCK");
+  if (noUser.length !== 2 || noUser[1]?.content?.[0]?.text !== "BLOCK") { console.error("FAIL withInjection append"); fail++; }
+}
+
 console.log(fail === 0 ? "SELF-CHECK OK" : `SELF-CHECK FAILED ${fail}`);
 if (fail > 0) process.exitCode = 1;
