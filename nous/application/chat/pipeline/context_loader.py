@@ -205,7 +205,8 @@ async def _build_context_section(
         labels={"fatigue": "疲労", "warmth": "体温", "arousal": "覚醒", "heart_rate": "心拍", "pain": "痛み"},
     )
     if body_str:
-        state_lines.append(f"身体: {body_str}")
+        # `|` はタグ内では読み手の邪魔になる。区切りの意味は保ったまま読点へ。
+        state_lines.append(f"身体: {body_str.replace(' | ', ', ')}")
 
     if getattr(state, "environment", None):
         state_lines.append(f"場所: {state.environment}")
@@ -233,10 +234,11 @@ async def _build_context_section(
     try:
         rel_ctx = _build_relationship_context(ctx)
         if rel_ctx:
-            # Extract just the content (remove the "--- 関係性コンテキスト ---" header)
-            rel_lines = rel_ctx.split("\n")
-            if len(rel_lines) > 1:
-                state_lines.append("\n".join(rel_lines[1:]))  # skip header
+            # 見出し行を落とす。`lines` の先頭要素は "\n--- …" なので、
+            # split 直後の [0] を捨てるだけでは見出しが残る（実際そうなっていた）。
+            rel_lines = [ln for ln in rel_ctx.split("\n") if ln.strip() and "関係性コンテキスト" not in ln]
+            if rel_lines:
+                state_lines.append("\n".join(rel_lines))
     except Exception as e:
         logger.debug("Failed to build relationship context: %s", e)
 
