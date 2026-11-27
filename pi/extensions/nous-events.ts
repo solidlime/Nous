@@ -475,7 +475,9 @@ export default function nousEvents(pi: ExtensionAPI): void {
   );
 
   // 注入は履歴に書かず、そのリクエストにだけ足す（chat の揮発ブロックと同じ扱い）。
-  pi.on("context", (event: any) => {
+  // `context` ではなく `context_with_system` を使う: 先に走る他拡張（billion-context など）が
+  // セッションエントリからメッセージを組み直して `context` の追加を落とすため。
+  pi.on("context_with_system", (event: any) => {
     try {
       if (!pendingInjection) return;
       return { messages: withInjection(event?.messages ?? [], pendingInjection) };
