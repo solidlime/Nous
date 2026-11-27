@@ -13,6 +13,7 @@ from __future__ import annotations
 
 from contextlib import nullcontext
 from types import SimpleNamespace
+from typing import TYPE_CHECKING, cast
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
@@ -21,6 +22,10 @@ from nous.application.chat.pipeline.context import ChatTurnContext
 from nous.application.chat.pipeline.prompt import PromptBuildStep
 from nous.domain.memory import wiring_events
 from nous.domain.shared.result import Success
+
+if TYPE_CHECKING:
+    from nous.application.chat.session_store import TreeSessionWindow
+    from nous.domain.config.chat_config import ChatConfig
 
 
 @pytest.fixture(autouse=True)
@@ -83,7 +88,7 @@ def test_prompt_inject_absent_when_no_memory_inserted() -> None:
         session_id="s",
         user_message="hi",
         turn_id="turn-2",
-        context_section="感情: 好奇心",
+        context_section=("感情: 好奇心", ""),
     )
     _run_prompt(turn_ctx)
     assert [e for e in wiring_events.snapshot_after(0) if e["kind"] == "prompt_inject"] == []
@@ -113,18 +118,23 @@ async def test_prepare_records_episodes_structurally() -> None:
     ctx = MagicMock()
     ctx.persona = "t"
     ctx.persona_service.get_context.return_value = Success(state)
-    session = SimpleNamespace(pending_memory_task=None, _messages=[], _injected_memory_keys=set())
-    config = SimpleNamespace(
-        context_compression_mode="light",
-        memory_preload_count=3,
-        episode_search_enabled=True,
-        show_message_timestamps=False,
-        memory_digest_count=0,
+    session = cast(
+        "TreeSessionWindow", SimpleNamespace(pending_memory_task=None, _messages=[], _injected_memory_keys=set())
+    )
+    config = cast(
+        "ChatConfig",
+        SimpleNamespace(
+            context_compression_mode="light",
+            memory_preload_count=3,
+            episode_search_enabled=True,
+            show_message_timestamps=False,
+            memory_digest_count=0,
+        ),
     )
     turn_ctx = ChatTurnContext(session_id="s", user_message="hi", turn_id="turn-1")
     with (
         patch.object(prepare_mod, "_search_memories", _fake_search),
-        patch.object(prepare_mod, "_build_context_section", AsyncMock(return_value="")),
+        patch.object(prepare_mod, "_build_context_section", AsyncMock(return_value=("", ""))),
         patch.object(prepare_mod, "_search_episodes", _fake_episodes),
         nullcontext(),
     ):

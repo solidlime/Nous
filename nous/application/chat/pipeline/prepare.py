@@ -6,7 +6,6 @@ import asyncio
 from typing import TYPE_CHECKING
 
 from nous.application.chat.pipeline.context_loader import (  # noqa: F401
-    _GAP_INSTRUCTIONS,
     _SUSPICIOUS_RANGES,
     _TIME_OF_DAY,
     _build_context_section,
@@ -216,9 +215,9 @@ class PrepareStep:
             context_section = results[0]
             memory_result = results[1]
 
-            if not isinstance(context_section, str):
+            if not (isinstance(context_section, tuple) and len(context_section) == 2):
                 logger.warning("PrepareStep: context_section build failed: %s", context_section)
-                context_section = ""
+                context_section = ("", "")
             if not isinstance(memory_result, tuple):
                 logger.warning("PrepareStep: memory search failed: %s", memory_result)
                 turn_ctx.related_memories = ""

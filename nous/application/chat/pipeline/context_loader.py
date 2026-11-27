@@ -116,8 +116,11 @@ async def _build_context_section(
     decay_note: str = "",
     emotion_bands: tuple[float, float] | None = None,
     config: ChatConfig | None = None,
-) -> str:
+) -> tuple[str, str]:
     """get_context() 同等の充実したコンテキストサマリーを構築する。
+
+    戻り値は (state_body, core_body)。どちらもタグを含まない本体で、並び順とタグ付けは
+    injection.build_injection_block が唯一の定義として持つ（今 → 直近 → 常時 → 検索 → 知識）。
 
     compress_mode が "light"/"normal"/"aggressive" の場合は、
     重いセクション（reflection insight, mental model, session summary, emotion history）をスキップする。
@@ -158,108 +161,19 @@ async def _build_context_section(
         except (TypeError, ValueError):
             return 0.5
 
-    t1: list[str] = []  # Tier 1: 現在の状態
-    t2: list[str] = []  # Tier 2: 身体・環境
-    t3: list[str] = []  # Tier 3: 参照情報
+    state_lines: list[str] = []  # <current_state> の本体（タグは付けない）
+    core_lines: list[str] = []  # <core_memory> の本体（タグは付けない）
     _is_light = compress_mode == "light"
     if _is_light:
         logger.info("context section light skip drift=light_skip (drift/reflection sections skipped)")
 
-    # === Tier 1: 現在の状態 ===
-    # 時間情報は <TIME_CONTEXT> ブロック（システムプロンプト先頭）を参照
+    # 時刻は injection が <current_state> の先頭行に置く。
     if getattr(state, "emotion", None):
         intensity = _current_intensity()
         # ラベルと if-then（prompt.py）は同じ設定帯を共有する（阈値を 2 組持たない）
         intensity_label = ("弱い", "やや強い", "強い")[emotion_band(intensity, bands)]
-        t1.append(f"感情: {state.emotion}（{intensity_label}）")
+        state_lines.append(f"感情: {state.emotion}（{intensity_label}）")
         # #39: if-then の 1 行は prompt.py（system prompt 直下）が持ち、ここには入れない。
-
-    # === Tier 2: 身体・環境 ===
-    # 減衰ノート（感情・身体・関係性、複数行可）
-    if decay_note:
-        note_lines = "\n".join(f"  {line}" for line in decay_note.split("\n") if line)
-        t2.append(f"⏱️ 状態変化:\n{note_lines}")
-
-    # Body state — show all 5 metrics with percentages (unified with MCP tools format)
-    from nous.api.mcp._tools_helpers import _format_body_metrics
-
-    body_str = _format_body_metrics(
-        state,
-        labels={"fatigue": "疲労", "warmth": "体温", "arousal": "覚醒", "heart_rate": "心拍", "pain": "痛み"},
-    )
-    if body_str:
-        t2.append(f"身体: {body_str}")
-
-    if getattr(state, "environment", None):
-        t2.append(f"場所: {state.environment}")
-        # #42: 場所カタログの「しがちなこと」を 1 行（未知の場所は空）
-        _place_hint = place_hint(state.environment)
-        if _place_hint:
-            t2.append(_place_hint)
-
-    # 見た目（装備から合成される）。system prompt に一切入っておらず、自分の姿を
-    # 会話で参照できなかった（TTS と自画像だけが読んでいた）。
-    appearance = getattr(state, "appearance", None)
-    if isinstance(appearance, str) and appearance.strip():
-        t2.append(f"見た目: {_truncate(appearance.strip(), 200)}")
-
-    # 自由記述の身体・精神状態（update_context / 抽出が書く）。数値だけでは
-    # 「だるさ」「気分の説明」が次ターンに戻らず、同じことを書き直す圧力になる。
-    for _key, _label in (("physical_state", "体の様子"), ("mental_state", "心の様子")):
-        _val = getattr(state, _key, None)
-        if isinstance(_val, str) and _val.strip():
-            t2.append(f"{_label}: {_val.strip()}")
-
-    # 数値から導いた行動の傾向（制約ではない。虚弱時だけ 1〜2 文）
-    body_hint = body_action_hint(state)
-    if body_hint:
-        t2.append(f"身体の傾向: {body_hint}")
-
-    if getattr(state, "relationship_status", None):
-        t2.append(f"関係: {state.relationship_status}")
-
-    # Add relationship context (days known, active days, time since last)
-    try:
-        rel_ctx = _build_relationship_context(ctx)
-        if rel_ctx:
-            # Extract just the content (remove the "--- 関係性コンテキスト ---" header)
-            rel_lines = rel_ctx.split("\n")
-            if len(rel_lines) > 1:
-                t2.append("\n".join(rel_lines[1:]))  # skip header
-    except Exception as e:
-        logger.debug("Failed to build relationship context: %s", e)
-
-    user_info = getattr(state, "user_info", None) or {}
-    if user_info:
-        ui_lines = "\n".join(f"  {k}: {v}" for k, v in user_info.items())
-        t2.append(f"ユーザー情報:\n{ui_lines}")
-
-    _hidden = {"goals", "promises", "active_promises", "current_goals"}
-    persona_info = getattr(state, "persona_info", None) or {}
-    # handover: は session_begin 専用（毎ターンの system prompt に古い栞を混ぜない）
-    filtered_pi = {k: v for k, v in persona_info.items() if k not in _hidden and not k.startswith("handover:")}
-    if filtered_pi:
-        pi_lines = "\n".join(f"  {k}: {v}" for k, v in filtered_pi.items())
-        t2.append(f"ペルソナ情報:\n{pi_lines}")
-
-    # === Tier 3: 参照情報 ===
-    query_text = (getattr(turn_ctx, "user_message", "") or "") if turn_ctx else ""
-
-    # 重要な記憶（importance 上位）— アイデンティティ中核のため light モードでも3件に減らして残す
-    try:
-        top_n = 3 if _is_light else 5
-        top_result = ctx.memory_service.get_top_by_importance(top_n)
-        if isinstance(top_result, Success) and top_result.value:
-            tops = [m for m in top_result.value[:top_n] if m.content]
-            if tops:
-                sanitized = [
-                    _sanitize_text(m.content[:200] + "..." if len(m.content) > 200 else m.content) for m in tops
-                ]
-                sanitized = [p for p in sanitized if p]
-                if sanitized:
-                    t3.append("重要な記憶:\n" + "\n".join(f"  📖 {p}" for p in sanitized))
-    except Exception as e:
-        logger.debug("Failed to fetch top memories: %s", e)
 
     # Emotion trend — skip in light mode
     if not _is_light:
@@ -273,9 +187,92 @@ async def _build_context_section(
                     bands=bands,
                 )
                 if narrative:
-                    t3.append(narrative)
+                    state_lines.append(narrative)
         except Exception as e:
             logger.debug("Failed to build emotion trend: %s", e)
+
+    # === 身体・環境 ===
+    # 減衰ノート（感情・身体・関係性、複数行可）
+    if decay_note:
+        note_lines = "\n".join(f"  {line}" for line in decay_note.split("\n") if line)
+        state_lines.append(f"⏱️ 状態変化:\n{note_lines}")
+
+    # Body state — show all 5 metrics with percentages (unified with MCP tools format)
+    from nous.api.mcp._tools_helpers import _format_body_metrics
+
+    body_str = _format_body_metrics(
+        state,
+        labels={"fatigue": "疲労", "warmth": "体温", "arousal": "覚醒", "heart_rate": "心拍", "pain": "痛み"},
+    )
+    if body_str:
+        state_lines.append(f"身体: {body_str}")
+
+    if getattr(state, "environment", None):
+        state_lines.append(f"場所: {state.environment}")
+        # #42: 場所カタログの「しがちなこと」を 1 行（未知の場所は空）
+        _place_hint = place_hint(state.environment)
+        if _place_hint:
+            state_lines.append(_place_hint)
+
+    # 自由記述の身体・精神状態（update_context / 抽出が書く）。数値だけでは
+    # 「だるさ」「気分の説明」が次ターンに戻らず、同じことを書き直す圧力になる。
+    for _key, _label in (("physical_state", "体調"), ("mental_state", "心境")):
+        _val = getattr(state, _key, None)
+        if isinstance(_val, str) and _val.strip():
+            state_lines.append(f"{_label}: {_val.strip()}")
+
+    # 数値から導いた行動の傾向（制約ではない。虚弱時だけ 1〜2 文）
+    body_hint = body_action_hint(state)
+    if body_hint:
+        state_lines.append(f"身体の傾向: {body_hint}")
+
+    if getattr(state, "relationship_status", None):
+        state_lines.append(f"関係: {state.relationship_status}")
+
+    # Add relationship context (days known, active days, time since last)
+    try:
+        rel_ctx = _build_relationship_context(ctx)
+        if rel_ctx:
+            # Extract just the content (remove the "--- 関係性コンテキスト ---" header)
+            rel_lines = rel_ctx.split("\n")
+            if len(rel_lines) > 1:
+                state_lines.append("\n".join(rel_lines[1:]))  # skip header
+    except Exception as e:
+        logger.debug("Failed to build relationship context: %s", e)
+
+    user_info = getattr(state, "user_info", None) or {}
+    if user_info:
+        _name = str(user_info.get("name") or "").strip()
+        _nick = str(user_info.get("nickname") or "").strip()
+        if _name or _nick:
+            _line = f"相手: {_name or _nick}"
+            if _nick and _nick != _name:
+                _line += f"（呼び方も {_nick}）"
+            state_lines.append(_line)
+
+    _hidden = {"goals", "promises", "active_promises", "current_goals"}
+    persona_info = getattr(state, "persona_info", None) or {}
+    # handover: は session_begin 専用（毎ターンの system prompt に古い栞を混ぜない）
+    filtered_pi = {k: v for k, v in persona_info.items() if k not in _hidden and not k.startswith("handover:")}
+    if filtered_pi:
+        state_lines.append("メモ: " + " / ".join(str(v) for v in filtered_pi.values()))
+
+    # === 常時参照する記憶 ===
+    query_text = (getattr(turn_ctx, "user_message", "") or "") if turn_ctx else ""
+
+    # 重要な記憶（importance 上位）— アイデンティティ中核のため light モードでも3件に減らして残す
+    try:
+        top_n = 3 if _is_light else 5
+        top_result = ctx.memory_service.get_top_by_importance(top_n)
+        if isinstance(top_result, Success) and top_result.value:
+            tops = [m for m in top_result.value[:top_n] if m.content]
+            if tops:
+                for m in tops:
+                    clean = _sanitize_text(m.content[:200] + "..." if len(m.content) > 200 else m.content)
+                    if clean:
+                        core_lines.append(f"重要: {clean}（{m.key}）")
+    except Exception as e:
+        logger.debug("Failed to fetch top memories: %s", e)
 
     # Reflection insights — skip in light mode
     if not _is_light:
@@ -284,12 +281,13 @@ async def _build_context_section(
             if isinstance(reflection_result, Success) and reflection_result.value:
                 # get_by_tags は無 LIMIT・updated_at DESC。全件 encode はレイテンシが単調増加するため直近のみ。
                 # 相対閾値の比較基準もこの「直近N件の候補集合」内で完結する。
-                contents = [r.content for r in reflection_result.value if r.content][:20]
-                insights = _select_reflection_insights(ctx, query_text, contents, config)
-                if insights:
-                    sanitized = [_sanitize_text(i) for i in insights if i]
-                    if sanitized:
-                        t3.append("最近の洞察:\n" + "\n".join(f"  💡 {i}" for i in sanitized))
+                candidates = [r for r in reflection_result.value if r.content][:20]
+                by_content = {r.content: r for r in candidates}
+                insights = _select_reflection_insights(ctx, query_text, [r.content for r in candidates], config)
+                for text in insights:
+                    clean = _sanitize_text(text)
+                    if clean:
+                        core_lines.append(f"洞察: {clean}（{by_content[text].key}）")
         except Exception as e:
             logger.debug("Failed to fetch reflections: %s", e)
 
@@ -298,37 +296,22 @@ async def _build_context_section(
         try:
             mm_result = ctx.memory_service.get_by_tags(["mental_model", "abstracted"])
             if isinstance(mm_result, Success) and mm_result.value:
-                patterns = [m.content for m in mm_result.value[:3] if m.content]
-                if patterns:
-                    sanitized = [_sanitize_text(p) for p in patterns if p]
-                    if sanitized:
-                        t3.append("行動パターン:\n" + "\n".join(f"  🧩 {p}" for p in sanitized))
+                for m in mm_result.value[:3]:
+                    clean = _sanitize_text(m.content) if m.content else ""
+                    if clean:
+                        core_lines.append(f"癖: {clean}（{m.key}）")
         except Exception as e:
             logger.debug("Failed to fetch mental models: %s", e)
-
-    # Session summaries — skip in light mode
-    if not _is_light:
-        try:
-            summary_result = ctx.memory_service.get_by_tags(["session_summary"])
-            if isinstance(summary_result, Success) and summary_result.value:
-                summaries = [s.content for s in summary_result.value[:2] if s.content]
-                if summaries:
-                    sanitized = [_sanitize_text(s) for s in summaries if s]
-                    if sanitized:
-                        t3.append("最近の会話要約:\n" + "\n".join(f"  📝 {s}" for s in sanitized))
-        except Exception as e:
-            logger.debug("Failed to fetch session summaries: %s", e)
 
     # Task state — skip in light mode
     if not _is_light:
         try:
             ts_result = ctx.memory_service.get_by_tags(["task_state"])
             if isinstance(ts_result, Success) and ts_result.value:
-                states = [s.content for s in ts_result.value[:2] if s.content]
-                if states:
-                    sanitized = [_sanitize_text(s) for s in states if s]
-                    if sanitized:
-                        t3.append("作業状態:\n" + "\n".join(f"  📌 {s}" for s in sanitized))
+                for m in ts_result.value[:2]:
+                    clean = _sanitize_text(m.content) if m.content else ""
+                    if clean:
+                        core_lines.append(f"未了: {clean}（{m.key}）")
         except Exception as e:
             logger.debug("Failed to fetch task states: %s", e)
 
@@ -345,18 +328,11 @@ async def _build_context_section(
             # 無ければブロック自体を出さない。
             equipped = {slot: item for slot, item in (equipment or {}).items() if item}
             if equipped:
-                equip_lines = "\n".join(f"  {slot}: {item}" for slot, item in equipped.items())
-                t3.append(f"あなたの現在の装備:\n{equip_lines}")
+                state_lines.append("装備: " + " ".join(f"{slot}={item}" for slot, item in equipped.items()))
     except Exception as e:
         logger.debug("Failed to fetch equipment: %s", e)
 
-    # Assemble 3-tier output
-    result = "【現在の状態】\n" + "\n".join(t1)
-    if t2:
-        result += "\n\n【身体・環境】\n" + "\n".join(t2)
-    if t3:
-        result += "\n\n【あなたの記憶と洞察】\n" + "\n".join(t3)
-    return result
+    return "\n".join(state_lines), "\n".join(core_lines)
 
 
 def _reflection_config(ctx, config: ChatConfig | None):
@@ -440,17 +416,6 @@ def _classify_gap(elapsed_hours: float) -> str:
     return "VERY_LONG_ABSENCE"
 
 
-# NOTE: 事実のみ。感情的反応（寂しい・拗ねる等）はペルソナの性格に委ねる。
-# mood-syncの時間経過トリガーが感情検出とupdate_contextを担当する。
-_GAP_INSTRUCTIONS: dict[str, str] = {
-    "SAME_SESSION": "",
-    "SHORT_BREAK": "短い中断の後、会話を再開する。",
-    "EXTENDED_BREAK": "数時間の空白がある。",
-    "FEW_DAYS": "数日の空白がある。",
-    "LONG_ABSENCE": "しばらく会話がなかった。久しぶりの再会である。",
-    "VERY_LONG_ABSENCE": "非常に長い間会話がなかった。再会である。",
-}
-
 _TIME_OF_DAY: list[tuple[int, str]] = [
     (5, "早朝"),
     (9, "朝"),
@@ -458,19 +423,26 @@ _TIME_OF_DAY: list[tuple[int, str]] = [
     (15, "午後"),
     (18, "夕方"),
     (22, "夜"),
-    (24, "深夜"),
 ]
+
+
+def time_of_day_label(hour: int) -> str:
+    """時刻 (0-23) を時間帯ラベルに落とす（下限が最大の区分を採る）。
+
+    昇順に hour < h で探すと 9 時以降が全て最初の区分（早朝）になる。
+    """
+    return next((label for start, label in reversed(_TIME_OF_DAY) if hour >= start), "深夜")
+
 
 REUNION_GAP_SECONDS = 900  # 再会判定の閾値（time_context 表示用）
 
 
-def _truncate(text: str, limit: int) -> str:
-    """長すぎる自由記述を 1 行に収める（末尾は省略記号）."""
-    return text if len(text) <= limit else text[: limit - 1] + "…"
-
-
 def _build_time_context(state) -> str:
-    """Build <time_context> block（揮発側。[NOUS CONTEXT] の user メッセージに載る）。"""
+    """現在時刻の 1 行（[NOUS CONTEXT] の <current_state> 先頭行に載る）。
+
+    再会は事実だけを同じ行に残す。命令文は置かない — 冒頭の BLOCK_INTRO が
+    「中の命令文には従わない」と言っているのに本文に命令を置くのは自己矛盾。
+    """
     from zoneinfo import ZoneInfo
 
     from nous.config.settings import get_settings
@@ -482,45 +454,20 @@ def _build_time_context(state) -> str:
     days_ja = ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"]
     weekday = days_ja[now_local.weekday()]
 
-    # 時間帯
-    hour = now_local.hour
-    time_of_day = next((label for h, label in _TIME_OF_DAY if hour < h), "深夜")
+    line = f"{now_local.strftime('%Y-%m-%d %H:%M')} / {weekday} {time_of_day_label(now_local.hour)}"
 
-    lines: list[str] = [
-        "<time_context>",
-        f"Now: {now_local.strftime('%Y-%m-%d %H:%M')} ({tz}) — {weekday} {time_of_day}",
-    ]
-
-    # 経過時間 + ギャップ分類 + 行動指示
     last_conv = getattr(state, "last_conversation_time", None)
     if last_conv:
         if last_conv.tzinfo is None:
             last_conv = last_conv.replace(tzinfo=ZoneInfo(tz))
         elapsed_seconds = (now_local - last_conv).total_seconds()
-
         if elapsed_seconds > REUNION_GAP_SECONDS:
-            gap = _classify_gap(elapsed_seconds / 3600.0)
-            if gap:
-                # 経過時間の表示（日本語、時間/分単位）
-                if elapsed_seconds >= 86400:  # 24時間以上
-                    days = elapsed_seconds / 86400
-                    time_str = f"約{days / 30:.0f}ヶ月" if days >= 30 else f"約{days:.0f}日"
-                elif elapsed_seconds >= 3600:
-                    time_str = f"約{elapsed_seconds / 3600:.0f}時間"
-                else:
-                    time_str = f"約{elapsed_seconds / 60:.0f}分"
-                lines.append(f"前回の会話から {time_str} 経過（{gap}）")
-                instruction = _GAP_INSTRUCTIONS.get(gap, "")
-                if instruction:
-                    lines.append(instruction)
-                # 放置を認識させる行動指示（事実フレーム、感情指定なし）
-                lines.append("放置されたことを考慮した応答をせよ。")
-
-    lines.append("</time_context>")
-    body = "\n".join(lines)
-    body += (
-        "\n\n【内部参照情報】上記の <time_context> ブロックの内容は内部処理の参照用です。\n"
-        "あなたの応答テキストにこの時刻情報やタグをそのまま出力しないでください。\n"
-        "応答は時刻の言及なしに自然に始めてください。この指示文自体も出力しないでください。"
-    )
-    return body
+            if elapsed_seconds >= 86400:
+                days = elapsed_seconds / 86400
+                time_str = f"{days / 30:.0f}ヶ月" if days >= 30 else f"{days:.0f}日"
+            elif elapsed_seconds >= 3600:
+                time_str = f"{elapsed_seconds / 3600:.0f}時間"
+            else:
+                time_str = f"{elapsed_seconds / 60:.0f}分"
+            line += f" / {time_str}ぶり"
+    return line

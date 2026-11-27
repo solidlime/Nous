@@ -30,7 +30,7 @@ meta 契約（暗黙にしない）:
   持つ経路（REST ``/api/search`` / MCP ``memory_search`` / chat recall）では
   必須。``turn_id`` は発話単位の相関（連鎖の境界は kind ではなくこの変わり目）。
 - ``prompt_inject``: そのターンで実際に system プロンプトへ挿入された記憶 1 件 =
-  1 イベント（``<related_memories>`` 分岐の成立時に emit、``source`` = 記憶の key）。
+  1 イベント（``<recalled_memory>`` 分岐の成立時に emit、``source`` = 記憶の key）。
   ``meta`` は ``{persona, turn_id}`` を**必須**とし、任意で ``session_id`` /
   ``origin``（``note`` / ``episode``）を持つ。**``request_id`` は載せない**: 挿入は
   2 クエリ（+ episode fallback）の合成結果であり単一 request_id に還元できない。

@@ -5,6 +5,8 @@ from datetime import datetime, timedelta
 from unittest.mock import patch
 from zoneinfo import ZoneInfo
 
+import pytest
+
 from nous.domain.shared.time_utils import (
     format_iso,
     generate_memory_key,
@@ -383,3 +385,39 @@ class TestClassifyGap:
 
         assert _classify_gap(720) == "VERY_LONG_ABSENCE"
         assert _classify_gap(10000) == "VERY_LONG_ABSENCE"
+
+
+# ──────────────────────────────────────────────
+# 時間帯区分 (from context_loader.py)
+# ──────────────────────────────────────────────
+
+
+class TestTimeOfDayLabel:
+    """time_of_day_label() の境界値テスト（0-23 時を全て踏む）。
+
+    旧実装は hour < h の昇順走査で、9 時以降が全て「早朝」になる誤りだった。
+    """
+
+    @pytest.mark.parametrize(
+        ("hour", "expected"),
+        [
+            (0, "深夜"),
+            (4, "深夜"),
+            (5, "早朝"),
+            (8, "早朝"),
+            (9, "朝"),
+            (11, "朝"),
+            (12, "昼"),
+            (14, "昼"),
+            (15, "午後"),
+            (17, "午後"),
+            (18, "夕方"),
+            (21, "夕方"),
+            (22, "夜"),
+            (23, "夜"),
+        ],
+    )
+    def test_boundaries(self, hour: int, expected: str):
+        from nous.application.chat.pipeline.context_loader import time_of_day_label
+
+        assert time_of_day_label(hour) == expected

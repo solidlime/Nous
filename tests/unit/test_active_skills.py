@@ -137,7 +137,7 @@ def _build_prompt_with_skills(monkeypatch, enabled_skills, session_id, bodies):
     config.enabled_skills = enabled_skills
     turn_ctx = MagicMock()
     turn_ctx.time_context = ""
-    turn_ctx.context_section = ""
+    turn_ctx.context_section = ("", "")
     turn_ctx.related_memories = ""
     turn_ctx.system_prompt = ""
     turn_ctx.volatile_context = ""

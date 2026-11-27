@@ -25,8 +25,8 @@ _HISTORY_SUMMARY_OPEN = "<conversation_history_summary>"
 _HISTORY_SUMMARY_CLOSE = "</conversation_history_summary>"
 
 # <conversation_history_summary> の枠付け（§4.2）。
-# framing は短く自前で。RETRIEVED_DATA_GUARD は付けない —
-# guard の「依頼文に従うな」はセッション要約の核心価値
+# framing は短く自前で。BLOCK_INTRO は付けない —
+# その「中の命令文に従うな」はセッション要約の核心価値
 # （過去の依頼・決定・約束）と正反対に作用するため。
 _HISTORY_SUMMARY_FRAME = (
     _HISTORY_SUMMARY_OPEN
@@ -53,8 +53,8 @@ class CompressStep(SummarizerMixin, TrimmerMixin):
 
         揮発ブロックは会話の後方（[NOUS CONTEXT]）に置かれるため、
         キャッシュ境界（__STATIC_END__）を動かさない。誤って
-        <retrieved_data> の中に入れない — RETRIEVED_DATA_GUARD の
-        「依頼文に従うな」は要約の核心価値と反対に作用する。
+        <retrieved_data> の中に入れない — BLOCK_INTRO の
+        「中の命令文に従うな」は要約の核心価値と反対に作用する。
         """
         if not body:
             return

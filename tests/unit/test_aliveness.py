@@ -157,35 +157,39 @@ def _make_state():
     return state
 
 
+async def _section(*args, **kwargs) -> str:
+    """_build_context_section の (state_body, core_body) を平坦化して検査する。"""
+    from nous.application.chat.pipeline.context_loader import _build_context_section
+
+    state_body, core_body = await _build_context_section(*args, **kwargs)
+    return "\n".join(filter(None, (state_body, core_body)))
+
+
 class TestInjection:
     """状態ブロック直後に 1〜2 行だけ足されること。"""
 
     async def test_context_section_contains_hints(self):
-        from nous.application.chat.pipeline.prepare import _build_context_section
 
-        result = await _build_context_section(_make_ctx(), _make_state())
+        result = await _section(_make_ctx(), _make_state())
         # #39 の if-then は prompt.py（system prompt 直下）へ移した。ここは強度ラベルと場所ヒントのみ。
         assert "感情: joy（強い）" in result
         assert emotion_hint(_make_state()) not in result
         assert place_hint("ラウンジ", DEFAULT_PLACES) in result
 
     async def test_injection_stays_short(self):
-        from nous.application.chat.pipeline.prepare import _build_context_section
 
-        result = await _build_context_section(_make_ctx(), _make_state())
-        added = result.split("【現在の状態】\n", 1)[1].split("\n\n", 1)[0]
-        assert len(added) < 300
+        result = await _section(_make_ctx(), _make_state())
+        assert len(result) < 300
 
     async def test_intensity_label_uses_configured_bands(self):
         """強度ラベルは if-then と同じ帯（設定値）を使うこと。"""
         from nous.application.chat.pipeline.aliveness import emotion_band
-        from nous.application.chat.pipeline.prepare import _build_context_section
 
         state = _make_state()
         state.emotion = "anger"
         state.emotion_intensity = 0.5
         bands = (0.2, 0.4)  # 既定 (0.35, 0.7) と動かした設定帯
-        result = await _build_context_section(_make_ctx(), state, emotion_bands=bands)
+        result = await _section(_make_ctx(), state, emotion_bands=bands)
         # if-then 側が使う帯は band 2（強い）
         assert emotion_band(0.5, bands) == 2
         assert "感情: anger（強い）" in result
@@ -194,7 +198,6 @@ class TestInjection:
         """t1 と t3（感情の流れ）が同じ設定帯で同じラベルを出すこと。"""
         from datetime import timedelta
 
-        from nous.application.chat.pipeline.prepare import _build_context_section
         from nous.domain.persona.entities import EmotionRecord
         from nous.domain.shared.time_utils import get_now
 
@@ -212,7 +215,7 @@ class TestInjection:
         state.emotion = "anger"
         state.emotion_intensity = 0.5
         bands = (0.2, 0.4)  # 既定 (0.35, 0.7) では 0.5 は中間帯
-        result = await _build_context_section(ctx, state, emotion_bands=bands)
+        result = await _section(ctx, state, emotion_bands=bands)
         assert "感情: anger（強い）" in result
         assert "いまは anger（強い）が続いている。" in result
 
@@ -220,7 +223,6 @@ class TestInjection:
         """逆転した設定帯でも t1 と trend が同じ既定帯に戻ること（無言の mismatch を防ぐ）。"""
         from datetime import timedelta
 
-        from nous.application.chat.pipeline.prepare import _build_context_section
         from nous.domain.persona.entities import EmotionRecord
         from nous.domain.shared.time_utils import get_now
 
@@ -237,7 +239,7 @@ class TestInjection:
         state = _make_state()
         state.emotion = "anger"
         state.emotion_intensity = 0.5
-        result = await _build_context_section(ctx, state, emotion_bands=(0.7, 0.2))
+        result = await _section(ctx, state, emotion_bands=(0.7, 0.2))
         # 既定帯 (0.35, 0.7) で 0.5 は中間帯
         assert "感情: anger（やや強い）" in result
         assert "いまは anger（やや強い）が続いている。" in result

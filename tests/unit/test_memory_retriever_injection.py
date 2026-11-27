@@ -124,7 +124,7 @@ async def test_prepare_passes_session_set_to_search():
     )
     with (
         _patch("nous.application.chat.pipeline.prepare._search_memories", _fake_search),
-        _patch("nous.application.chat.pipeline.prepare._build_context_section", AsyncMock(return_value="")),
+        _patch("nous.application.chat.pipeline.prepare._build_context_section", AsyncMock(return_value=("", ""))),
         nullcontext(),
     ):
         await PrepareStep().run(ctx, session, ChatTurnContext(session_id="s", user_message="hi"), config)

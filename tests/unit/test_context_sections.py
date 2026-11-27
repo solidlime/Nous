@@ -12,6 +12,7 @@ from nous.domain.shared.result import Success
 
 def _make_memory(content: str, tags: list[str] | None = None):
     m = MagicMock()
+    m.key = "k0"
     m.content = content
     m.tags = tags or []
     m.created_at = None
@@ -50,7 +51,9 @@ def _make_state():
 async def _build(ctx, state, compress_mode="auto"):
     from nous.application.chat.pipeline.prepare import _build_context_section
 
-    return await _build_context_section(ctx, state, compress_mode=compress_mode)
+    # 戻り値は (state_body, core_body)。本テストは平坦化した文字列で検査する
+    state_body, core_body = await _build_context_section(ctx, state, compress_mode=compress_mode)
+    return "\n".join(filter(None, (state_body, core_body)))
 
 
 class TestTopImportanceSection:
@@ -60,8 +63,7 @@ class TestTopImportanceSection:
     async def test_top_memories_injected(self):
         ctx = _make_ctx(top_memories=[_make_memory("ラウラというニックネームで呼ばれている")])
         result = await _build(ctx, _make_state())
-        assert "重要な記憶:" in result
-        assert "📖 ラウラというニックネームで呼ばれている" in result
+        assert "重要: ラウラというニックネームで呼ばれている" in result
 
     @pytest.mark.asyncio
     async def test_auto_mode_requests_five(self):
@@ -74,7 +76,7 @@ class TestTopImportanceSection:
         """light モードでも重要な記憶は残る（3件に減らす）。"""
         ctx = _make_ctx(top_memories=[_make_memory(f"重要 {i}") for i in range(5)])
         result = await _build(ctx, _make_state(), compress_mode="light")
-        assert "重要な記憶:" in result
+        assert "重要:" in result
         ctx.memory_service.get_top_by_importance.assert_called_once_with(3)
         assert "重要 3" not in result  # 3件に丸められている
         assert "重要 0" in result
@@ -92,8 +94,8 @@ class TestTopImportanceSection:
         ctx = _make_ctx()
         ctx.memory_service.get_top_by_importance.side_effect = RuntimeError("boom")
         result = await _build(ctx, _make_state())
-        assert "【現在の状態】" in result
-        assert "重要な記憶:" not in result
+        assert "身体: " in result
+        assert "重要:" not in result
 
 
 class TestPrecedenceBlock:
@@ -121,7 +123,7 @@ class TestCharacterAdherenceConsistency:
         from nous.application.chat.pipeline.prompt import CHARACTER_ADHERENCE_BLOCK
 
         # タグ名はリテラル <xx> で書かない（tag-pairing ガード §4.5 の誤検知防止）
-        for name in ("current_state", "related_memories", "time_context"):
+        for name in ("current_state", "core_memory", "recalled_memory", "recent_turns"):
             assert name in CHARACTER_ADHERENCE_BLOCK
         assert "矛盾しないこと" in CHARACTER_ADHERENCE_BLOCK
         assert "列挙・読み上げはしない" in CHARACTER_ADHERENCE_BLOCK
@@ -174,8 +176,8 @@ class TestFreeTextBodyState:
 
         section = await _build(_make_ctx(), state)
 
-        assert "体の様子: 肩が重い" in section
-        assert "心の様子: 昨日の会話を引きずっている" in section
+        assert "体調: 肩が重い" in section
+        assert "心境: 昨日の会話を引きずっている" in section
 
     async def test_empty_strings_are_skipped(self):
         state = _make_state()
@@ -184,14 +186,16 @@ class TestFreeTextBodyState:
 
         section = await _build(_make_ctx(), state)
 
-        assert "体の様子" not in section
-        assert "心の様子" not in section
+        assert "体調:" not in section
+        assert "心境:" not in section
 
-    async def test_appearance_is_injected_and_truncated(self):
+    async def test_appearance_is_not_injected(self):
+        """見た目 の長文行は廃止（装備行と重複し、毎ターン文脈を圧迫していた）。"""
         state = _make_state()
         state.appearance = "A" * 400
 
         section = await _build(_make_ctx(), state)
 
-        line = next(ln for ln in section.splitlines() if ln.startswith("見た目: "))
-        assert line.endswith("…") and len(line) <= len("見た目: ") + 200
+        assert "見た目:" not in section
+        assert "A" * 400 not in section
+        assert state.appearance == "A" * 400  # state 側の値は無傷

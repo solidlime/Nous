@@ -17,8 +17,9 @@ class ChatTurnContext:
     # 発話単位の相関 ID（wiring イベントの連鎖境界）。service.chat が採番する。
     turn_id: str = ""
     # PrepareStep が埋める
-    context_section: str = ""
-    time_context: str = ""  # <time_context> ブロック（揮発側: [NOUS CONTEXT] の user メッセージに入る）
+    # (state_body, core_body)。タグ付けと並び順は injection.build_injection_block が持つ。
+    context_section: tuple[str, str] = ("", "")
+    time_context: str = ""  # 現在時刻の 1 行（[NOUS CONTEXT] の <current_state> 先頭行に入る）
     related_memories: str = ""
     state_raw: dict = field(default_factory=dict)
     memories_raw: list[dict] = field(default_factory=list)

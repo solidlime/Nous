@@ -85,6 +85,13 @@ def validate_response(text: str) -> list[str]:
         r"<retrieved_data>",
         r"</retrieved_data>",
         r"<current_state>",
+        r"</current_state>",
+        r"<recent_memory>",
+        r"<recent_turns>",
+        r"<core_memory>",
+        r"<recalled_memory>",
+        r"<wiki>",
+        r"</wiki>",
         r"<related_memories>",
         r"<precedence>",
     ]

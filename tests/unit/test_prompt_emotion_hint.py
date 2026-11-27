@@ -1,4 +1,4 @@
-"""#39: 感情 if-then を system prompt 直下に 1 行注入する（retrieved_data の外）。"""
+"""#39: 感情 if-then は <current_state> 内の「向き:」1 行として注入される。"""
 
 from __future__ import annotations
 
@@ -7,7 +7,7 @@ from unittest.mock import MagicMock
 from nous.application.chat.pipeline.context import ChatTurnContext
 from nous.application.chat.pipeline.prompt import PromptBuildStep
 
-HEADER = "【今の感情から】"
+HEADER = "向き: "
 
 
 def _ctx() -> MagicMock:
@@ -27,7 +27,7 @@ def _config(texts: dict | None = None) -> MagicMock:
     return cfg
 
 
-def _run(state_raw: dict, texts: dict | None = None, context_section: str = "") -> str:
+def _run(state_raw: dict, texts: dict | None = None, context_section: tuple[str, str] = ("", "")) -> str:
     turn_ctx = ChatTurnContext(session_id="s", user_message="やあ")
     turn_ctx.state_raw = state_raw
     turn_ctx.context_section = context_section
@@ -42,12 +42,12 @@ def test_emotion_line_injected_once():
     assert prompt.count(HEADER) == 1
 
 
-def test_emotion_line_is_outside_retrieved_data():
-    prompt = _run({"emotion": "joy", "emotion_intensity": 0.9}, context_section="感情: joy（強い）")
+def test_emotion_line_sits_inside_current_state():
+    """向き は <current_state> の末尾 1 行（記憶ブロックには混ぜない）。"""
+    prompt = _run({"emotion": "joy", "emotion_intensity": 0.9}, context_section=("感情: joy（強い）", ""))
 
-    assert HEADER in prompt.split("<retrieved_data>", 1)[0]
-    inside = prompt.split("<retrieved_data>", 1)[1].split("</retrieved_data>", 1)[0]
-    assert HEADER not in inside
+    assert HEADER in prompt.split("<current_state>", 1)[1].split("</current_state>", 1)[0]
+    assert prompt.count(HEADER) == 1
 
 
 def test_no_emotion_no_line():

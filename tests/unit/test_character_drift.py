@@ -60,17 +60,19 @@ class TestEquipmentContext:
 
         equipment: dict[str, str | None] = dict.fromkeys(VALID_SLOTS)
         equipment["top"] = "パーカー"
-        section = await _build_context_section(self._ctx_with_equipment(equipment), _make_state())
-        assert "top: パーカー" in section
+        section = "\n".join(await _build_context_section(self._ctx_with_equipment(equipment), _make_state()))
+        assert "top=パーカー" in section
         assert "未装着" not in section
-        assert section.count("bottom:") == 0
+        assert "bottom=" not in section
 
     @pytest.mark.asyncio
     async def test_empty_equipment_omits_block(self):
         from nous.domain.equipment.entities import VALID_SLOTS
 
-        section = await _build_context_section(self._ctx_with_equipment({s: None for s in VALID_SLOTS}), _make_state())
-        assert "あなたの現在の装備" not in section
+        section = "\n".join(
+            await _build_context_section(self._ctx_with_equipment({s: None for s in VALID_SLOTS}), _make_state())
+        )
+        assert "装備:" not in section
         assert "未装着" not in section
 
     @pytest.mark.asyncio
@@ -78,10 +80,10 @@ class TestEquipmentContext:
         from nous.domain.equipment.entities import VALID_SLOTS
 
         equipment: dict[str, str | None] = {s: ("テスト服" if s == "shoes" else None) for s in VALID_SLOTS}
-        section = await _build_context_section(self._ctx_with_equipment(equipment), _make_state())
-        assert "shoes: テスト服" in section
-        assert section.count("shoes:") == 1
+        section = "\n".join(await _build_context_section(self._ctx_with_equipment(equipment), _make_state()))
+        assert "shoes=テスト服" in section
+        assert section.count("shoes=") == 1
         # 未装着スロットは列挙しない
         for slot in VALID_SLOTS:
             if slot != "shoes":
-                assert f"{slot}:" not in section
+                assert f"{slot}=" not in section

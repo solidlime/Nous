@@ -139,12 +139,10 @@ class TestBuildRelationshipContext:
 
         turn_ctx = MagicMock()
         turn_ctx.context_section = (
-            "【現在の状態】\nNow: 2026-07-10 12:00 (JST)\n\n"
-            "【身体・環境】\n"
-            "関係: 友好的\n"
-            "3日前から知り合い。これまで 2 日会話した。\n\n"
-            "【参照情報】\n"
+            "感情: neutral（弱い）\n関係: 友好的\n3日前から知り合い。これまで 2 日会話した。",
+            "",
         )
+        turn_ctx.time_context = ""
         turn_ctx.related_memories = ""
         turn_ctx.system_prompt = ""
         turn_ctx.volatile_context = ""

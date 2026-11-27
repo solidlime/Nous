@@ -236,7 +236,7 @@ async def _build_injection(ctx, persona: str, rows: list, wiki_hits: list, confi
     state_result = ctx.persona_service.get_context(persona)
     if isinstance(state_result, Success):
         state = state_result.value
-    context_section = ""
+    context_section: tuple[str, str] = ("", "")
     if state is not None:
         # 減衰は適用しない（GET で書き込み副作用を起こさない — chat との明示的な差）。
         context_section = await _build_context_section(

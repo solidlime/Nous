@@ -70,7 +70,7 @@ class TestSSEEvents:
 class TestChatTurnContext:
     def test_defaults(self):
         ctx = ChatTurnContext(session_id="s1", user_message="hello")
-        assert ctx.context_section == ""
+        assert ctx.context_section == ("", "")
         assert ctx.related_memories == ""
         assert ctx.system_prompt == ""
         assert ctx.full_response == ""
@@ -369,9 +369,10 @@ class TestBuildContextSectionLightMode:
         state.pain = None
         state.arousal = None
 
-        result = await _build_context_section(ctx, state, compress_mode="light")
-        # Should still contain basic structure (time info moved to TIME_CONTEXT block)
-        assert "【現在の状態】" in result
+        result = "\n".join(await _build_context_section(ctx, state, compress_mode="light"))
+        # 見出し・タグは廃止（レイアウトは injection.build_injection_block の責務）
+        assert "【現在の状態】" not in result
+        assert "<current_state>" not in result
         # Should not call emotion history
         ctx.persona_service.get_emotion_history.assert_not_called()
         # Light mode should not fetch heavy sections (reflection, mental_model, session_summary)
@@ -415,8 +416,8 @@ class TestBuildContextSectionNormalMode:
         state.pain = None
         state.arousal = None
 
-        result = await _build_context_section(ctx, state, compress_mode="auto")
-        assert "【現在の状態】" in result
+        result = "\n".join(await _build_context_section(ctx, state, compress_mode="auto"))
+        assert "身体: " in result
 
 
 class TestBuildContextSectionTierContent:
@@ -454,7 +455,7 @@ class TestBuildContextSectionTierContent:
         state.pain = None
         state.arousal = None
 
-        result = await _build_context_section(ctx, state)
+        result = "\n".join(await _build_context_section(ctx, state))
         assert "喜び" in result
         assert "強い" in result  # intensity 0.8 > 0.6 → "強い"
 
@@ -491,7 +492,7 @@ class TestBuildContextSectionTierContent:
         state.persona_info = {}
         state.equipped_items = None
 
-        result = await _build_context_section(ctx, state)
+        result = "\n".join(await _build_context_section(ctx, state))
         assert "身体:" in result
         assert "疲労" in result
         assert "自室" in result
@@ -532,11 +533,10 @@ class TestBuildContextSectionTierContent:
             "handover:nous": "前回の栞",
         }
 
-        result = await _build_context_section(ctx, state)
-        assert "ユーザー情報:" in result
-        assert "Taro" in result
-        assert "ペルソナ情報:" in result
-        assert "assistant" in result
+        result = "\n".join(await _build_context_section(ctx, state))
+        assert "相手: Taro" in result
+        assert "ペルソナ情報:" not in result  # 見出し廃止 → メモ: 1 行へ
+        assert "メモ: assistant" in result
         # handover: は session_begin 専用（毎ターンの system prompt には出さない）
         assert "前回の栞" not in result
         # goals should be filtered out (in _hidden set)
@@ -593,7 +593,7 @@ class TestEmotionTrendNarrative:
         ctx = self._make_ctx(records)
         state = self._make_state("喜び")  # prev(好奇心) != 喜び → 移行ナラティブ
 
-        result = await _build_context_section(ctx, state)
+        result = "\n".join(await _build_context_section(ctx, state))
 
         assert "感情の流れ:" in result
         line = [ln for ln in result.splitlines() if "感情の流れ:" in ln][0]
@@ -618,7 +618,7 @@ class TestEmotionTrendNarrative:
         ctx = self._make_ctx(records)
         state = self._make_state("喜び")
 
-        result = await _build_context_section(ctx, state)
+        result = "\n".join(await _build_context_section(ctx, state))
         assert "感情の流れ:" not in result
 
 
@@ -634,9 +634,9 @@ class TestDecayNoteInContextSection:
 
         note = "2時間の間に、joyの感情は減衰した（現在の強度: 0.4）\n3時間の経過で fatigue 40%→55% に上昇"
         state = PersonaState(persona="t", fatigue=0.55)
-        result = await _build_context_section(MagicMock(), state, compress_mode="light", decay_note=note)
+        result = "\n".join(await _build_context_section(MagicMock(), state, compress_mode="light", decay_note=note))
         assert "状態変化" in result and "fatigue 40%→55% に上昇" in result
-        assert result.index("【身体・環境】") < result.index("状態変化")  # Tier 2 内
+        assert result.index("状態変化") < result.index("身体: ")  # 状態変化は身体計測の直前
 
     @pytest.mark.asyncio
     async def test_no_decay_note_no_section(self):
@@ -645,7 +645,7 @@ class TestDecayNoteInContextSection:
         from nous.application.chat.pipeline.prepare import _build_context_section
         from nous.domain.persona.entities import PersonaState
 
-        result = await _build_context_section(MagicMock(), PersonaState(persona="t"), compress_mode="light")
+        result = "\n".join(await _build_context_section(MagicMock(), PersonaState(persona="t"), compress_mode="light"))
         assert "状態変化" not in result
 
 
@@ -695,13 +695,13 @@ class TestPrepareStepBodyDecayNote:
 
     @pytest.mark.asyncio
     async def test_body_decay_delta_line_appended(self):
-        section = await self._run(0.55)
+        section = "\n".join(await self._run(0.55))
         assert "3時間" in section and "fatigue 40%→55% に上昇" in section
         assert "joyの感情は減衰した" in section  # 感情ノートと連結済み
 
     @pytest.mark.asyncio
     async def test_no_delta_no_body_line(self):
-        section = await self._run(0.405)  # 差分 < 0.01 → ノートなし
+        section = "\n".join(await self._run(0.405))  # 差分 < 0.01 → ノートなし
         assert "上昇" not in section and "40%→" not in section
 
 
@@ -743,7 +743,7 @@ class TestPrepareStepTimeContext:
         ):
             await PrepareStep().run(ctx, session, turn_ctx, config)
 
-        assert turn_ctx.time_context.startswith("<time_context>")  # ← 時計は渡す
+        assert turn_ctx.time_context and "<" not in turn_ctx.time_context  # ← 時計は渡す（タグは注入側）
 
 
 # ──────────────────────────────────────────────
@@ -1331,7 +1331,7 @@ class TestBuildTimeContext:
     """_build_time_context() の出力検証"""
 
     def test_output_structure(self):
-        """<time_context>...</time_context> で囲まれ、末尾に否定例付き指示が付加される"""
+        """1 行ラベル（タグも内部参照注記も付けない。注入時の体裁は injection.py の責務）"""
         from unittest.mock import MagicMock
 
         from nous.application.chat.pipeline.prepare import _build_time_context
@@ -1339,13 +1339,16 @@ class TestBuildTimeContext:
         state = MagicMock()
         state.last_conversation_time = None
         result = _build_time_context(state)
-        assert result.startswith("<time_context>")
-        assert "</time_context>" in result
-        assert "応答テキストにこの時刻情報やタグをそのまま出力しない" in result
-        assert "【内部参照情報】" in result
+        import re
+
+        assert re.fullmatch(
+            r"\d{4}-\d{2}-\d{2} \d{2}:\d{2} / (月|火|水|木|金|土|日)曜日 (深夜|早朝|朝|昼|午後|夕方|夜)",
+            result,
+        )
+        assert "<" not in result
 
     def test_contains_now_and_weekday(self):
-        """出力に Now: と曜日が含まれる"""
+        """出力に日付・時刻と曜日が含まれる"""
         from unittest.mock import MagicMock
 
         from nous.application.chat.pipeline.prepare import _build_time_context
@@ -1353,7 +1356,7 @@ class TestBuildTimeContext:
         state = MagicMock()
         state.last_conversation_time = None
         result = _build_time_context(state)
-        assert "Now:" in result
+        assert result.split(" / ")[0].count(":") == 1  # HH:MM
         assert any(d in result for d in ["月曜日", "火曜日", "水曜日", "木曜日", "金曜日", "土曜日", "日曜日"])
 
     def test_no_gap_when_no_last_conversation(self):
@@ -1365,7 +1368,7 @@ class TestBuildTimeContext:
         state = MagicMock()
         state.last_conversation_time = None
         result = _build_time_context(state)
-        assert "Time since last conversation" not in result
+        assert "ぶり" not in result
 
     def test_gap_shows_only_above_15min(self):
         """15分未満の経過時間ではギャップ表示が出ない"""
@@ -1384,7 +1387,7 @@ class TestBuildTimeContext:
         with patch("nous.application.chat.pipeline.context_loader.get_now", return_value=fixed_now):
             result = _build_time_context(state2)
         # 10min < 15min threshold → no gap
-        assert "Time since last conversation" not in result
+        assert "ぶり" not in result
 
 
 class TestGapClassification:
@@ -1552,12 +1555,11 @@ class TestBuildDigest:
 
         from nous.application.chat.pipeline.prepare import _build_digest
 
-        mem = SimpleNamespace(content="テスト記憶です", updated_at=datetime.now(UTC) - timedelta(hours=2))
+        mem = SimpleNamespace(key="m1", content="テスト記憶です", updated_at=datetime.now(UTC) - timedelta(hours=2))
         ctx = self._ctx_with([mem])
         digest = _build_digest(ctx, MagicMock(memory_digest_count=5))
-        assert digest.startswith("[最近のできごと")
-        assert "(2h ago)" in digest
-        assert "テスト記憶です" in digest
+        assert digest.startswith("- [2時間前] テスト記憶です")
+        assert "h ago" not in digest
 
     def test_build_digest_swallows_store_failure(self):
         from unittest.mock import MagicMock
@@ -1643,7 +1645,9 @@ class TestTaskStateInjection:
 
         def fake_get_by_tags(tags):
             if tags == ["task_state"]:
-                mem = SimpleNamespace(content="Lane A 実装中", tags=["task_state"], created_at=datetime.now(UTC))
+                mem = SimpleNamespace(
+                    key="ts1", content="Lane A 実装中", tags=["task_state"], created_at=datetime.now(UTC)
+                )
                 return Success([mem])
             return Success([])
 
@@ -1666,8 +1670,8 @@ class TestTaskStateInjection:
         state.pain = None
         state.arousal = None
 
-        result = await _build_context_section(ctx, state)
-        assert "作業状態:" in result
+        result = "\n".join(await _build_context_section(ctx, state))
+        assert "未了: Lane A 実装中" in result
         assert "Lane A 実装中" in result
 
 

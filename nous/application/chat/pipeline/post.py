@@ -273,7 +273,7 @@ class PostProcessStep:
                 "auto_extract": config.auto_extract,
                 "system_prompt": turn_ctx.system_prompt,
                 "context_state": turn_ctx.state_raw,
-                "context_summary": turn_ctx.context_section,
+                "context_summary": "\n\n".join(turn_ctx.context_section),
                 "memories_raw": turn_ctx.memories_raw,
                 "memory_queries": turn_ctx.memory_debug.get("queries", []),
                 "skills_raw": turn_ctx.skills_raw,
