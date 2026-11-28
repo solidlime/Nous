@@ -215,13 +215,16 @@ class SkillRepository:
     def _skill_to_md(skill: Skill) -> str:
         """Serialize a Skill object to SKILL.md format with YAML frontmatter."""
         lines = ["---"]
+        # json 文字列は YAML の二重引用スカラーとして妥当。description は日本語の「:」を
+        # 含みうるので素で書くと frontmatter が壊れる（往復で読めなくなる）。
+        # name は a-z0-9 とハイフンに制限済みなので素のまま（引用すると検証で弾かれる）。
         lines.append(f"name: {skill.name}")
         if skill.description:
-            lines.append(f"description: {skill.description}")
+            lines.append(f"description: {json.dumps(skill.description, ensure_ascii=False)}")
         if skill.license:
-            lines.append(f"license: {skill.license}")
+            lines.append(f"license: {json.dumps(skill.license, ensure_ascii=False)}")
         if skill.compatibility:
-            lines.append(f"compatibility: {skill.compatibility}")
+            lines.append(f"compatibility: {json.dumps(skill.compatibility, ensure_ascii=False)}")
         if skill.metadata:
             lines.append(f"metadata: {json.dumps(skill.metadata, ensure_ascii=False)}")
         lines.append("---")
@@ -355,6 +358,20 @@ def _validate_name(name: str, dir_name: str) -> str:
     return name
 
 
+def _unquote_scalar(value: str) -> str:
+    """frontmatter の値を素の文字列に戻す（_skill_to_md が JSON 形式で引用するため）。"""
+    if len(value) >= 2 and value[0] == '"' and value[-1] == '"':
+        try:
+            parsed = json.loads(value)
+            if isinstance(parsed, str):
+                return parsed
+        except json.JSONDecodeError:
+            pass
+    if len(value) >= 2 and value[0] == "'" and value[-1] == "'":
+        return value[1:-1].replace("''", "'")
+    return value
+
+
 def _parse_skill_md(dir_name: str, raw: str) -> dict[str, Any]:
     """Extract name/description/license/compatibility/metadata from YAML frontmatter, body as content.
 
@@ -374,13 +391,13 @@ def _parse_skill_md(dir_name: str, raw: str) -> dict[str, Any]:
             for line in fm.splitlines():
                 stripped = line.strip()
                 if stripped.startswith("name:"):
-                    name = stripped[5:].strip()
+                    name = _unquote_scalar(stripped[5:].strip())
                 elif stripped.startswith("description:"):
-                    description = stripped[12:].strip()
+                    description = _unquote_scalar(stripped[12:].strip())
                 elif stripped.startswith("license:"):
-                    license_val = stripped[8:].strip()
+                    license_val = _unquote_scalar(stripped[8:].strip())
                 elif stripped.startswith("compatibility:"):
-                    compatibility_val = stripped[14:].strip()
+                    compatibility_val = _unquote_scalar(stripped[14:].strip())
                 elif stripped.startswith("metadata:"):
                     meta_raw = stripped[9:].strip()
                     if meta_raw:

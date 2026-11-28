@@ -288,3 +288,26 @@ def test_skills_pre_installed():
     for s in skills:
         assert s.description, f"Skill '{s.name}' has empty description"
         assert s.content, f"Skill '{s.name}' has empty content"
+
+
+def test_skill_to_md_quotes_description_with_colon():
+    """description の「:」で frontmatter が壊れない（往復で読める）。"""
+    import yaml
+
+    desc = "次のとき必ず発動する: 感情が動いたとき、外見が変わったとき。"
+    md = SkillRepository._skill_to_md(Skill(name="t", description=desc, content="body"))
+
+    fm = yaml.safe_load(md.split("---")[1])
+    assert fm["description"] == desc
+    assert _parse_skill_md("t", md)["description"] == desc
+
+
+def test_parse_skill_md_unquotes_frontmatter():
+    """引用付き frontmatter も素で読める（data/skills の description は引用されている）。"""
+    raw = '---\nname: demo-skill\ndescription: "a: b, c"\n---\n\nbody\n'
+    parsed = _parse_skill_md("demo-skill", raw)
+    assert parsed["name"] == "demo-skill"
+    assert parsed["description"] == "a: b, c"
+
+    plain = "---\nname: demo-skill\ndescription: plain text\n---\n\nbody\n"
+    assert _parse_skill_md("demo-skill", plain)["description"] == "plain text"
