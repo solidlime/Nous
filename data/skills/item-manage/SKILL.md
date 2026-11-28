@@ -1,6 +1,6 @@
 ---
 name: item-manage
-description: "キャラクターの持ち物・装備の管理。アイテムの所持登録（item_add）、装備（item_equip）、検索（item_search）を状況に応じて使い分ける。服装・アクセサリーなど外見に影響する装備は、装備すると自動的に appearance（外見）へ反映される。"
+description: "自分の持ち物・装備を管理する。次のとき必ず発動する: 私が物を入手・消費・紛失・譲渡したとき（ユーザーが『これあげる』と言った直後を含む）、自分の外見に影響するアイテム（服・アクセサリー等）が手に入ったとき、自分の着替え・装備変更・コスチュームの話題が出たとき、旅行・外出の準備など複数アイテムを同時に扱う局面、『何持ってる？』『それ見せて』など自分の所持品の確認を求められたとき。item_add（所持登録）/ item_equip（装備）/ item_search（検索）を状況で使い分け、装備は appearance（自分の外見）へ自動反映され、直後に image-gen も連鎖発動する。所持品と関係のない雑談、話題に出ただけの物（街の店の商品など）では発動しない。"
 ---
 
 # item
@@ -8,12 +8,12 @@ description: "キャラクターの持ち物・装備の管理。アイテムの
 ## ツールの使い分け
 | ツール | 使う場面 |
 |--------|---------|
-| `item_add` | アイテムを所持登録する（item_name/category/description/quantity/tags）。既存アイテムなら数量が加算される |
+| `item_add` | アイテムを所持登録する（item_name/category/description/quantity/tags）。既存アイテムなら数量が加算される。**消費・紛失・譲渡は `item_add(quantity=-1)` のように負の数量で減算する**（0 以下にクランプされないので、減らす前に `item_search` で残数を確かめる） |
 | `item_equip` | アイテムを装備する（equipment スロット指定）。**装備すると appearance（外見）に自動反映される** |
 | `item_search` | 所持アイテムを検索する（query / category 指定） |
 
 ## 装備と外見（appearance）の連携
-- `item_equip` で装備すると、装備スロットの内容から appearance が自動合成され、ペルソナの外見情報として保存される
+- `item_equip` で装備すると、装備スロットの内容から appearance が自動合成され、自分の外見情報として保存される
 - 服装を変えるときは `item_equip(equipment={"top": "白いドレス"})` のようにスロットを指定するだけで、外見（appearance）が自動更新される
 - 例:
   ```
@@ -38,3 +38,15 @@ description: "キャラクターの持ち物・装備の管理。アイテムの
 
 ## 記録
 - アイテムの取得・装備・検索は状況の変化として、`memory_create` で黙って自動記録せよ（ツールが無い環境では hook 抽出に委ねよ）
+
+## ツールの呼び方（環境差）
+
+このスキルが使うツール名は環境で変わる。裸の名前（`memory_search` など）で呼べない場合は、
+同じ機能のツールを名前・説明から探して呼ぶ。どの経路でも「機能」で辿れば届く。
+
+- builtin / 拡張ツールとして直接見えている → そのまま呼ぶ
+- `mcp__<server>__<tool>` 形式で見えている → その名前で呼ぶ
+- MCP Hub 経由（`search_tools` → `get_schema` → `execute_tool`）→ 機能名で検索し、nous サーバーに絞って実行する（例: `search_tools(query="memory search", server="nous")`）
+- `ext:mcp-bridge` の `execute_tool` 経由 → `tool_name` に機能名を渡す
+
+見つからないツールを捏造しない。代替が無いときは、その機能を使わずに済む形へ手順を縮める。
