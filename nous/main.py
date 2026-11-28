@@ -303,13 +303,13 @@ def create_app() -> MemoryFastMCP:
     _workers.append(prospective_worker)
 
     # 自発発言（kanban #44）。idle な persona に自分から 1〜2 文を push する。
-    # 既定無効: session_config.proactive_enabled=true で有効化。
+    # 既定無効: session_config.autonomy_enabled=true で有効化。
     proactive_worker = ProactiveWorker()
     proactive_worker.start()
     _workers.append(proactive_worker)
 
     # 自発活動（kanban #47）。idle な persona に自分で選んだ行動を 1 tick 1 つ実行させる。
-    # 既定無効: session_config.activity_enabled=true で有効化。
+    # 既定無効: session_config.autonomy_enabled=true で有効化。
     activity_worker = ActivityWorker()
     activity_worker.start()
     _workers.append(activity_worker)

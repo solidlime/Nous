@@ -7,6 +7,8 @@ ChatConfig から分割された、セッション管理・リフレクション
 from __future__ import annotations
 
 import logging
+import re
+from datetime import time
 
 from pydantic import BaseModel, Field, field_validator, model_validator
 
@@ -15,6 +17,23 @@ from nous.domain.value_objects import normalize_importance
 logger = logging.getLogger(__name__)
 
 VOICE_EMOTION_MODES = ("off", "anchor", "llm")
+
+DEFAULT_QUIET_HOURS = "01:00-08:00"
+_QUIET_HOURS_RE = re.compile(r"^([01]\d|2[0-3]):([0-5]\d)-([01]\d|2[0-3]):([0-5]\d)$")
+
+
+def parse_quiet_hours(text: str) -> tuple[time, time] | None:
+    """``"HH:MM-HH:MM"`` を (開始, 終了) に。空文字・不正値は None（= 無効）。
+
+    日跨ぎ（開始 > 終了）は許す。開始 == 終了は 24 時間ずっと停止とみなす
+    （「無効」は空文字なので、同じ時刻 2 つは全時間帯の意図と読む）。
+    """
+    m = _QUIET_HOURS_RE.match(text.strip())
+    if m is None:
+        return None
+    start = time(int(m.group(1)), int(m.group(2)))
+    end = time(int(m.group(3)), int(m.group(4)))
+    return start, end
 
 
 class SessionConfig(BaseModel):
@@ -63,19 +82,39 @@ class SessionConfig(BaseModel):
     # (絶対閾値では関連/無関内省のコサイン分布が重なるため、集合内の相対選択で分離)
     reflection_injection_margin: float = Field(default=0.08, description="注入候補を選ぶ相対マージン。")
 
-    # 自発発言（kanban #44）: 話しかけられていない時に自分から1〜2文だけ声をかける。
-    proactive_enabled: bool = Field(default=False, description="一定時間話していない時、自分から声をかけます。")
+    # 自立活動（kanban #152）: 自発発言（#44）と自発活動（#47）を 1 本のフラグに統合。
+    # 旧 proactive_enabled / activity_enabled は削除（未知キーは pydantic が捨てる）。
+    autonomy_enabled: bool = Field(default=False, description="一定時間話していない時、自分から発言・行動します。")
+    # 体調・時間帯の停止条件（nous/application/workers/autonomy.py の quiet_reason）。
+    # ユーザー発言への応答は止めない（自発だけ止める）。
+    autonomy_quiet_hours: str = Field(
+        default="01:00-08:00", description="自発活動を止める時間帯（HH:MM-HH:MM、日跨ぎ可）。空文字で無効"
+    )
+    autonomy_fatigue_limit: float = Field(default=0.7, ge=0.0, le=1.0)
+    autonomy_pain_limit: float = Field(default=0.5, ge=0.0, le=1.0)
+    autonomy_arousal_floor: float = Field(default=0.05, ge=0.0, le=1.0)
+
     proactive_idle_minutes: int = Field(default=180, description="自発発言までに必要な無会話の分数。")
     proactive_interval_minutes: int = Field(default=30, description="自発発言を検討する間隔（分）。")
     proactive_cooldown_minutes: int = Field(default=60, description="連続した自発発言を空ける最小間隔（分）。")
     proactive_prompt: str = Field(default="", description="自発発言のプロンプトに足す追加指示（空欄で無し）。")
 
-    # 自発活動（kanban #47）: 予定が無い時に自分で 1 アクション選んで実行する。
-    # 感情・身体の更新経路とは無関係（状態を読むだけ）。
-    activity_enabled: bool = Field(default=False, description="予定が無い時、自分で行動を 1 つ選んで実行します。")
+    # 自発活動の間隔・上限。感情・身体の更新経路とは無関係（状態を読むだけ）。
     activity_idle_minutes: int = Field(default=120, description="自発活動までに必要な無会話の分数。")
     activity_daily_limit: int = Field(default=5, description="1 日に自発活動する回数の上限。")
     activity_prompt: str = Field(default="", description="自発活動のプロンプトに足す追加指示（空欄で無し）。")
+
+    @field_validator("autonomy_quiet_hours")
+    @classmethod
+    def _validate_quiet_hours(cls, v: str) -> str:
+        """``"HH:MM-HH:MM"`` 以外は既定値に戻す（例外で起動を落とさない）。
+
+        空文字は「無効」の明示なので素通し。
+        """
+        if v == "" or parse_quiet_hours(v) is not None:
+            return v
+        logger.warning("autonomy_quiet_hours=%r is not HH:MM-HH:MM, falling back to %s", v, DEFAULT_QUIET_HOURS)
+        return DEFAULT_QUIET_HOURS
 
     @field_validator("reflection_retrieval_penalty")
     @classmethod

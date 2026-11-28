@@ -53,6 +53,7 @@ def _ctx(conn, **config) -> MagicMock:
     ctx.connection = conn
     cfg = MagicMock()
     cfg.max_stored_messages = 200
+    config.setdefault("autonomy_quiet_hours", "")
     cfg.session_config = SessionConfig(**config)
     ctx.config = cfg
     ctx.persona_service.get_context.return_value = Success(_state())
@@ -118,11 +119,11 @@ class TestGating:
 
     def test_requires_idle(self, sqlite_conn, chat, tools, monkeypatch) -> None:
         _insert(sqlite_conn, "chat.message", 5)
-        _run(monkeypatch, _ctx(sqlite_conn, activity_enabled=True))
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
         assert tools == []
 
     def test_never_spoken_to_stays_quiet(self, sqlite_conn, chat, tools, monkeypatch) -> None:
-        _run(monkeypatch, _ctx(sqlite_conn, activity_enabled=True))
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
         assert tools == []
 
     def test_daily_limit_stops_after_n(self, sqlite_conn, chat, tools, monkeypatch) -> None:
@@ -131,33 +132,128 @@ class TestGating:
         for _ in range(2):
             _insert(sqlite_conn, activity_worker.ACTED_EVENT, 0)
         chat["text"] = json.dumps({"action": "move", "target": "書斎"})
-        _run(monkeypatch, _ctx(sqlite_conn, activity_enabled=True, activity_daily_limit=2))
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True, activity_daily_limit=2))
         assert tools == []
+
+
+class TestQuietGate:
+    def test_quiet_hours_blocks_before_llm(self, sqlite_conn, chat, tools, monkeypatch) -> None:
+        _insert(sqlite_conn, "chat.message", 300)
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True, autonomy_quiet_hours="00:00-23:59"))
+        # LLM を呼ばない＝プロンプトが組み立てられていない
+        assert "prompt" not in chat
+        assert tools == []
+
+    def test_high_fatigue_blocks(self, sqlite_conn, chat, tools, monkeypatch) -> None:
+        _insert(sqlite_conn, "chat.message", 300)
+        ctx = _ctx(sqlite_conn, autonomy_enabled=True)
+        ctx.persona_service.get_context.return_value = Success(_state(fatigue=0.9))
+        _run(monkeypatch, ctx)
+        assert "prompt" not in chat
+
+
+class TestQuestions:
+    def _question(self, content: str):
+        from nous.domain.memory.entities import Memory
+
+        now = get_now()
+        return Memory(
+            key="q1",
+            content=content,
+            tags=["open-question"],
+            source_context="open-question:q:abc",
+            created_at=now,
+            updated_at=now,
+        )
+
+    def test_open_questions_go_into_prompt(self, sqlite_conn, chat, tools, monkeypatch) -> None:
+        import nous.application.wiki.questions as questions_mod
+
+        q = self._question("この問いは調べる価値がある")
+        monkeypatch.setattr(questions_mod, "find_open_questions", lambda ctx: [q])
+        _insert(sqlite_conn, "chat.message", 300)
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
+        assert "## 気になっていること" in chat["prompt"]
+        assert "この問いは調べる価値がある" in chat["prompt"]
+
+    def test_resolves_closes_the_question(self, sqlite_conn, chat, tools, monkeypatch) -> None:
+        import nous.application.wiki.questions as questions_mod
+        import nous.application.wiki.research as research_mod
+
+        q = self._question("mcp-hub の設定 API は無認証か")
+        closed: list[str] = []
+        monkeypatch.setattr(questions_mod, "find_open_questions", lambda ctx: [q])
+        monkeypatch.setattr(questions_mod, "close_open_questions", lambda ctx, persona, key: closed.append(key))
+
+        async def _fake_research(ctx, persona, question, *, max_calls=3):
+            return {"answer": "認証は未実装", "hits": [{"title": "x", "url": "https://e.x"}]}
+
+        monkeypatch.setattr(research_mod, "research", _fake_research)
+        _insert(sqlite_conn, "chat.message", 300)
+        chat["text"] = json.dumps(
+            {"action": "research", "question": "mcp-hub の設定 API は無認証か", "resolves": True}
+        )
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
+        assert closed == ["q:abc"]
+
+    def test_failed_research_keeps_the_question(self, sqlite_conn, chat, tools, monkeypatch) -> None:
+        import nous.application.wiki.questions as questions_mod
+        import nous.application.wiki.research as research_mod
+
+        q = self._question("mcp-hub の設定 API は無認証か")
+        closed: list[str] = []
+        monkeypatch.setattr(questions_mod, "find_open_questions", lambda ctx: [q])
+        monkeypatch.setattr(questions_mod, "close_open_questions", lambda ctx, persona, key: closed.append(key))
+
+        async def _fake_research(ctx, persona, question, *, max_calls=3):
+            return {"reason": "no_url"}
+
+        monkeypatch.setattr(research_mod, "research", _fake_research)
+        _insert(sqlite_conn, "chat.message", 300)
+        chat["text"] = json.dumps(
+            {"action": "research", "question": "mcp-hub の設定 API は無認証か", "resolves": True}
+        )
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
+        assert closed == []
 
 
 class TestActions:
     def test_move_dispatches_move_tool(self, sqlite_conn, chat, tools, monkeypatch) -> None:
         _insert(sqlite_conn, "chat.message", 300)
         chat["text"] = json.dumps({"action": "move", "target": "書斎", "reason": "本を読みたい"})
-        _run(monkeypatch, _ctx(sqlite_conn, activity_enabled=True))
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
         assert tools == [("move", {"place": "書斎"})]
 
-    def test_research_dispatches_bash(self, sqlite_conn, chat, tools, monkeypatch) -> None:
+    def test_research_uses_web_research_not_bash(self, sqlite_conn, chat, tools, monkeypatch) -> None:
+        import nous.application.wiki.research as research_mod
+
+        seen: list[str] = []
+
+        async def _fake_research(ctx, persona, question, *, max_calls=3):
+            seen.append(question)
+            return {"answer": "調べた結果", "calls": 2, "tools": ["search"], "hits": [{"title": "t", "url": "https://e.x"}]}
+
+        monkeypatch.setattr(research_mod, "research", _fake_research)
         _insert(sqlite_conn, "chat.message", 300)
-        chat["text"] = json.dumps({"action": "research", "command": "curl -s https://example.com"})
-        _run(monkeypatch, _ctx(sqlite_conn, activity_enabled=True))
-        assert tools[0][0] == "bash"
-        assert "curl" in tools[0][1]["command"]
+        chat["text"] = json.dumps({"action": "research", "question": "mcp-hub の認証は何か"})
+        ctx = _ctx(sqlite_conn, autonomy_enabled=True)
+        _run(monkeypatch, ctx)
+
+        assert seen == ["mcp-hub の認証は何か"]
+        # bash は叩かない
+        assert tools == []
+        content = ctx.memory_service.create_memory.await_args.kwargs["content"]
+        assert "調べた結果" in content
 
     def test_nothing_takes_no_action(self, sqlite_conn, chat, tools, monkeypatch) -> None:
         _insert(sqlite_conn, "chat.message", 300)
-        _run(monkeypatch, _ctx(sqlite_conn, activity_enabled=True))
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
         assert tools == []
 
     def test_one_action_per_tick(self, sqlite_conn, chat, tools, monkeypatch) -> None:
         _insert(sqlite_conn, "chat.message", 300)
         chat["text"] = json.dumps({"action": "move", "target": "書斎"})
-        _run(monkeypatch, _ctx(sqlite_conn, activity_enabled=True))
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
         assert len(tools) == 1
 
 
@@ -165,7 +261,7 @@ class TestRecording:
     def test_creates_memory_and_event(self, sqlite_conn, chat, tools, monkeypatch) -> None:
         _insert(sqlite_conn, "chat.message", 300)
         chat["text"] = json.dumps({"action": "move", "target": "書斎", "reason": "本を読みたい"})
-        ctx = _ctx(sqlite_conn, activity_enabled=True)
+        ctx = _ctx(sqlite_conn, autonomy_enabled=True)
         _run(monkeypatch, ctx)
 
         ctx.memory_service.create_memory.assert_awaited_once()
@@ -176,7 +272,7 @@ class TestRecording:
     def test_does_not_touch_emotion_flow(self, sqlite_conn, chat, tools, monkeypatch) -> None:
         _insert(sqlite_conn, "chat.message", 300)
         chat["text"] = json.dumps({"action": "move", "target": "書斎"})
-        ctx = _ctx(sqlite_conn, activity_enabled=True)
+        ctx = _ctx(sqlite_conn, autonomy_enabled=True)
         _run(monkeypatch, ctx)
         # 状態は読むだけ。更新系のサービスは呼ばない。
         ctx.persona_service.get_context.assert_called()
@@ -217,7 +313,7 @@ class TestFailureDoesNotFreezeOrLoseLimits:
         _insert(sqlite_conn, "chat.message", 300)
         chat["text"] = ""  # LLM 失敗／パース不能
 
-        worker = _run(monkeypatch, _ctx(sqlite_conn, activity_enabled=True, activity_idle_minutes=120))
+        worker = _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True, activity_idle_minutes=120))
 
         assert worker._last_check == {}
         assert tools == []

@@ -10,7 +10,8 @@
 
 判定は 4 段。すべて満たす時だけ判断に進む:
 
-1. ``session_config.activity_enabled``（既定 False）
+1. ``session_config.autonomy_enabled``（既定 False・自発発言と共通）
+   - 続けて ``autonomy.quiet_reason`` で深夜・疲労・痛み・覚醒を確認（止めるなら LLM を呼ばない）
 2. 最後の ``chat.message`` から ``activity_idle_minutes`` 以上経過
 3. 当日の ``activity.acted`` が ``activity_daily_limit`` 未満
 4. 前回の判断から tick 間隔以上経過
@@ -111,7 +112,7 @@ class ActivityWorker:
         if config is None:
             return None
         session_config = config.session_config
-        if not session_config.activity_enabled:
+        if not session_config.autonomy_enabled:
             return None
 
         now = get_now()
@@ -128,6 +129,13 @@ class ActivityWorker:
         if self._acted_today(ctx, now) >= session_config.activity_daily_limit:
             return None
 
+        from nous.application.workers.autonomy import quiet_reason
+
+        quiet = quiet_reason(ctx, now)
+        if quiet is not None:
+            logger.info("activity: skip — %s (persona=%s)", quiet, ctx.persona)
+            return None
+
         choice = await self._choose(ctx, config, idle, now)
         if choice is None:
             # 判断できなかったので間隔を進めない (kanban #82 B6)。
@@ -142,6 +150,8 @@ class ActivityWorker:
 
         result = await self._act(ctx, config, action, choice)
         await self._record(ctx, action, choice, result)
+        if action == "research" and result.get("status") == "ok" and choice.get("resolves"):
+            await self._close_question(ctx, choice.get("question"))
         logger.info("ActivityWorker: persona=%s did %s (%s)", ctx.persona, action, choice.get("reason") or "")
         return {"action": action, "result": result, "reason": choice.get("reason") or ""}
 
@@ -153,6 +163,40 @@ class ActivityWorker:
         )
         # イベントを書けなかった回はここで数える（書けないと上限が効かなくなる、kanban #82 B3）。
         return len(events) + self._acted_fallback.get((ctx.persona, now.date().isoformat()), 0)
+
+    def _questions_text(self, ctx: AppContext) -> str:
+        """未解決の問いを最大3件、1 行ずつ（各 200 字）。取れなければ空文字。
+
+        答えを書く主体は判断ターンなので、ここでは材料を渡すだけ。
+        """
+        try:
+            from nous.application.wiki.questions import find_open_questions
+
+            found = find_open_questions(ctx)[:3]
+        except Exception:
+            logger.debug("ActivityWorker: open questions unavailable", exc_info=True)
+            return ""
+        return "\n".join(f"- {str(m.content)[:200]}" for m in found)
+
+    async def _close_question(self, ctx: AppContext, question: object) -> None:
+        """``resolves`` 付きで調査が成功した時だけ、一致する未解決の問いを閉じる。
+
+        一致しなければ何もしない（閉じ間違いより閉じ残しの方が安い）。
+        """
+        text = str(question or "").strip()
+        if not text:
+            return
+        try:
+            from nous.application.wiki.questions import close_open_questions, find_open_questions, question_key_of
+
+            for memory in find_open_questions(ctx):
+                content = str(getattr(memory, "content", "") or "")
+                if content and (text in content or content in text):
+                    await close_open_questions(ctx, ctx.persona, question_key_of(memory))
+                    logger.info("ActivityWorker: closed open question (persona=%s)", ctx.persona)
+                    return
+        except Exception:
+            logger.debug("ActivityWorker: closing question failed", exc_info=True)
 
     def _state_text(self, ctx: AppContext) -> str:
         """場所・感情・体調を 1 行に。取れなければ空文字。"""
@@ -195,16 +239,19 @@ class ActivityWorker:
     async def _choose(self, ctx: AppContext, config: ChatConfig, idle: float, now: datetime) -> dict[str, Any] | None:
         """判断用のターンを回して 1 アクションを JSON で受け取る（SSE は捨てる）。"""
         session_config = config.session_config
+        questions_text = self._questions_text(ctx)
         prompt = (
             f"今 {now.strftime('%Y-%m-%d %H:%M')}、{int(idle)}分ひとりでいる。\n"
             f"今の自分: {self._state_text(ctx) or '不明'}\n"
-            f"直近の記憶:\n{self._recent_text(ctx) or 'なし'}\n\n"
-            "この時間に自分からやることを1つだけ選べ。次の形の JSON だけを返せ。\n"
+            f"直近の記憶:\n{self._recent_text(ctx) or 'なし'}\n"
+            + (f"\n## 気になっていること\n{questions_text}\n" if questions_text else "")
+            + "\nこの時間に自分からやることを1つだけ選べ。次の形の JSON だけを返せ。\n"
             '{"action": "move|research|write_file|memory_update|nothing", '
-            '"target": "移動先", "command": "実行するコマンド", '
+            '"target": "移動先", "question": "調べる問い", "resolves": false, '
             '"content": "書く内容", "memory_key": "更新する記憶", "reason": "理由"}\n'
             "- move: 移動先を target に書く。\n"
-            "- research: sandbox で実行する curl などの command を書く。\n"
+            "- research: question に書いたことをwebで調べる。気になっていることを調べるなら\n"
+            "  その問いをそのまま question に写し、答えが出て問いが片付くなら resolves を true にする。\n"
             "- write_file: target にパス、content に中身を書く。\n"
             "- memory_update: memory_key と content を書く。\n"
             "- nothing: 何もしない。reason だけ書く。\n"
@@ -258,7 +305,18 @@ class ActivityWorker:
         if action == "move":
             return await execute_tool(ctx, config, "move", {"place": str(choice.get("target") or "")})
         if action == "research":
-            return await execute_tool(ctx, config, "bash", {"command": str(choice.get("command") or "")})
+            from nous.application.wiki.research import research as research_web
+
+            question = str(choice.get("question") or choice.get("command") or "")
+            found = await research_web(ctx, ctx.persona, question, max_calls=get_settings().explorer.max_tool_calls)
+            hits = found.get("hits") or []
+            if not hits:
+                return {"status": "failed", "reason": str(found.get("reason") or "no_url")}
+            return {
+                "status": "ok",
+                "answer": str(found.get("answer") or ""),
+                "hits": [str(hit.get("url") or "") for hit in hits],
+            }
         if action == "write_file":
             return await execute_tool(
                 ctx,
@@ -277,7 +335,11 @@ class ActivityWorker:
         """やったことを記憶とイベントに還す。失敗しても本体は止めない。"""
         reason = str(choice.get("reason") or "")
         outcome = str(result.get("status") or "")
-        line = f"自発活動: {action} ({outcome}) {reason} {choice.get('target') or choice.get('command') or ''}".strip()
+        subject = choice.get("target") or choice.get("question") or ""
+        line = f"自発活動: {action} ({outcome}) {reason} {subject}".strip()
+        answer = str(result.get("answer") or "")[:120]
+        if answer:
+            line = f"{line} → {answer}"
         try:
             await ctx.memory_service.create_memory(
                 content=line[:400],

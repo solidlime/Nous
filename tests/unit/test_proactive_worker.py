@@ -41,6 +41,7 @@ def _ctx(conn, **config) -> MagicMock:
     ctx.connection = conn
     cfg = MagicMock()
     cfg.max_stored_messages = 200
+    config.setdefault("autonomy_quiet_hours", "")
     cfg.session_config = SessionConfig(**config)
     ctx.config = cfg
     return ctx
@@ -123,24 +124,24 @@ class TestLastUserMessageAt:
 class TestGates:
     def test_disabled_does_nothing(self, sqlite_conn, chat, published, monkeypatch) -> None:
         _insert(sqlite_conn, "chat.message", 300)
-        _run(monkeypatch, _ctx(sqlite_conn, proactive_enabled=False))
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=False))
         assert "prompt" not in chat
         assert published == []
 
     def test_not_idle_enough_does_nothing(self, sqlite_conn, chat, published, monkeypatch) -> None:
         _insert(sqlite_conn, "chat.message", 10)
-        _run(monkeypatch, _ctx(sqlite_conn, proactive_enabled=True, proactive_idle_minutes=180))
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True, proactive_idle_minutes=180))
         assert "prompt" not in chat
         assert published == []
 
     def test_no_user_message_ever_does_nothing(self, sqlite_conn, chat, published, monkeypatch) -> None:
-        _run(monkeypatch, _ctx(sqlite_conn, proactive_enabled=True))
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
         assert "prompt" not in chat
 
     def test_cooldown_blocks(self, sqlite_conn, chat, published, monkeypatch) -> None:
         _insert(sqlite_conn, "chat.message", 300)
         _insert(sqlite_conn, "proactive.spoke", 5)
-        _run(monkeypatch, _ctx(sqlite_conn, proactive_enabled=True, proactive_cooldown_minutes=60))
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True, proactive_cooldown_minutes=60))
         assert "prompt" not in chat
         assert published == []
 
@@ -149,7 +150,7 @@ class TestSpeak:
     def test_silent_writes_nothing(self, sqlite_conn, chat, published, monkeypatch) -> None:
         _insert(sqlite_conn, "chat.message", 300)
         chat["text"] = "  <silent>  "
-        _run(monkeypatch, _ctx(sqlite_conn, proactive_enabled=True))
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
         assert chat["session_id"].startswith("proactive:")
         assert _messages(sqlite_conn) == []
         assert "proactive.spoke" not in _events(sqlite_conn)
@@ -157,7 +158,7 @@ class TestSpeak:
 
     def test_speak_appends_main_and_records_event(self, sqlite_conn, chat, published, monkeypatch) -> None:
         _insert(sqlite_conn, "chat.message", 300)
-        _run(monkeypatch, _ctx(sqlite_conn, proactive_enabled=True))
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
 
         messages = _messages(sqlite_conn)
         assert len(messages) == 1
@@ -174,7 +175,7 @@ class TestSpeak:
         _insert(sqlite_conn, "chat.message", 200)
         _run(
             monkeypatch,
-            _ctx(sqlite_conn, proactive_enabled=True, proactive_prompt="下の句: 静かだ"),
+            _ctx(sqlite_conn, autonomy_enabled=True, proactive_prompt="下の句: 静かだ"),
         )
         prompt = chat["prompt"]
         assert "200分" in prompt
@@ -183,7 +184,7 @@ class TestSpeak:
 
     def test_speaking_does_not_publish_chat_message(self, sqlite_conn, chat, published, monkeypatch) -> None:
         _insert(sqlite_conn, "chat.message", 300)
-        _run(monkeypatch, _ctx(sqlite_conn, proactive_enabled=True))
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
         # 自発発言は chat.message を発行しない（ユーザー発言に数えると idle がリセットされる）
         assert _events(sqlite_conn).count("chat.message") == 1
 
@@ -195,7 +196,7 @@ class TestFailureDoesNotFreeze:
         _insert(sqlite_conn, "chat.message", 300)
         chat["text"] = ""  # LLM 失敗・ターン衝突は空文字で返る
 
-        worker = _run(monkeypatch, _ctx(sqlite_conn, proactive_enabled=True, proactive_idle_minutes=120))
+        worker = _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True, proactive_idle_minutes=120))
 
         assert worker._last_check == {}
         assert published == []
@@ -204,7 +205,7 @@ class TestFailureDoesNotFreeze:
         _insert(sqlite_conn, "chat.message", 300)
         chat["text"] = proactive_worker.SILENT_MARK
 
-        worker = _run(monkeypatch, _ctx(sqlite_conn, proactive_enabled=True, proactive_idle_minutes=120))
+        worker = _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True, proactive_idle_minutes=120))
 
         assert PERSONA in worker._last_check
 
@@ -225,7 +226,7 @@ class TestFailureDoesNotFreeze:
             monkeypatch,
             _ctx(
                 sqlite_conn,
-                proactive_enabled=True,
+                autonomy_enabled=True,
                 proactive_idle_minutes=120,
                 proactive_cooldown_minutes=180,
                 proactive_interval_minutes=0,
@@ -264,3 +265,47 @@ class TestIntervalFromSettings:
         worker._run()
 
         assert waits == [1800, 300]
+
+
+def _memory(content: str, tags: list[str]):
+    from nous.domain.memory.entities import Memory
+
+    now = get_now()
+    return Memory(key=f"k-{content[:4]}", content=content, tags=tags, created_at=now, updated_at=now)
+
+
+class TestQuietGate:
+    def test_quiet_hours_blocks_before_llm(self, sqlite_conn, chat, published, monkeypatch) -> None:
+        _insert(sqlite_conn, "chat.message", 300)
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True, autonomy_quiet_hours="00:00-23:59"))
+        assert "prompt" not in chat
+        assert published == []
+
+
+class TestMaterial:
+    def test_carry_questions_and_activity_go_into_prompt(
+        self, sqlite_conn, chat, published, monkeypatch
+    ) -> None:
+        from nous.domain.shared.result import Success
+
+        ctx = _ctx(sqlite_conn, autonomy_enabled=True)
+        memories = [
+            _memory("昨日の続きを気にしている", ["journal:carry"]),
+            _memory("自発活動: research (ok) 調べた", ["self_activity"]),
+        ]
+        ctx.memory_repo.find_all.return_value = Success(memories)
+        _insert(sqlite_conn, "chat.message", 300)
+        _run(monkeypatch, ctx)
+        assert "## 話の素材" in chat["prompt"]
+        assert "日記から: 昨日の続きを気にしている" in chat["prompt"]
+        assert "前に自分でやったこと: 自発活動" in chat["prompt"]
+
+    def test_works_when_memories_unavailable(self, sqlite_conn, chat, published, monkeypatch) -> None:
+        from nous.domain.shared.result import Failure
+
+        ctx = _ctx(sqlite_conn, autonomy_enabled=True)
+        ctx.memory_repo.find_all.return_value = Failure(MagicMock())
+        _insert(sqlite_conn, "chat.message", 300)
+        _run(monkeypatch, ctx)
+        assert "## 話の素材" not in chat["prompt"]
+        assert chat["prompt"]  # 判断は普通に回る

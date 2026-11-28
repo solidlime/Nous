@@ -6,7 +6,7 @@
 
 判定は 3 段（すべて満たす時だけ判断に進む）:
 
-1. ``session_config.proactive_enabled``
+1. ``session_config.autonomy_enabled``（自発活動と共通）→ ``autonomy.quiet_reason`` で深夜・体調不良を止める
 2. ``last_user_message_at`` から ``proactive_idle_minutes`` 以上経過
    （``chat.message`` / ``turn.completed``。``chat.llm_response`` を数えると
    自分の発言で idle がリセットされる自己ループになる）
@@ -118,10 +118,17 @@ class ProactiveWorker:
     async def run_persona(self, ctx: AppContext) -> str | None:
         """1 persona 分の判定。話したら本文、黙ったら None。"""
         config = ctx.config
-        if config is None or not config.session_config.proactive_enabled:
+        if config is None or not config.session_config.autonomy_enabled:
             return None
 
         now = get_now()
+        from nous.application.workers.autonomy import quiet_reason
+
+        quiet = quiet_reason(ctx, now)
+        if quiet is not None:
+            logger.info("proactive: skip — %s (persona=%s)", quiet, ctx.persona)
+            return None
+
         last_check = self._last_check.get(ctx.persona)
         if last_check is not None:
             if last_check.tzinfo is None:
@@ -165,6 +172,37 @@ class ProactiveWorker:
             return None
         return idle
 
+    def _material_text(self, ctx: AppContext) -> str:
+        """話の素材（日記の引き継ぎ・未解決の問い・最近の自発活動）を1行ずつ。
+
+        取れなければ空文字（素材なしで普通に判断させる）。読むだけ。
+        """
+        from nous.domain.shared.result import Success
+
+        memories: list = []
+        try:
+            result = ctx.memory_repo.find_all()
+            if isinstance(result, Success):
+                memories = list(result.value)
+        except Exception:
+            logger.debug("proactive: memories unavailable", exc_info=True)
+
+        lines: list[str] = []
+        for m in [m for m in memories if "journal:carry" in (getattr(m, "tags", None) or [])][:2]:
+            lines.append(f"- 日記から: {str(m.content)[:200]}")
+        try:
+            from nous.application.wiki.questions import find_open_questions
+
+            questions = find_open_questions(ctx)[:1]
+        except Exception:
+            logger.debug("proactive: open questions unavailable", exc_info=True)
+            questions = []
+        for m in questions:
+            lines.append(f"- 気になっていること: {str(m.content)[:200]}")
+        for m in [m for m in memories if "self_activity" in (getattr(m, "tags", None) or [])][:1]:
+            lines.append(f"- 前に自分でやったこと: {str(m.content)[:200]}")
+        return "\n".join(lines)
+
     async def _deliberate(self, ctx: AppContext, idle_minutes: float, now: datetime) -> str:
         """判断用のターンを回して本文を集める（SSE は捨てる）。"""
         session_config = ctx.config.session_config  # type: ignore[union-attr]
@@ -174,6 +212,9 @@ class ProactiveWorker:
             f"{SILENT_MARK} とだけ返せ。用もないのに埋め合わせの挨拶はするな。"
             "質問か、今の自分の居場所・体調・作業の話を1つ混ぜてよい。"
         )
+        material = self._material_text(ctx)
+        if material:
+            prompt = f"{prompt}\n\n## 話の素材（使うなら1つだけ。無理に使うな）\n{material}"
         if session_config.proactive_prompt.strip():
             prompt = f"{prompt}\n{session_config.proactive_prompt.strip()}"
 

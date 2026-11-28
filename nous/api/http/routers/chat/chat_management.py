@@ -178,9 +178,8 @@ _TIER_BASIC: frozenset[str] = frozenset(
         "retrieval_recency_weight",
         "retrieval_importance_weight",
         "retrieval_relevance_weight",
-        # 自発発言 / 自発活動 ON/OFF（kanban #44, #47）
-        "proactive_enabled",
-        "activity_enabled",
+        # 自立活動 ON/OFF（自発発言 #44 + 自発活動 #47 を統合、kanban #152）
+        "autonomy_enabled",
     }
 )
 _TIER_ADVANCED: frozenset[str] = frozenset(
