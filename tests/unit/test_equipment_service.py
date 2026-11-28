@@ -115,6 +115,22 @@ class TestAddItem:
         service.add_item("ポーション", quantity=2)
         assert repo._items["ポーション"].quantity == 5
 
+    def test_add_negative_quantity_reaching_zero_succeeds(
+        self, service: EquipmentService, repo: InMemoryEquipmentRepository
+    ):
+        service.add_item("ポーション", quantity=1)
+        result = service.add_item("ポーション", quantity=-1)
+        assert result.is_ok
+        assert repo._items["ポーション"].quantity == 0
+
+    def test_add_negative_quantity_underflow_fails_without_write(
+        self, service: EquipmentService, repo: InMemoryEquipmentRepository
+    ):
+        service.add_item("ポーション", quantity=1)
+        result = service.add_item("ポーション", quantity=-2)
+        assert not result.is_ok
+        assert repo._items["ポーション"].quantity == 1
+
     def test_empty_name_fails(self, service: EquipmentService):
         result = service.add_item("")
         assert not result.is_ok

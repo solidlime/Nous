@@ -65,6 +65,8 @@ class EquipmentService:
 
         if existing.value is not None:
             new_qty = existing.value.quantity + quantity
+            if new_qty < 0:
+                return Failure(ItemValidationError(f"quantity underflow: {existing.value.quantity} + {quantity}"))
             result = self._repo.update_item(name.strip(), quantity=new_qty)
             if isinstance(result, Failure):
                 return Failure(result.error)
@@ -77,6 +79,9 @@ class EquipmentService:
                 )
             )
             return result
+
+        if quantity < 0:
+            return Failure(ItemValidationError(f"quantity underflow: new item + {quantity}"))
 
         now = get_now()
         item = Item(
