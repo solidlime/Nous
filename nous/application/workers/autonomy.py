@@ -47,8 +47,11 @@ def quiet_reason(ctx: AppContext, now: datetime) -> str | None:
     pain = _as_float(getattr(state, "pain", None))
     if pain is not None and pain >= session_config.autonomy_pain_limit:
         return "痛みが強い"
+    # floor=0.0 は「覚醒を見ない」の意（判定は <= なので 0 を素通しさせない）。
+    # 平常時の arousal は 0% で、床を立てると常時止まってしまう。
     arousal = _as_float(getattr(state, "arousal", None))
-    if arousal is not None and arousal <= session_config.autonomy_arousal_floor:
+    floor = session_config.autonomy_arousal_floor
+    if floor > 0.0 and arousal is not None and arousal <= floor:
         return "覚醒が低い"
     return None
 

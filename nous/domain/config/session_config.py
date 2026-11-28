@@ -92,7 +92,10 @@ class SessionConfig(BaseModel):
     )
     autonomy_fatigue_limit: float = Field(default=0.7, ge=0.0, le=1.0)
     autonomy_pain_limit: float = Field(default=0.5, ge=0.0, le=1.0)
-    autonomy_arousal_floor: float = Field(default=0.05, ge=0.0, le=1.0)
+    # 0.0 で arousal 判定を無効化（眠気は疲労と時間帯で見る。平常時の arousal は 0%）。
+    autonomy_arousal_floor: float = Field(
+        default=0.0, ge=0.0, le=1.0, description="この値以下の覚醒で自発を止める（0.0 で無効）。"
+    )
 
     proactive_idle_minutes: int = Field(default=180, description="自発発言までに必要な無会話の分数。")
     proactive_interval_minutes: int = Field(default=30, description="自発発言を検討する間隔（分）。")

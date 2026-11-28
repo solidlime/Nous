@@ -97,11 +97,23 @@ def test_pain_is_quiet() -> None:
 
 
 def test_low_arousal_is_quiet() -> None:
-    assert quiet_reason(_ctx(_state(arousal=0.01)), _at(12)) == "覚醒が低い"
+    """床を明示した時だけ覚醒で止まる（既定は 0 = 無効、kanban #156）。"""
+    assert quiet_reason(_ctx(_state(arousal=0.01), autonomy_arousal_floor=0.05), _at(12)) == "覚醒が低い"
 
 
 def test_arousal_boundary_inclusive() -> None:
-    assert quiet_reason(_ctx(_state(arousal=0.05)), _at(12)) == "覚醒が低い"
+    assert quiet_reason(_ctx(_state(arousal=0.05), autonomy_arousal_floor=0.05), _at(12)) == "覚醒が低い"
+
+
+def test_default_floor_never_stops_on_arousal() -> None:
+    """平常時の arousal は 0%。既定の床 0.0 は arousal 判定をしない（kanban #156）。"""
+    assert quiet_reason(_ctx(_state(arousal=0.0)), _at(12)) is None
+
+
+@pytest.mark.parametrize("arousal", [0.0, 0.04, 0.06, 1.0])
+def test_explicit_floor_stops_under_threshold(arousal: float) -> None:
+    ctx = _ctx(_state(arousal=arousal), autonomy_arousal_floor=0.5)
+    assert quiet_reason(ctx, _at(12)) == ("覚醒が低い" if arousal <= 0.5 else None)
 
 
 def test_unset_metrics_pass_through() -> None:
@@ -140,4 +152,5 @@ def test_autonomy_defaults() -> None:
     assert config.autonomy_enabled is False
     assert config.autonomy_fatigue_limit == 0.7
     assert config.autonomy_pain_limit == 0.5
-    assert config.autonomy_arousal_floor == 0.05
+    # 0.0 = arousal 判定なし（平常時 0% で常時停止していた、kanban #156）
+    assert config.autonomy_arousal_floor == 0.0

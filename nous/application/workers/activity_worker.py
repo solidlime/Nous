@@ -279,10 +279,23 @@ class ActivityWorker:
                     continue
                 kind = payload.get("type")
                 if kind == "error":
+                    # 無音で None を返すと原因がログに残らない（kanban #156）。
+                    logger.warning(
+                        "activity: choose failed — llm error: %s (persona=%s)",
+                        payload.get("message") or payload.get("error") or payload,
+                        ctx.persona,
+                    )
                     return None
                 if kind == "text_delta":
                     parts.append(str(payload.get("content") or ""))
-            return self._parse("".join(parts))
+            text = "".join(parts)
+            if not text.strip():
+                logger.warning("activity: choose failed — empty reply (persona=%s)", ctx.persona)
+                return None
+            parsed = self._parse(text)
+            if parsed is None:
+                logger.warning("activity: choose failed — unparsable json (persona=%s): %r", ctx.persona, text[:300])
+            return parsed
         finally:
             hub.end_background_turn(ctx.persona)
 

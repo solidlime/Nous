@@ -367,3 +367,43 @@ class TestFailureDoesNotFreezeOrLoseLimits:
         assert await worker._record(ctx, "move", {"reason": "散歩"}, {"status": "ok"}) is False
         key = (PERSONA, get_now().date().isoformat())
         assert worker._acted_fallback[key] == 1
+
+
+class TestChooseFailureIsLogged:
+    """_choose の None 経路は黙って終わらない（無音失敗の計装、kanban #156）。"""
+
+    def _patch_chat(self, monkeypatch, sse_lines: list[str]) -> None:
+        class _FakeChat:
+            async def chat(self, *a, **kw):
+                for line in sse_lines:
+                    yield line
+
+        monkeypatch.setattr(activity_worker, "ChatService", _FakeChat)
+
+    def test_llm_error_sse_is_warned(self, sqlite_conn, tools, monkeypatch, caplog) -> None:
+        from nous.application.chat.events import ErrorSSE
+
+        self._patch_chat(monkeypatch, [ErrorSSE(message="upstream 502").to_sse()])
+        _insert(sqlite_conn, "chat.message", 300)
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
+
+        assert "choose failed" in caplog.text
+        assert "upstream 502" in caplog.text
+
+    def test_unparsable_reply_is_warned(self, sqlite_conn, tools, monkeypatch, caplog) -> None:
+        from nous.application.chat.events import TextDeltaSSE
+
+        self._patch_chat(monkeypatch, [TextDeltaSSE(content="何もしない").to_sse()])
+        _insert(sqlite_conn, "chat.message", 300)
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
+
+        assert "choose failed" in caplog.text
+        assert "何もしない" in caplog.text
+
+    def test_empty_reply_is_warned(self, sqlite_conn, tools, monkeypatch, caplog) -> None:
+        self._patch_chat(monkeypatch, [])
+        _insert(sqlite_conn, "chat.message", 300)
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
+
+        assert "choose failed" in caplog.text
+        assert "empty" in caplog.text
