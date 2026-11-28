@@ -190,9 +190,7 @@ class TestQuestions:
 
         monkeypatch.setattr(research_mod, "research", _fake_research)
         _insert(sqlite_conn, "chat.message", 300)
-        chat["text"] = json.dumps(
-            {"action": "research", "question": "mcp-hub の設定 API は無認証か", "resolves": True}
-        )
+        chat["text"] = json.dumps({"action": "research", "question": "mcp-hub の設定 API は無認証か", "resolves": True})
         _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
         assert closed == ["q:abc"]
 
@@ -210,9 +208,7 @@ class TestQuestions:
 
         monkeypatch.setattr(research_mod, "research", _fake_research)
         _insert(sqlite_conn, "chat.message", 300)
-        chat["text"] = json.dumps(
-            {"action": "research", "question": "mcp-hub の設定 API は無認証か", "resolves": True}
-        )
+        chat["text"] = json.dumps({"action": "research", "question": "mcp-hub の設定 API は無認証か", "resolves": True})
         _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
         assert closed == []
 
@@ -231,7 +227,12 @@ class TestActions:
 
         async def _fake_research(ctx, persona, question, *, max_calls=3):
             seen.append(question)
-            return {"answer": "調べた結果", "calls": 2, "tools": ["search"], "hits": [{"title": "t", "url": "https://e.x"}]}
+            return {
+                "answer": "調べた結果",
+                "calls": 2,
+                "tools": ["search"],
+                "hits": [{"title": "t", "url": "https://e.x"}],
+            }
 
         monkeypatch.setattr(research_mod, "research", _fake_research)
         _insert(sqlite_conn, "chat.message", 300)

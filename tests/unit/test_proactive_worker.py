@@ -283,9 +283,7 @@ class TestQuietGate:
 
 
 class TestMaterial:
-    def test_carry_questions_and_activity_go_into_prompt(
-        self, sqlite_conn, chat, published, monkeypatch
-    ) -> None:
+    def test_carry_questions_and_activity_go_into_prompt(self, sqlite_conn, chat, published, monkeypatch) -> None:
         from nous.domain.shared.result import Success
 
         ctx = _ctx(sqlite_conn, autonomy_enabled=True)

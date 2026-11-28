@@ -24,7 +24,7 @@ from nous.domain.shared.result import Success
 from nous.infrastructure.logging.structured import get_logger
 
 if TYPE_CHECKING:
-    from datetime import datetime
+    from datetime import datetime, time
 
     from nous.application.use_cases import AppContext
 
@@ -53,7 +53,7 @@ def quiet_reason(ctx: AppContext, now: datetime) -> str | None:
     return None
 
 
-def _in_range(now: datetime, start, end) -> bool:  # noqa: ANN001 — datetime.time（TYPE_CHECKING 不要化のため）
+def _in_range(now: datetime, start: time, end: time) -> bool:
     """``now`` の時刻が [start, end) に入るか。start > end は日跨ぎ。"""
     t = now.timetz().replace(tzinfo=None)
     if start <= end:
