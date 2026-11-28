@@ -41,19 +41,28 @@ _TODO_TAG = "journal:todo"
 _EXISTING_LIST_LIMIT = 20
 #: 保存する予定本文の上限（指示は 60 文字以内だが、長文をそのまま自走させない）。
 _TASK_PROMPT_MAX = 200
+#: 日記の「伝えたいこと」を次の対話まで運ぶ記憶のタグ（#147）。topic 編纂からは除外する。
+_CARRY_TAG = "journal:carry"
+#: その記憶の寿命（日）。過ぎたものは context_loader が読まない＝リポジトリは触らない。
+_CARRY_TTL_DAYS = 3
+#: 1 ページあたりの上限（プロンプトの「最大 3 行」と揃える）。
+_CARRY_MAX = 3
+#: 節見出し（パース側の唯一の定義）。
+_CARRY_SECTION = "伝えたいこと"
 
 _JOURNAL_PROMPT = """あなたは日記を書く記録係です。{day} の記憶と営みを材料に、その日の記録を Markdown で書いてください。
 
 現在時刻: {now}
 
 書き方:
-- 見出しは必ず次の 6 つだけを、この順・この表記で使う:
+- 見出しは必ず次の 7 つだけを、この順・この表記で使う:
   ## 活動
   ## やったこと
   ## 感想
   ## 決めたこと
   ## 引っかかったこと
   ## 未解決
+  ## 伝えたいこと
 - ## 活動 は「その日の本人が何をしていたか」の記録。各行は `- HH:MM [プロジェクト名] 何をしたか`
   の形で時刻の順に並べる（暮らしの動きはプロジェクト名を省略してよい）。
   [プロジェクト名] は材料の各行の本文先頭に付くマーカーで、その作業の対象プロジェクト（角括弧は 1 重）。
@@ -67,6 +76,7 @@ _JOURNAL_PROMPT = """あなたは日記を書く記録係です。{day} の記�
   行数は材料にある事実の数まで。材料が少ない日に埋め草を書かない。
 - 場所・天気・相手など、材料に書かれていない設定は書かない（推測で補わない）。
 - ## 未解決 には下の「未解決の問い」をそのまま列挙する（答えを創作しない）。1 件も無ければ見出しごと省略。
+- ## 伝えたいこと は、次にユーザーと会ったとき伝えたいことを 1 行 1 件・最大 3 行・体言止めで簡潔に書く。無ければ「なし」（推測でひねり出さない）。
 - ## やったこと は活動に書いた行を繰り返さず、成果と学びだけをまとめる。
 - ## 感想 は「その日に起きたことに対して何を感じたか・どう思ったか」を本人の口調で書く。事実の列挙にはしない。
 - 材料に無い事実は書かない（推測・脚色・一般論での補完は禁止）。
@@ -158,15 +168,15 @@ class JournalMixin:
         def _ask_text(self, prompt: str, boost: int = 0) -> str | None: ...
 
     def _compile_journal(self, ctx, persona: str, store: WikiStore, now: datetime) -> list[str]:
-        """前日（JST）の記憶を 1 ページの日記にまとめる。取り込んだ sources を返す。
+        """当日（JST）の記憶を 1 ページの日記にまとめる。取り込んだ sources を返す。
 
         同じ日に 2 回走っても ``journal-YYYY-MM-DD`` の上書きで 1 ページのまま。
         失敗は監査に残してサイクルは続ける（日記は編纂の前提条件ではない）。
         """
         if not self._cfg.journal_enabled:
             return []
-        day = (now - timedelta(days=1)).date()
-        start, end = self._journal_window(day, now.tzinfo)
+        day = now.date()
+        start, end = self._journal_window(day, now.tzinfo, now)
         try:
             memories = self._journal_memories(ctx, start, end, now.tzinfo)
             activity = self._journal_activity(ctx, persona, start, end, now.tzinfo)
@@ -217,6 +227,7 @@ class JournalMixin:
             )
             if isinstance(written, Failure):
                 raise RuntimeError(f"write_page failed: {written.error}")
+            self._save_carry(ctx, persona, body, now)
             if self.vector_enabled:
                 vector_index.sync_page(self._settings, persona, slug, title, body)
             action = "updated" if existed else "created"
@@ -243,6 +254,44 @@ class JournalMixin:
             self._record_event(ctx, persona, f"error: journal {day}: {e}", None)
             return []
         return list(sources)
+
+    def _save_carry(self, ctx, persona: str, body: str, now: datetime) -> None:
+        """日記の「伝えたいこと」を次の対話まで有効な記憶にする（#147）。
+
+        3 日で失効させる（valid_until）。topic 編纂には食わさない — 編纂されると
+        _delete_sources で物理削除され、対話に届く前に消える。
+        """
+        lines = _section_lines(body, _CARRY_SECTION)[:_CARRY_MAX]
+        if not lines:
+            return
+        service = getattr(ctx, "memory_service", None)
+        if service is None:
+            self._record_event(ctx, persona, "skipped: journal carry (no memory_service)", None)
+            return
+        existing = service.get_by_tags([_CARRY_TAG])
+        if not isinstance(existing, Success):
+            return
+        # 失効した伝言は以後読まれない。タグを外して溜めず、重複判定にも数えない（kanban #88 と同じ病巣）。
+        live: list[Memory] = []
+        expired: list[Memory] = []
+        for m in existing.value:
+            until = getattr(m, "valid_until", None)
+            (expired if until is not None and _aware(until, now.tzinfo) <= now else live).append(m)
+        for m in expired:
+            service.update_memory(m.key, tags=[t for t in m.tags if t != _CARRY_TAG])
+        seen = {_normalize_task(m.content) for m in live}
+        fresh = [line for line in lines if _normalize_task(line) not in seen]
+        if not fresh:
+            return
+        created = asyncio.run(_create_carry(service, fresh, now + timedelta(days=_CARRY_TTL_DAYS)))
+        if created:
+            self._record_event(
+                ctx,
+                persona,
+                f"carry {created} items (ttl {_CARRY_TTL_DAYS}d)",
+                {"items": fresh},
+                event_type="journal.carry",
+            )
 
     def _apply_journal_state(self, ctx, persona: str, slug: str, memories: list[Memory], body: str) -> None:
         """日記から感情・体調を 1 回だけ推定して persona 状態へ反映する。
@@ -432,15 +481,15 @@ class JournalMixin:
             logger.warning("WikiWorker: tomorrow tasks failed: %s", e)
             self._record_event(ctx, persona, f"warning: tomorrow {now.date()}: {e}", None)
 
-    def _journal_window(self, day: date, tz: tzinfo | None) -> tuple[datetime, datetime]:
-        """日記 1 日分の窓 ``[start, end)``。日界は ``run_at_hour``（既定 03:00）。
+    def _journal_window(self, day: date, tz: tzinfo | None, now: datetime) -> tuple[datetime, datetime]:
+        """日記 1 日分の窓 ``[start, end)``。当日 00:00 から実行時刻まで（既定 23:00）。
 
-        カレンダー日で切ると、00:00〜run_at_hour の記憶が「当日の topic 編纂」で先に
-        物理削除され、翌日の日記（同じ記憶を材料にする）から抜け落ちる。
+        日記は当日の終わり際に走るので、カレンダー日 ``[day 00:00, now)`` で
+        その日の記憶を漏れなく拾える（slug・ラベルも当日）。``end`` を now で
+        切るのは、遅れて回ったサイクルが翌日分を混ぜないため。
         """
-        hour = self._cfg.run_at_hour if self._cfg.run_at_hour >= 0 else 0
-        start = datetime.combine(day, time(hour=hour), tzinfo=tz)
-        return start, start + timedelta(days=1)
+        start = datetime.combine(day, time(0), tzinfo=tz)
+        return start, min(start + timedelta(days=1), now)
 
     def _journal_memories(self, ctx, start: datetime, end: datetime, tz: tzinfo | None) -> list[Memory]:
         """``[start, end)``（日記の 1 日）に作られた記憶を created_at 昇順で上限まで。
@@ -651,6 +700,43 @@ def _is_pending_task(memory: Memory) -> bool:
     from nous.application.chat.tools.schedule import AGENT_TASK_TAG
 
     return AGENT_TASK_TAG in memory.tags
+
+
+def _section_lines(body: str, heading: str) -> list[str]:
+    """Markdown の節（## heading）の箇条書きを 1 行 1 項目で返す（次の見出しで終わる）。"""
+    out: list[str] = []
+    inside = False
+    for line in body.splitlines():
+        text = line.strip()
+        if text.startswith("## "):
+            inside = text[3:].strip() == heading
+            continue
+        item = " ".join(text.lstrip("-*・ ").split())
+        if inside and item and item != "なし":
+            out.append(item)
+    return out
+
+
+async def _create_carry(service, lines: list[str], valid_until: datetime) -> int:
+    """carry 記憶を登録し、成功件数を返す（失敗は warning・日記本体は成功扱い）。"""
+    created = 0
+    for line in lines:
+        result = await service.create_memory(
+            content=line,
+            importance=0.6,
+            emotion="neutral",
+            tags=[_CARRY_TAG],
+            kind="prospective",
+            source_type="llm_inferred",
+            confidence=0.7,
+            skip_duplicate_check=True,
+            valid_until=valid_until,
+        )
+        if getattr(result, "is_ok", False):
+            created += 1
+        else:
+            logger.warning("WikiWorker: journal carry create failed: %s", getattr(result, "error", None))
+    return created
 
 
 async def _create_scheduled(service, planned: list[tuple[datetime, str, list[str]]]) -> list[tuple[datetime, str]]:

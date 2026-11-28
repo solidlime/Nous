@@ -41,8 +41,8 @@ PERSONA = "test_oq"
 
 
 def _settings(tmp_path, **wiki_update) -> SimpleNamespace:
-    # 日記は既定で止める。窓が run_at_hour 基準なので、有効なままだと実行時刻
-    # （00:00〜03:00）で材料が日記に食われ、topic 編纂のテストが時刻依存で落ちる。
+    # 日記は既定で止める。窓は当日 [00:00, 実行時刻) なので、有効なままだと当日の
+    # 材料が日記に食われ、topic 編纂のテストが時刻依存で落ちる。
     params = {"enabled": True, "journal_enabled": False, **wiki_update}
     return SimpleNamespace(
         wiki=WikiConfig(**params),

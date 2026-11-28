@@ -305,10 +305,11 @@ class WikiConfig(BaseModel):
     enabled: bool = False
     interval_seconds: int = 86400  # 24h cycle
     # 毎日この時刻（ローカル TZ）に実行する。負値（-1）で旧来の interval 方式。
+    # 日記の窓は当日 [00:00, 実行時刻) なので、日付が確定する 23:00 が既定（le=23 が安全）。
     # 範囲外だと _next_delay の now.replace() が ValueError を投げ、worker が
     # 無言で永久停止するので pydantic 側で潰す。
-    run_at_hour: int = Field(default=3, ge=-1, le=23)
-    # run_at_hour を解釈するタイムゾーン。コンテナが UTC で動いていても「03:00 JST」の
+    run_at_hour: int = Field(default=23, ge=-1, le=23)
+    # run_at_hour を解釈するタイムゾーン。コンテナが UTC で動いていても「23:00 JST」の
     # 意味を保つため既定は Asia/Tokyo（time_utils._DEFAULT_TZ と同じ）。UTC 運用したい
     # 場合は NOUS_WIKI__RUN_AT_TZ=UTC を明示する。
     run_at_tz: str = "Asia/Tokyo"
@@ -326,7 +327,7 @@ class WikiConfig(BaseModel):
         return value
 
     topics_per_cycle: int = 2  # 1 cycle で編纂する topic 数
-    # 日記（前日 JST の記憶を 1 ページに）。専用ストレージは作らない（wiki ページ）。
+    # 日記（当日 JST の記憶を 1 ページに）。専用ストレージは作らない（wiki ページ）。
     journal_enabled: bool = True
     journal_max_sources: int = 60  # 日記 1 ページの材料上限
     # その日の営み（pi の turn.completed / session.started）も日記の材料にする。

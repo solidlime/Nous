@@ -156,7 +156,7 @@ docker compose up -d
 ## 5. 定期実行と保持
 
 ```bash
-# cron（毎日 03:30、wiki 編纂 03:00 の直後を避けるなら 04:30 など）
+# cron（毎日 03:30。wiki 編纂は 23:00 なので衝突しない）
 30 4 * * * cd /path/to/Nous && .venv/bin/python scripts/backup_restore.py backup --out /path/backups >> /path/backups/cron.log 2>&1
 ```
 

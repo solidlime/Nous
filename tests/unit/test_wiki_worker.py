@@ -78,8 +78,8 @@ def _setup(
         repo.save(m)
     ctx = SimpleNamespace(memory_repo=repo, connection=conn)
     worker = WikiWorker(_settings(tmp_path))
-    # topic 編纂のテストは日記を止める。日記の窓は run_at_hour 基準で「いま」に依存する
-    # ため、有効なままだと実行時刻（00:00〜03:00）で材料が日記に食われて結果が変わる。
+    # topic 編纂のテストは日記を止める。日記の窓は当日 [00:00, 実行時刻) なので、
+    # 有効なままだと当日の材料が日記に食われて結果が変わる。
     # 日記は TestJournal 側（_journal_setup）が固定時刻で見る。
     worker._cfg = worker._cfg.model_copy(update={"journal_enabled": False, **(cfg_update or {})})
     worker.vector_enabled = False
@@ -430,11 +430,11 @@ class TestTopicRotation:
 
 class TestSchedule:
     def test_default_tz_is_asia_tokyo(self) -> None:
-        """既定が UTC に戻ったら落ちる（03:00 JST の意味を守る番人）。"""
+        """既定が UTC に戻ったら落ちる（23:00 JST の意味を守る番人）。"""
         from nous.config.settings import WikiConfig
 
         assert WikiConfig().run_at_tz == "Asia/Tokyo"
-        assert WikiConfig().run_at_hour == 3
+        assert WikiConfig().run_at_hour == 23
 
     def test_unknown_tz_is_rejected_at_config_load(self) -> None:
         """未知の TZ 名は起動時に落ちる（無言の永久停止を防ぐ）。"""
@@ -803,26 +803,25 @@ def _journal_setup(
 
 
 class TestJournal:
-    _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+    _now = datetime(2026, 11, 9, 23, 0, tzinfo=_JST)
     _body = "## やったこと\n\n- 日記のテストを書いた\n\n## 決めたこと\n\n- なし"
 
-    def test_journal_day_runs_from_run_at_hour(self, tmp_path) -> None:
-        """日記 1 日は [前日 03:00, 当日 03:00)。00:01 の記憶も翌日の日記に入る。
+    def test_journal_day_is_calendar_day_cut_at_run_time(self, tmp_path) -> None:
+        """日記 1 日は [当日 00:00, 実行時刻)。翌日分は混ぜず、slug/ラベルも当日になる。
 
-        カレンダー日で切ると 00:00〜03:00 が「当日の topic 編纂」で先に物理削除され、
-        日記から恒常的に抜け落ちる（03:00 実行・日記→topic の順のため）。
+        23:00 実行なので窓は [00:00, 23:00)。実行時刻を過ぎた記憶は入らない。
         """
         memories = [
-            _mem_at("old", datetime(2026, 11, 8, 23, 0, tzinfo=_JST)),  # 窓の外（さらに前日）
-            _mem_at("late", datetime(2026, 11, 9, 23, 59, tzinfo=_JST)),  # 窓の中
-            _mem_at("early", datetime(2026, 11, 9, 0, 1, tzinfo=_JST)),  # 窓の外（前日の 03:00 より前）
-            _mem_at("today", datetime(2026, 11, 10, 0, 1, tzinfo=_JST)),  # 窓の中（当日 03:00 より前）
+            _mem_at("old", datetime(2026, 11, 8, 23, 0, tzinfo=_JST)),  # 窓の外（前日）
+            _mem_at("first", datetime(2026, 11, 9, 0, 0, tzinfo=_JST)),  # 窓の中（先頭ちょうど）
+            _mem_at("late", datetime(2026, 11, 9, 22, 59, tzinfo=_JST)),  # 窓の中（末尾近く）
+            _mem_at("after", datetime(2026, 11, 9, 23, 30, tzinfo=_JST)),  # 窓の外（実行時刻より後）
         ]
         conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
         try:
-            assert worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now) == ["late", "today"]
+            assert worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now) == ["first", "late"]
             page = _unwrap(_store(tmp_path).read_page(f"journal-{_DAY}"))
-            assert page.sources == ("late", "today")  # created_at 昇順
+            assert page.sources == ("first", "late")  # created_at 昇順
             assert page.title == f"{_DAY} の記録"
             assert page.tags == ("journal", "2026-11")
             assert page.body.startswith("## やったこと")
@@ -832,7 +831,7 @@ class TestJournal:
             conn.close()
 
     def test_no_memories_writes_nothing(self, tmp_path) -> None:
-        """前日に記憶が無ければページも監査イベントも作らない。"""
+        """窓に記憶が無ければページも監査イベントも作らない。"""
         memories = [_mem_at("today", datetime(2026, 11, 10, 5, 0, tzinfo=_JST))]
         conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
         try:
@@ -858,7 +857,7 @@ class TestJournal:
 
     def test_sources_capped_by_config(self, tmp_path) -> None:
         """材料は journal_max_sources 件まで（created_at 昇順で先勝ち）。"""
-        base = datetime(2026, 11, 9, 3, 0, tzinfo=_JST)  # 日界（run_at_hour=3）ちょうどから
+        base = datetime(2026, 11, 9, 0, 0, tzinfo=_JST)  # 窓の先頭（当日 00:00）から
         memories = [_mem_at(f"m{i:02d}", base + timedelta(minutes=i)) for i in range(61)]
         conn, worker, ctx = _journal_setup(tmp_path, memories, self._body)
         try:
@@ -999,6 +998,106 @@ class TestJournal:
         finally:
             conn.close()
 
+    _carry_body = "## やったこと\n\n- 日記\n\n## 伝えたいこと\n\n- 研究の続きを聞きたい\n- 体を休めてほしい\n"
+
+    def _carry_setup(self, tmp_path, body: str):
+        memories = [_mem_at("a", datetime(2026, 11, 9, 10, 0, tzinfo=_JST))]
+        conn, worker, ctx = _journal_setup(tmp_path, memories, body)
+        ctx.memory_service = MemoryService(ctx.memory_repo)
+        return conn, worker, ctx
+
+    @staticmethod
+    def _carries(ctx) -> list[Memory]:
+        found = ctx.memory_service.get_by_tags(["journal:carry"])
+        assert isinstance(found, Success)
+        return sorted(found.value, key=lambda m: m.content)
+
+    def test_carry_section_becomes_prospective_memory(self, tmp_path) -> None:
+        """「伝えたいこと」の 1 行 = 1 記憶（prospective・3 日 TTL・journal:carry）。"""
+        conn, worker, ctx = self._carry_setup(tmp_path, self._carry_body)
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            carries = self._carries(ctx)
+            assert [m.content for m in carries] == ["体を休めてほしい", "研究の続きを聞きたい"]
+            for m in carries:
+                assert m.kind == "prospective"
+                assert m.source_type == "llm_inferred"
+                assert "journal:carry" in m.tags
+                assert m.importance == 0.6
+                assert m.confidence == 0.7
+                assert m.valid_until == self._now + timedelta(days=3)
+        finally:
+            conn.close()
+
+    def test_same_carry_is_not_duplicated(self, tmp_path) -> None:
+        """同じ文の carry は 2 回目以降のサイクルで作らない。"""
+        conn, worker, ctx = self._carry_setup(tmp_path, self._carry_body)
+        store = _store(tmp_path)
+        try:
+            worker._compile_journal(ctx, "test_ww", store, self._now)
+            worker._compile_journal(ctx, "test_ww", store, self._now)
+            assert len(self._carries(ctx)) == 2
+        finally:
+            conn.close()
+
+    @staticmethod
+    def _seed_carry(ctx, key: str, content: str, created: datetime, expires: datetime) -> None:
+        ctx.memory_repo.save(
+            Memory(
+                key=key,
+                content=content,
+                created_at=created,
+                updated_at=created,
+                importance=0.6,
+                kind="prospective",
+                source_type="llm_inferred",
+                confidence=0.7,
+                tags=["journal:carry"],
+                valid_until=expires,
+            )
+        )
+
+    def test_expired_carry_does_not_block_recreation(self, tmp_path) -> None:
+        """失効した carry は重複判定に数えず、タグも外して溜めない（kanban #88 と同じ病巣）。"""
+        conn, worker, ctx = self._carry_setup(tmp_path, self._carry_body)
+        try:
+            self._seed_carry(
+                ctx, "carry_old", "研究の続きを聞きたい", self._now - timedelta(days=5), self._now - timedelta(days=2)
+            )
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            carries = self._carries(ctx)
+            assert [m.content for m in carries] == ["体を休めてほしい", "研究の続きを聞きたい"]
+            assert "carry_old" not in {m.key for m in carries}
+            old = ctx.memory_repo.find_by_key("carry_old")
+            assert isinstance(old, Success) and old.value is not None
+            assert "journal:carry" not in old.value.tags
+        finally:
+            conn.close()
+
+    def test_live_carry_blocks_duplicate(self, tmp_path) -> None:
+        """期限内の同一正文は従来どおり skip する（同日夜の再実行の冪等性を壊さない）。"""
+        conn, worker, ctx = self._carry_setup(tmp_path, self._carry_body)
+        try:
+            self._seed_carry(
+                ctx, "carry_live", "研究の続きを聞きたい", self._now - timedelta(days=1), self._now + timedelta(days=1)
+            )
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            carries = self._carries(ctx)
+            assert [m.content for m in carries] == ["体を休めてほしい", "研究の続きを聞きたい"]
+            assert "carry_live" in {m.key for m in carries}
+        finally:
+            conn.close()
+
+    def test_none_section_saves_nothing(self, tmp_path) -> None:
+        """「なし」と書かれた日は記憶を作らない。"""
+        body = "## やったこと\n\n- 日記\n\n## 伝えたいこと\n\nなし\n"
+        conn, worker, ctx = self._carry_setup(tmp_path, body)
+        try:
+            worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
+            assert self._carries(ctx) == []
+        finally:
+            conn.close()
+
 
 _STATE_JSON = json.dumps(
     {
@@ -1031,7 +1130,7 @@ def _fake_llm(responses: list[str]):
 class TestJournalIsolation:
     """日記が topic 編纂の巡回・プロンプト・削除に混ざらないこと（静かに壊れる箇所の番人）。"""
 
-    _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+    _now = datetime(2026, 11, 9, 23, 0, tzinfo=_JST)
 
     def _seed_journal(self, tmp_path) -> WikiStore:
         store = _store(tmp_path)
@@ -1115,7 +1214,7 @@ class TestJournalIsolation:
 
     def test_body_budget_leaves_room_for_frontmatter(self, tmp_path) -> None:
         """sources が多くてもページが書ける（本文予算 = max_page_bytes - frontmatter 実測）。"""
-        base = datetime(2026, 11, 9, 3, 0, tzinfo=_JST)  # 日界（run_at_hour=3）ちょうどから
+        base = datetime(2026, 11, 9, 0, 0, tzinfo=_JST)  # 窓の先頭（当日 00:00）から
         memories = [_mem_at(f"memory_key_{i:03d}", base + timedelta(minutes=i)) for i in range(60)]
         body = "x" * 7000
         conn, worker, ctx = _journal_setup(tmp_path, memories, body)
@@ -1148,7 +1247,7 @@ class TestStripCodeFence:
 
 
 class TestJournalStateInstrumentation:
-    _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+    _now = datetime(2026, 11, 9, 23, 0, tzinfo=_JST)
     _body = "## やったこと\n\n- 日記"
 
     def test_no_persona_service_records_skip(self, tmp_path) -> None:
@@ -1233,15 +1332,15 @@ def _sess_event(
 
 
 class TestJournalActivity:
-    _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+    _now = datetime(2026, 11, 9, 23, 0, tzinfo=_JST)
     _day = date(2026, 11, 9)
-    # 日界は run_at_hour（既定 3 時）: [2026-11-09 03:00, 2026-11-10 03:00)
-    _win_start = datetime(2026, 11, 9, 3, 0, tzinfo=_JST)
-    _win_end = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+    # 日記の窓は当日 [00:00, 実行時刻): [2026-11-09 00:00, 2026-11-09 23:00)
+    _win_start = datetime(2026, 11, 9, 0, 0, tzinfo=_JST)
+    _win_end = datetime(2026, 11, 9, 23, 0, tzinfo=_JST)
     _body = "## 活動\n\n- 11:36 起きた\n\n## やったこと\n\n- 直した"
 
     def test_collects_only_that_jst_day_in_time_order(self, tmp_path) -> None:
-        """窓 [前日 03:00, 当日 03:00) の 3 件を時刻昇順で。前日 23:00 は落とす。"""
+        """窓 [当日 00:00, 23:00) の 2 件を時刻昇順で。前日と翌日分は落とす。"""
         conn, worker, ctx = _journal_setup(tmp_path, [], self._body)
         try:
             _sess_event(conn, "turn.completed", datetime(2026, 11, 9, 15, 20, tzinfo=_JST), {"user_text": "お菓子作り"})
@@ -1250,7 +1349,7 @@ class TestJournalActivity:
             _sess_event(conn, "turn.completed", datetime(2026, 11, 10, 0, 10, tzinfo=_JST), {"user_text": "翌日"})
             activity = worker._journal_activity(ctx, "test_ww", self._win_start, self._win_end, _JST)
             lines = activity.splitlines()
-            assert [line[:6] for line in lines] == ["- 11:3", "- 15:2", "- 00:1"]
+            assert [line[:6] for line in lines] == ["- 11:3", "- 15:2"]
             assert "お菓子作り" in activity
             assert "前の日" not in activity
         finally:
@@ -1471,7 +1570,7 @@ class TestJournalActivity:
 class TestJournalKeepsExistingPage:
     """源記憶は物理削除されるので、２回目のサイクルは材料 0 件で回ってくる。"""
 
-    _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+    _now = datetime(2026, 11, 9, 23, 0, tzinfo=_JST)
 
     def test_existing_page_is_not_overwritten_without_memories(self, tmp_path) -> None:
         """既存ページがあり、その日の記憶が 0 件なら書かない（瘀せた日記で上書きしない）。"""
@@ -1659,7 +1758,7 @@ class TestPromptRevisionContext:
 
 
 class TestJournalLife:
-    _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+    _now = datetime(2026, 11, 9, 23, 0, tzinfo=_JST)
 
     def _write_character(self, tmp_path, text: str | None = "ヘルタ。模擬宇宙を作っている。甘い物が好き。") -> None:
         if text is None:
@@ -1777,7 +1876,7 @@ class TestJournalStateIdempotence:
 class TestJournalTomorrow:
     """日記 → 明日やること → 既存スケジューラ（agent:task + cue:time）への登録。"""
 
-    _now = datetime(2026, 11, 10, 3, 0, tzinfo=_JST)
+    _now = datetime(2026, 11, 9, 23, 0, tzinfo=_JST)
 
     def _setup(self, tmp_path, memories=None, *, llm=(), cfg_update=None):
         if memories is None:
@@ -1814,7 +1913,7 @@ class TestJournalTomorrow:
         )
         try:
             worker._compile_journal(ctx, "test_ww", _store(tmp_path), self._now)
-            assert set(self._tasks(ctx)[0].tags) >= {"cue:time:2026-11-11T01:00:00+09:00"}
+            assert set(self._tasks(ctx)[0].tags) >= {"cue:time:2026-11-10T01:00:00+09:00"}
         finally:
             conn.close()
 
@@ -1965,8 +2064,8 @@ class TestJournalTomorrow:
 
     def test_pending_task_is_not_a_journal_source(self, tmp_path) -> None:
         """未実行の予定は日記の sources にしない（消化されて発火前に消えない）。"""
-        # 予定の created_at は実時計なので、その日を窓にする（now は翌日）。
-        # 窓は [当日 03:00, 翌 03:00) なので、どの時刻に走らせても窓内の 12:00 に固定する。
+        # 予定の created_at は実時計なので、窓が実日付になるよう now を 23:00 に固定する。
+        # 窓は [当日 00:00, 23:00) なので、材料は窓内の 12:00 に置く。
         real_now = datetime.now(_JST).replace(hour=12, minute=0, second=0, microsecond=0)
         task = _mem_at("t1", real_now, tags=[AGENT_TASK_TAG, _TODO_TAG])
         task.content = "問いの答えを書く"
@@ -1975,7 +2074,7 @@ class TestJournalTomorrow:
         )
         try:
             store = _store(tmp_path)
-            worker._compile_journal(ctx, "test_ww", store, real_now + timedelta(days=1))
+            worker._compile_journal(ctx, "test_ww", store, real_now.replace(hour=23))
             page = store.read_page(f"journal-{real_now.date().isoformat()}")
             assert isinstance(page, Success)
             assert task.key not in page.value.sources
@@ -1991,7 +2090,7 @@ class TestJournalTomorrow:
         conn, worker, ctx = self._setup(tmp_path, [task], llm=[_BODY, json.dumps({"tasks": []})])
         try:
             store = _store(tmp_path)
-            worker._compile_journal(ctx, "test_ww", store, real_now + timedelta(days=1))
+            worker._compile_journal(ctx, "test_ww", store, real_now.replace(hour=23))
             assert store.read_page(f"journal-{real_now.date().isoformat()}").is_ok
         finally:
             conn.close()

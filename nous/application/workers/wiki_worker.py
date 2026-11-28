@@ -303,6 +303,9 @@ class WikiWorker(JournalMixin, ConflictsMixin):
                 continue
             if getattr(m, "source_type", "") == "consolidated":
                 continue
+            # #147: 日記の「伝えたいこと」は編纂で物理削除せず、TTL で失効させる。
+            if "journal:carry" in m.tags:
+                continue
             buckets.setdefault(_topic_of(m), []).append(m)
 
         last_compiled = self._last_compiled(store)
