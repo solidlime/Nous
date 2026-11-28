@@ -154,6 +154,12 @@ def test_them_survives_right_after_digest():
 # ---------------------------------------------------------------------------
 
 
+def test_intro_asks_to_weave_instead_of_listing():
+    """#149: 参照ブロックは読み上げず、1〜2 点だけ地の文に溶かさせる。"""
+    assert "必要な1〜2点だけ" in BLOCK_INTRO
+    assert "列挙・読み上げない" in BLOCK_INTRO
+
+
 def test_intro_precedes_all_sections():
     block = build_injection_block(
         _ctx(),

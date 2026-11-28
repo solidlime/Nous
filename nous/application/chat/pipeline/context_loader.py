@@ -6,6 +6,7 @@ from datetime import UTC, date, datetime
 from typing import TYPE_CHECKING
 
 from nous.application.chat.pipeline.aliveness import emotion_band, place_hint, safe_bands
+from nous.application.chat.pipeline.injection import _relative_ja
 from nous.domain.persona.body import body_action_hint
 from nous.domain.persona.emotion_trend import build_emotion_trend_narrative
 from nous.domain.shared.result import Success
@@ -18,6 +19,24 @@ if TYPE_CHECKING:
     from nous.domain.config.chat_config import ChatConfig
 
 logger = get_logger(__name__)
+
+#: 日記の「伝えたいこと」を運ぶ記憶のタグ（#147）。
+_CARRY_TAG = "journal:carry"
+
+
+def _key_with_age(m) -> str:
+    """行末の記憶 ID に相対時刻を添える（時刻が取れなければ ID だけ・#149）。"""
+    rel = _relative_ja(getattr(m, "updated_at", None) or getattr(m, "created_at", None))
+    return f"（{m.key}, {rel}）" if rel else f"（{m.key}）"
+
+
+def _is_expired(valid_until: datetime | None, now: datetime) -> bool:
+    """期限切れか。naive は UTC 扱いのフォールバック（実運用の DB 往復は aware JST なので
+    naive 分岐には入らない。nous/infrastructure/sqlite/memory_crud_repo.py の format_iso/parse_iso）。"""
+    if valid_until is None:
+        return False
+    return (valid_until.replace(tzinfo=UTC) if valid_until.tzinfo is None else valid_until) <= now
+
 
 # Byte-level BPEトークナイザ由来の文字化けで発生しうる異常Unicodeブロック。
 # 通常の日本語/英語テキストでは出現しないスクリプトを広くカバーする。
@@ -252,6 +271,20 @@ async def _build_context_section(
                 _line += f"（呼び方も {_nick}）"
             state_lines.append(_line)
 
+    # 日記の「伝えたいこと」（#147）: 期限内の carry だけ最大 2 件。
+    # 失効判定はリポジトリを触らず読む側で行う（valid_until は前回の日記が書いた値）。
+    try:
+        carry_result = ctx.memory_service.get_by_tags([_CARRY_TAG])
+        if isinstance(carry_result, Success) and carry_result.value:
+            _now_carry = datetime.now(tz=UTC)
+            live = [m for m in carry_result.value if m.content and not _is_expired(m.valid_until, _now_carry)]
+            for m in live[:2]:
+                message = _sanitize_text(m.content)
+                if message:
+                    state_lines.append(f"伝えたい: {message}（{m.key}）")
+    except Exception as e:
+        logger.debug("Failed to fetch journal carry: %s", e)
+
     _hidden = {"goals", "promises", "active_promises", "current_goals"}
     persona_info = getattr(state, "persona_info", None) or {}
     # handover: は session_begin 専用（毎ターンの system prompt に古い栞を混ぜない）
@@ -272,7 +305,7 @@ async def _build_context_section(
                 for m in tops:
                     clean = _sanitize_text(m.content[:200] + "..." if len(m.content) > 200 else m.content)
                     if clean:
-                        core_lines.append(f"重要: {clean}（{m.key}）")
+                        core_lines.append(f"重要: {clean}{_key_with_age(m)}")
     except Exception as e:
         logger.debug("Failed to fetch top memories: %s", e)
 
@@ -289,7 +322,7 @@ async def _build_context_section(
                 for text in insights:
                     clean = _sanitize_text(text)
                     if clean:
-                        core_lines.append(f"洞察: {clean}（{by_content[text].key}）")
+                        core_lines.append(f"洞察: {clean}{_key_with_age(by_content[text])}")
         except Exception as e:
             logger.debug("Failed to fetch reflections: %s", e)
 
@@ -301,7 +334,7 @@ async def _build_context_section(
                 for m in mm_result.value[:3]:
                     clean = _sanitize_text(m.content) if m.content else ""
                     if clean:
-                        core_lines.append(f"癖: {clean}（{m.key}）")
+                        core_lines.append(f"癖: {clean}{_key_with_age(m)}")
         except Exception as e:
             logger.debug("Failed to fetch mental models: %s", e)
 
@@ -313,7 +346,7 @@ async def _build_context_section(
                 for m in ts_result.value[:2]:
                     clean = _sanitize_text(m.content) if m.content else ""
                     if clean:
-                        core_lines.append(f"未了: {clean}（{m.key}）")
+                        core_lines.append(f"未了: {clean}{_key_with_age(m)}")
         except Exception as e:
             logger.debug("Failed to fetch task states: %s", e)
 
