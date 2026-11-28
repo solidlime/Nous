@@ -56,6 +56,8 @@ def quiet_reason(ctx: AppContext, now: datetime) -> str | None:
 def _in_range(now: datetime, start: time, end: time) -> bool:
     """``now`` の時刻が [start, end) に入るか。start > end は日跨ぎ。"""
     t = now.timetz().replace(tzinfo=None)
+    if start == end:  # 開始 == 終了は 24 時間停止（parse_quiet_hours の宣言どおり）
+        return True
     if start <= end:
         return start <= t < end
     return t >= start or t < end

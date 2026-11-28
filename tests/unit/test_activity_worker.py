@@ -194,6 +194,30 @@ class TestQuestions:
         _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
         assert closed == ["q:abc"]
 
+    @pytest.mark.parametrize("resolves", ["false", "no", 1, "0", None])
+    def test_truthy_json_resolves_does_not_close_the_question(
+        self, sqlite_conn, chat, tools, monkeypatch, resolves
+    ) -> None:
+        """LLM の JSON は信頼境界。``true`` の bool 以外では問いを閉じない。"""
+        import nous.application.wiki.questions as questions_mod
+        import nous.application.wiki.research as research_mod
+
+        q = self._question("mcp-hub の設定 API は無認証か")
+        closed: list[str] = []
+        monkeypatch.setattr(questions_mod, "find_open_questions", lambda ctx: [q])
+        monkeypatch.setattr(questions_mod, "close_open_questions", lambda ctx, persona, key: closed.append(key))
+
+        async def _fake_research(ctx, persona, question, *, max_calls=3):
+            return {"answer": "認証は未実装", "hits": [{"title": "x", "url": "https://e.x"}]}
+
+        monkeypatch.setattr(research_mod, "research", _fake_research)
+        _insert(sqlite_conn, "chat.message", 300)
+        chat["text"] = json.dumps(
+            {"action": "research", "question": "mcp-hub の設定 API は無認証か", "resolves": resolves}
+        )
+        _run(monkeypatch, _ctx(sqlite_conn, autonomy_enabled=True))
+        assert closed == []
+
     def test_failed_research_keeps_the_question(self, sqlite_conn, chat, tools, monkeypatch) -> None:
         import nous.application.wiki.questions as questions_mod
         import nous.application.wiki.research as research_mod

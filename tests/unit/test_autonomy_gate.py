@@ -70,6 +70,12 @@ def test_quiet_hours_wrapping_midnight_outside(hour: int) -> None:
     assert quiet_reason(_ctx(autonomy_quiet_hours="22:00-06:00"), _at(hour)) is None
 
 
+@pytest.mark.parametrize("hour", [3, 7, 8, 12, 23])
+def test_quiet_hours_start_equals_end_stops_all_day(hour: int) -> None:
+    """開始 == 終了は 24 時間停止（parse_quiet_hours の宣言に合わせる）。"""
+    assert quiet_reason(_ctx(autonomy_quiet_hours="08:00-08:00"), _at(hour)) == "深夜の就寝時間"
+
+
 def test_empty_quiet_hours_disables_the_night_gate() -> None:
     assert quiet_reason(_ctx(autonomy_quiet_hours=""), _at(3)) is None
 

@@ -71,6 +71,9 @@ _REMOVED_CONFIG_KEYS_V4: frozenset[str] = frozenset(
         "forgetting_decay_interval_seconds",
         "forgetting_min_strength",
         "h5_stability_clamp_enabled",
+        # 自立P1 (2026-11-28): autonomy_enabled に統合して削除。旧 UI の送信を警告に残す。
+        "proactive_enabled",
+        "activity_enabled",
         # H4 (2026-11-17): 死にノブ（感情ゲイン係数）を削除
         "brain_emotion_gain_k",
         "brain_rif_suppression_rho",

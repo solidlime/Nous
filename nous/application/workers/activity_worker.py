@@ -150,7 +150,8 @@ class ActivityWorker:
 
         result = await self._act(ctx, config, action, choice)
         await self._record(ctx, action, choice, result)
-        if action == "research" and result.get("status") == "ok" and choice.get("resolves"):
+        # LLM の JSON は信頼境界。文字列 "false" / "no" / 1 が真になると問いを消してしまう。
+        if action == "research" and result.get("status") == "ok" and choice.get("resolves") is True:
             await self._close_question(ctx, choice.get("question"))
         logger.info("ActivityWorker: persona=%s did %s (%s)", ctx.persona, action, choice.get("reason") or "")
         return {"action": action, "result": result, "reason": choice.get("reason") or ""}
